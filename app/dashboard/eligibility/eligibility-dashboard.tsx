@@ -8,6 +8,7 @@ import {
   formatAchievementSummary,
   truncateText,
 } from "@/lib/candidate-summary";
+import { LogoutButton } from "@/components/logout-button";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 
@@ -420,9 +421,10 @@ export function EligibilityDashboard() {
             >
               Dispatch
             </Link>
-            <Link href="/" className="text-slate-600 hover:text-slate-900">
+            <Link href="/dashboard" className="text-slate-600 hover:text-slate-900">
               ← Home
             </Link>
+            <LogoutButton />
           </div>
         </div>
       </header>

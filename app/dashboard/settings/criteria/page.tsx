@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { createBrowserSupabaseClient } from '@/lib/supabase-browser'
+import { LogoutButton } from '@/components/logout-button'
 
 type Criteria = {
   id: string
@@ -108,7 +109,7 @@ export default function CriteriaPage() {
             <p className="text-sm text-gray-500 uppercase tracking-wide">Settings</p>
             <h1 className="text-2xl font-bold text-gray-900">Eligibility Criteria</h1>
           </div>
-          <div className="flex gap-3">
+          <div className="flex flex-wrap items-center justify-end gap-3">
             <a href="/dashboard/eligibility" className="text-sm text-gray-600 hover:underline">← Eligibility</a>
             <button
               onClick={() => { setShowForm(true); setEditingId(null); setFormName(''); setFormDesc(''); setFormActive(true) }}
@@ -116,6 +117,7 @@ export default function CriteriaPage() {
             >
               + Add Criteria
             </button>
+            <LogoutButton />
           </div>
         </div>
 

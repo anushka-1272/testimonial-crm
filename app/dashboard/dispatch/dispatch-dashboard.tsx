@@ -4,6 +4,7 @@ import { endOfWeek, format, parseISO, startOfWeek } from "date-fns";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { LogoutButton } from "@/components/logout-button";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 
@@ -523,9 +524,10 @@ export function DispatchDashboard() {
             >
               Interviews
             </Link>
-            <Link href="/" className="text-slate-600 hover:text-slate-900">
+            <Link href="/dashboard" className="text-slate-600 hover:text-slate-900">
               Home
             </Link>
+            <LogoutButton />
           </div>
         </div>
       </header>

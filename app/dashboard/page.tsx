@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { createBrowserSupabaseClient } from '@/lib/supabase-browser'
+import { LogoutButton } from '@/components/logout-button'
 import Link from 'next/link'
 
 type Period = 'total' | 'monthly' | 'weekly'
@@ -108,12 +109,15 @@ export default function DashboardPage() {
             <h1 className="text-2xl font-bold text-gray-900">Testimonial CRM</h1>
             <p className="text-sm text-gray-500">Dashboard Overview</p>
           </div>
-          <nav className="flex gap-4 text-sm">
-            <Link href="/dashboard/eligibility" className="text-gray-600 hover:text-black">Eligibility</Link>
-            <Link href="/dashboard/interviews" className="text-gray-600 hover:text-black">Interviews</Link>
-            <Link href="/dashboard/dispatch" className="text-gray-600 hover:text-black">Dispatch</Link>
-            <Link href="/dashboard/settings/criteria" className="text-gray-600 hover:text-black">Settings</Link>
-          </nav>
+          <div className="flex items-center gap-4">
+            <nav className="flex gap-4 text-sm">
+              <Link href="/dashboard/eligibility" className="text-gray-600 hover:text-black">Eligibility</Link>
+              <Link href="/dashboard/interviews" className="text-gray-600 hover:text-black">Interviews</Link>
+              <Link href="/dashboard/dispatch" className="text-gray-600 hover:text-black">Dispatch</Link>
+              <Link href="/dashboard/settings/criteria" className="text-gray-600 hover:text-black">Settings</Link>
+            </nav>
+            <LogoutButton />
+          </div>
         </div>
 
         <div className="flex gap-2 mb-6">
