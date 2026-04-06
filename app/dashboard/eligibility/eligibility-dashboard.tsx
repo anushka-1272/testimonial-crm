@@ -1,6 +1,7 @@
 "use client";
 
 import { endOfDay, parseISO, startOfDay, startOfWeek } from "date-fns";
+import { Loader2, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
@@ -93,6 +94,7 @@ export function EligibilityDashboard() {
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [bulkBusy, setBulkBusy] = useState(false);
+  const [sheetSyncBusy, setSheetSyncBusy] = useState(false);
 
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [industryFilter, setIndustryFilter] = useState<string>("");
@@ -351,6 +353,52 @@ export function EligibilityDashboard() {
     setSelected(new Set());
   };
 
+  const syncSheet = async () => {
+    if (!supabase) return;
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    if (!session?.access_token) {
+      setError("You must be signed in to sync.");
+      return;
+    }
+    setSheetSyncBusy(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/sync-sheet", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      });
+      const j = (await res.json()) as {
+        error?: string;
+        total_rows?: number;
+        new_inserted?: number;
+        skipped_duplicates?: number;
+        errors?: string[];
+      };
+      if (!res.ok) {
+        setError(j.error ?? "Sheet sync failed.");
+        return;
+      }
+      const inserted = j.new_inserted ?? 0;
+      const skipped = j.skipped_duplicates ?? 0;
+      alert(
+        `✅ Synced ${inserted} new candidates, ${skipped} skipped duplicates`,
+      );
+      if (j.errors?.length) {
+        setError(j.errors.slice(0, 5).join(" · "));
+      }
+      await loadRows();
+      await loadStats();
+    } catch {
+      setError("Sheet sync request failed.");
+    } finally {
+      setSheetSyncBusy(false);
+    }
+  };
+
   const bulkRunAi = async () => {
     if (selected.size === 0) return;
     setBulkBusy(true);
@@ -392,12 +440,29 @@ export function EligibilityDashboard() {
   return (
     <>
       <header className="sticky top-0 z-30 bg-[#f5f5f7]/90 px-8 py-6 backdrop-blur-md">
-        <h1 className="text-2xl font-semibold tracking-tight text-[#1d1d1f]">
-          Eligibility review
-        </h1>
-        <p className="mt-1 text-sm text-[#6e6e73]">
-          Review and update candidate eligibility
-        </p>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight text-[#1d1d1f]">
+              Eligibility review
+            </h1>
+            <p className="mt-1 text-sm text-[#6e6e73]">
+              Review and update candidate eligibility
+            </p>
+          </div>
+          <button
+            type="button"
+            disabled={sheetSyncBusy || !supabase}
+            onClick={() => void syncSheet()}
+            className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl border border-[#e5e5e5] bg-white px-4 py-2 text-sm font-medium text-[#1d1d1f] transition-all hover:bg-[#f5f5f7] disabled:opacity-50"
+          >
+            {sheetSyncBusy ? (
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+            ) : (
+              <RefreshCw className="h-4 w-4" aria-hidden />
+            )}
+            Sync Sheet
+          </button>
+        </div>
       </header>
 
       <main className="mx-auto max-w-7xl px-8 pb-12 pt-2 text-sm text-[#1d1d1f]">
