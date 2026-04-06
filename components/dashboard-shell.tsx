@@ -12,6 +12,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
+import { LogoOnDark } from "@/components/brand-logo";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 
 const NAV = [
@@ -116,9 +117,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
       <aside className="fixed left-0 top-0 z-40 flex h-screen w-64 flex-col bg-[#0a0a0f]">
         <div className="px-4 py-5">
           <div className="flex items-center gap-2.5">
-            <div className="rounded-lg bg-[#3b82f6] p-1.5">
-              <LayoutDashboard className="h-3.5 w-3.5 text-white" strokeWidth={2} />
-            </div>
+            <LogoOnDark className="h-8 w-8 shrink-0 rounded-lg" />
             <span className="text-sm font-semibold text-white">Testimonial CRM</span>
           </div>
         </div>
