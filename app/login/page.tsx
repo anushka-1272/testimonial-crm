@@ -4,6 +4,9 @@ import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useState } from "react";
 
+const fieldClass =
+  "mt-1.5 w-full rounded-xl border border-[#e5e5e5] bg-white p-3 text-sm text-[#1d1d1f] placeholder:text-[#aeaeb2] focus:border-[#3b82f6] focus:outline-none focus:ring-0";
+
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -34,15 +37,19 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50 p-4">
-      <div className="w-full max-w-md rounded-xl border border-gray-200 bg-white p-8 shadow-sm">
-        <h1 className="text-2xl font-bold text-gray-900">Sign in</h1>
-        <p className="mt-1 text-sm text-gray-500">Testimonial CRM</p>
+    <div className="flex min-h-screen items-center justify-center bg-[#f5f5f7] px-4 py-12 font-sans">
+      <div className="w-full max-w-sm rounded-2xl border border-[#f0f0f0] bg-white p-8 shadow-[0_4px_16px_rgba(0,0,0,0.08)]">
+        <div className="text-center">
+          <h1 className="text-xl font-semibold text-[#1d1d1f]">
+            Testimonial CRM
+          </h1>
+          <p className="mt-1 text-sm text-[#6e6e73]">Sign in to continue</p>
+        </div>
 
         <form onSubmit={handleSubmit} className="mt-8 space-y-5">
           {error ? (
             <div
-              className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"
+              className="rounded-xl border border-[#f0f0f0] bg-[#f5f5f7] px-4 py-3 text-sm text-[#1d1d1f]"
               role="alert"
             >
               {error}
@@ -52,7 +59,7 @@ export default function LoginPage() {
           <div>
             <label
               htmlFor="login-email"
-              className="block text-sm font-medium text-gray-700"
+              className="text-xs font-medium uppercase tracking-widest text-[#aeaeb2]"
             >
               Email
             </label>
@@ -64,14 +71,14 @@ export default function LoginPage() {
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900 shadow-sm focus:border-black focus:outline-none focus:ring-2 focus:ring-black"
+              className={fieldClass}
             />
           </div>
 
           <div>
             <label
               htmlFor="login-password"
-              className="block text-sm font-medium text-gray-700"
+              className="text-xs font-medium uppercase tracking-widest text-[#aeaeb2]"
             >
               Password
             </label>
@@ -83,14 +90,14 @@ export default function LoginPage() {
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900 shadow-sm focus:border-black focus:outline-none focus:ring-2 focus:ring-black"
+              className={fieldClass}
             />
           </div>
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full rounded-lg bg-black py-2.5 text-sm font-semibold text-white hover:bg-gray-800 disabled:opacity-50"
+            className="w-full rounded-xl bg-[#1d1d1f] py-3 text-sm font-medium text-white transition-all hover:bg-[#2d2d2f] disabled:opacity-50"
           >
             {loading ? "Signing in…" : "Sign in"}
           </button>

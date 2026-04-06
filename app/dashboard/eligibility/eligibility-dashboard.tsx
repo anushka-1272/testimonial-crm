@@ -1,16 +1,13 @@
 "use client";
 
 import { endOfDay, parseISO, startOfDay, startOfWeek } from "date-fns";
-import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
   formatAchievementSummary,
   truncateText,
 } from "@/lib/candidate-summary";
-import { LogoutButton } from "@/components/logout-button";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
-import type { RealtimeChannel } from "@supabase/supabase-js";
 
 type EligibilityStatus = "pending_review" | "eligible" | "not_eligible";
 
@@ -54,25 +51,25 @@ type DashboardStats = {
 const SELECT_COLUMNS =
   "id, created_at, form_filled_date, email, full_name, whatsapp_number, role_before_program, salary_before_program, primary_goal, achievement_type, achievement_title, achieved_on_date, program_joined_date, quantified_result, skills_modules_helped, how_program_helped, proof_document_url, proof_description, linkedin_url, instagram_url, declaration_accepted, ai_eligibility_score, ai_eligibility_reason, eligibility_status, human_reviewed_by, human_reviewed_at, congratulation_call_pending";
 
-function scoreBadgeClass(score: number | null): string {
-  if (score === null || Number.isNaN(score)) {
-    return "bg-slate-100 text-slate-600 ring-slate-200";
-  }
-  if (score > 70) return "bg-emerald-50 text-emerald-800 ring-emerald-200";
-  if (score >= 40) return "bg-amber-50 text-amber-900 ring-amber-200";
-  return "bg-red-50 text-red-800 ring-red-200";
+const cardChrome =
+  "rounded-2xl bg-white shadow-[0_4px_16px_rgba(0,0,0,0.08)] border border-[#f0f0f0]";
+
+function scorePillClass(score: number | null): string {
+  if (score === null) return "bg-[#fafafa] text-[#6e6e73]";
+  if (score < 45) return "bg-[#fef2f2] text-[#dc2626]";
+  if (score < 75) return "bg-[#fafafa] text-[#6e6e73]";
+  return "bg-[#f0fdf4] text-[#16a34a]";
 }
 
-function statusPill(status: EligibilityStatus): string {
+function eligibilityStatusBadgeClass(status: EligibilityStatus): string {
   switch (status) {
-    case "pending_review":
-      return "bg-slate-100 text-slate-700 ring-slate-200";
     case "eligible":
-      return "bg-emerald-50 text-emerald-800 ring-emerald-200";
+      return "bg-[#f0fdf4] text-[#16a34a]";
     case "not_eligible":
-      return "bg-red-50 text-red-800 ring-red-200";
+      return "bg-[#fef2f2] text-[#dc2626]";
+    case "pending_review":
     default:
-      return "bg-slate-100 text-slate-600 ring-slate-200";
+      return "bg-[#fafafa] text-[#6e6e73]";
   }
 }
 
@@ -168,30 +165,26 @@ export function EligibilityDashboard() {
       return;
     }
 
-    let channel: RealtimeChannel | null = null;
+    const channel = supabase
+      .channel("candidates-realtime")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "candidates" },
+        () => {
+          void loadRows();
+          void loadStats();
+        },
+      )
+      .subscribe();
 
-    (async () => {
+    void (async () => {
       setLoading(true);
       await Promise.all([loadRows(), loadStats()]);
       setLoading(false);
-
-      channel = supabase
-        .channel("candidates-realtime")
-        .on(
-          "postgres_changes",
-          { event: "*", schema: "public", table: "candidates" },
-          () => {
-            void loadRows();
-            void loadStats();
-          },
-        )
-        .subscribe();
     })();
 
     return () => {
-      if (channel && supabase) {
-        void supabase.removeChannel(channel);
-      }
+      void supabase.removeChannel(channel);
     };
   }, [supabase, loadRows, loadStats]);
 
@@ -386,7 +379,7 @@ export function EligibilityDashboard() {
 
   if (!supabase && !loading) {
     return (
-      <div className="mx-auto max-w-4xl px-4 py-16 text-center text-slate-600">
+      <div className="mx-auto max-w-4xl px-8 py-16 text-center text-sm text-[#6e6e73]">
         <p>{error ?? "Cannot initialize Supabase client."}</p>
       </div>
     );
@@ -397,48 +390,26 @@ export function EligibilityDashboard() {
     filteredRows.every((r) => selected.has(r.id));
 
   return (
-    <div className="min-h-screen bg-slate-50/80">
-      <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6">
-          <div>
-            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-              Dashboard
-            </p>
-            <h1 className="text-xl font-semibold text-slate-900">
-              Eligibility review
-            </h1>
-          </div>
-          <div className="flex flex-wrap items-center gap-4 text-sm font-medium">
-            <Link
-              href="/dashboard/interviews"
-              className="text-slate-600 hover:text-slate-900"
-            >
-              Interviews
-            </Link>
-            <Link
-              href="/dashboard/dispatch"
-              className="text-slate-600 hover:text-slate-900"
-            >
-              Dispatch
-            </Link>
-            <Link href="/dashboard" className="text-slate-600 hover:text-slate-900">
-              ← Home
-            </Link>
-            <LogoutButton />
-          </div>
-        </div>
+    <>
+      <header className="sticky top-0 z-30 bg-[#f5f5f7]/90 px-8 py-6 backdrop-blur-md">
+        <h1 className="text-2xl font-semibold tracking-tight text-[#1d1d1f]">
+          Eligibility review
+        </h1>
+        <p className="mt-1 text-sm text-[#6e6e73]">
+          Review and update candidate eligibility
+        </p>
       </header>
 
-      <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
+      <main className="mx-auto max-w-7xl px-8 pb-12 pt-2 text-sm text-[#1d1d1f]">
         {error && (
           <div
-            className="mb-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"
+            className="mb-6 rounded-2xl border border-[#f0f0f0] bg-white px-4 py-3 text-sm text-[#1d1d1f] shadow-[0_4px_16px_rgba(0,0,0,0.08)]"
             role="alert"
           >
             {error}
             <button
               type="button"
-              className="ml-3 font-medium underline"
+              className="ml-3 font-medium text-[#3b82f6] hover:text-[#2563eb]"
               onClick={() => setError(null)}
             >
               Dismiss
@@ -446,7 +417,6 @@ export function EligibilityDashboard() {
           </div>
         )}
 
-        {/* Stats */}
         <section className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {[
             {
@@ -470,25 +440,26 @@ export function EligibilityDashboard() {
               sub: "Declined",
             },
           ].map((card) => (
-            <div
-              key={card.label}
-              className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm"
-            >
-              <p className="text-sm font-medium text-slate-500">{card.label}</p>
-              <p className="mt-2 text-3xl font-semibold tabular-nums text-slate-900">
+            <div key={card.label} className={`p-6 ${cardChrome}`}>
+              <p className="mb-3 text-xs font-medium text-[#6e6e73]">
+                {card.label}
+              </p>
+              <p className="text-4xl font-bold tabular-nums tracking-tight text-[#1d1d1f]">
                 {loading ? "…" : card.value}
               </p>
-              <p className="mt-1 text-xs text-slate-400">{card.sub}</p>
+              <p className="mt-1 text-sm text-[#6e6e73]">{card.sub}</p>
+              <div className="mt-4 h-0.5 w-8 rounded-full bg-[#3b82f6]" />
             </div>
           ))}
         </section>
 
-        {/* Filters */}
-        <section className="mb-4 flex flex-col gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:flex-wrap sm:items-end">
+        <section className="mb-6 flex flex-col gap-4 rounded-2xl border border-[#f0f0f0] bg-white p-4 shadow-sm sm:flex-row sm:flex-wrap sm:items-end">
           <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium text-slate-700">Status</span>
+            <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+              Status
+            </span>
             <select
-              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-slate-900 shadow-sm focus:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-200"
+              className="rounded-xl border border-[#e5e5e5] bg-white px-3 py-2 text-sm text-[#1d1d1f] focus:border-[#3b82f6] focus:outline-none focus:ring-0"
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
             >
@@ -499,9 +470,11 @@ export function EligibilityDashboard() {
             </select>
           </label>
           <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium text-slate-700">Industry / role</span>
+            <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+              Industry / role
+            </span>
             <select
-              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-slate-900 shadow-sm focus:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-200"
+              className="rounded-xl border border-[#e5e5e5] bg-white px-3 py-2 text-sm text-[#1d1d1f] focus:border-[#3b82f6] focus:outline-none focus:ring-0"
               value={industryFilter}
               onChange={(e) => setIndustryFilter(e.target.value)}
             >
@@ -514,26 +487,30 @@ export function EligibilityDashboard() {
             </select>
           </label>
           <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium text-slate-700">From</span>
+            <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+              From
+            </span>
             <input
               type="date"
-              className="rounded-lg border border-slate-200 px-3 py-2 text-slate-900 shadow-sm focus:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-200"
+              className="rounded-xl border border-[#e5e5e5] px-3 py-2 text-sm text-[#1d1d1f] focus:border-[#3b82f6] focus:outline-none focus:ring-0"
               value={dateFrom}
               onChange={(e) => setDateFrom(e.target.value)}
             />
           </label>
           <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium text-slate-700">To</span>
+            <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+              To
+            </span>
             <input
               type="date"
-              className="rounded-lg border border-slate-200 px-3 py-2 text-slate-900 shadow-sm focus:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-200"
+              className="rounded-xl border border-[#e5e5e5] px-3 py-2 text-sm text-[#1d1d1f] focus:border-[#3b82f6] focus:outline-none focus:ring-0"
               value={dateTo}
               onChange={(e) => setDateTo(e.target.value)}
             />
           </label>
           <button
             type="button"
-            className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            className="rounded-xl px-4 py-2 text-sm font-medium text-[#3b82f6] transition-all hover:text-[#2563eb]"
             onClick={() => {
               setStatusFilter("");
               setIndustryFilter("");
@@ -545,17 +522,18 @@ export function EligibilityDashboard() {
           </button>
         </section>
 
-        {/* Bulk bar */}
         {selected.size > 0 && (
-          <div className="mb-4 flex flex-col gap-3 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-sm font-medium text-indigo-900">
+          <div
+            className={`mb-6 flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between ${cardChrome}`}
+          >
+            <p className="text-sm font-medium text-[#1d1d1f]">
               {selected.size} selected
             </p>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-3">
               <button
                 type="button"
                 disabled={bulkBusy}
-                className="rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white shadow-sm hover:bg-emerald-700 disabled:opacity-50"
+                className="rounded-xl bg-[#1d1d1f] px-4 py-2 text-sm font-medium text-white transition-all hover:bg-[#2d2d2f] disabled:opacity-50"
                 onClick={() => void bulkMarkEligible()}
               >
                 Bulk mark eligible
@@ -563,7 +541,7 @@ export function EligibilityDashboard() {
               <button
                 type="button"
                 disabled={bulkBusy}
-                className="rounded-lg bg-red-600 px-3 py-1.5 text-sm font-medium text-white shadow-sm hover:bg-red-700 disabled:opacity-50"
+                className="rounded-xl border border-[#f0f0f0] bg-white px-4 py-2 text-sm font-medium text-[#ef4444] transition-all hover:bg-[#fafafa] disabled:opacity-50"
                 onClick={() => void bulkMarkNotEligible()}
               >
                 Bulk mark not eligible
@@ -571,7 +549,7 @@ export function EligibilityDashboard() {
               <button
                 type="button"
                 disabled={bulkBusy}
-                className="rounded-lg bg-slate-900 px-3 py-1.5 text-sm font-medium text-white shadow-sm hover:bg-slate-800 disabled:opacity-50"
+                className="text-sm font-medium text-[#3b82f6] transition-all hover:text-[#2563eb] disabled:opacity-50"
                 onClick={() => void bulkRunAi()}
               >
                 Bulk run AI assessment
@@ -580,53 +558,52 @@ export function EligibilityDashboard() {
           </div>
         )}
 
-        {/* Table */}
-        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className={`overflow-hidden ${cardChrome}`}>
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
-              <thead className="bg-slate-50">
-                <tr>
+            <table className="min-w-full text-left text-sm">
+              <thead>
+                <tr className="border-b border-[#f5f5f5]">
                   <th className="w-10 px-3 py-3">
                     <input
                       type="checkbox"
-                      className="rounded border-slate-300"
+                      className="rounded border-[#e5e5e5] text-[#1d1d1f] focus:ring-[#3b82f6]"
                       checked={allFilteredSelected}
                       onChange={toggleSelectAllFiltered}
                       aria-label="Select all visible"
                     />
                   </th>
-                  <th className="px-3 py-3 font-semibold text-slate-700">
+                  <th className="px-3 py-3 text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
                     Name
                   </th>
-                  <th className="px-3 py-3 font-semibold text-slate-700">
+                  <th className="px-3 py-3 text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
                     Email
                   </th>
-                  <th className="px-3 py-3 font-semibold text-slate-700">
+                  <th className="px-3 py-3 text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
                     Industry
                   </th>
-                  <th className="px-3 py-3 font-semibold text-slate-700">
+                  <th className="px-3 py-3 text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
                     Achievement
                   </th>
-                  <th className="px-3 py-3 font-semibold text-slate-700">
+                  <th className="px-3 py-3 text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
                     AI score
                   </th>
-                  <th className="px-3 py-3 font-semibold text-slate-700">
+                  <th className="px-3 py-3 text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
                     AI reason
                   </th>
-                  <th className="px-3 py-3 font-semibold text-slate-700">
+                  <th className="px-3 py-3 text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
                     Status
                   </th>
-                  <th className="px-3 py-3 font-semibold text-slate-700">
+                  <th className="px-3 py-3 text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
                     Actions
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody>
                 {loading ? (
                   <tr>
                     <td
                       colSpan={9}
-                      className="px-4 py-12 text-center text-slate-500"
+                      className="px-4 py-12 text-center text-sm text-[#6e6e73]"
                     >
                       Loading candidates…
                     </td>
@@ -635,7 +612,7 @@ export function EligibilityDashboard() {
                   <tr>
                     <td
                       colSpan={9}
-                      className="px-4 py-12 text-center text-slate-500"
+                      className="px-4 py-12 text-center text-sm text-[#6e6e73]"
                     >
                       No candidates match the current filters.
                     </td>
@@ -650,40 +627,40 @@ export function EligibilityDashboard() {
                     return (
                       <tr
                         key={r.id}
-                        className="hover:bg-slate-50/80"
+                        className="border-b border-[#f5f5f5] last:border-b-0 hover:bg-[#fafafa]"
                       >
                         <td className="px-3 py-3 align-top">
                           <input
                             type="checkbox"
-                            className="rounded border-slate-300"
+                            className="rounded border-[#e5e5e5] text-[#1d1d1f] focus:ring-[#3b82f6]"
                             checked={selected.has(r.id)}
                             onChange={() => toggleSelect(r.id)}
                             aria-label={`Select ${r.full_name ?? r.email}`}
                           />
                         </td>
-                        <td className="max-w-[140px] truncate px-3 py-3 font-medium text-slate-900">
+                        <td className="max-w-[140px] truncate px-3 py-3 font-medium text-[#1d1d1f]">
                           {r.full_name ?? "—"}
                         </td>
-                        <td className="max-w-[180px] truncate px-3 py-3 text-slate-600">
+                        <td className="max-w-[180px] truncate px-3 py-3 text-[#6e6e73]">
                           {r.email}
                         </td>
-                        <td className="max-w-[120px] truncate px-3 py-3 text-slate-600">
+                        <td className="max-w-[120px] truncate px-3 py-3 text-[#6e6e73]">
                           {r.role_before_program ?? "—"}
                         </td>
                         <td
-                          className="max-w-[200px] truncate px-3 py-3 text-slate-600"
+                          className="max-w-[200px] truncate px-3 py-3 text-[#6e6e73]"
                           title={summary || undefined}
                         >
                           {displaySummary}
                         </td>
                         <td className="px-3 py-3 align-top">
                           <span
-                            className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ring-inset ${scoreBadgeClass(score)}`}
+                            className={`inline-flex rounded-full px-3 py-1 text-xs font-medium tabular-nums ${scorePillClass(score)}`}
                           >
                             {score === null ? "—" : score}
                           </span>
                         </td>
-                        <td className="max-w-[160px] px-3 py-3 text-slate-600">
+                        <td className="max-w-[160px] px-3 py-3 text-[#6e6e73]">
                           <span
                             className="line-clamp-2 cursor-help"
                             title={
@@ -695,17 +672,17 @@ export function EligibilityDashboard() {
                         </td>
                         <td className="px-3 py-3 align-top">
                           <span
-                            className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset ${statusPill(r.eligibility_status)}`}
+                            className={`inline-flex rounded-full px-3 py-1 text-xs font-medium ${eligibilityStatusBadgeClass(r.eligibility_status)}`}
                           >
                             {statusLabel(r.eligibility_status)}
                           </span>
                         </td>
                         <td className="px-3 py-3 align-top">
-                          <div className="flex flex-col gap-1 sm:flex-row sm:flex-wrap">
+                          <div className="flex flex-col items-start gap-2 sm:flex-row sm:flex-wrap">
                             <button
                               type="button"
                               disabled={busyId === r.id}
-                              className="whitespace-nowrap rounded-md bg-emerald-600 px-2 py-1 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+                              className="whitespace-nowrap text-sm font-medium text-[#3b82f6] transition-all hover:text-[#2563eb] disabled:opacity-50"
                               onClick={() => void markEligible(r)}
                             >
                               Mark eligible
@@ -713,14 +690,14 @@ export function EligibilityDashboard() {
                             <button
                               type="button"
                               disabled={busyId === r.id}
-                              className="whitespace-nowrap rounded-md bg-red-600 px-2 py-1 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-50"
+                              className="whitespace-nowrap text-sm font-medium text-[#ef4444] transition-all hover:text-[#dc2626] disabled:opacity-50"
                               onClick={() => void markNotEligible(r)}
                             >
                               Mark not eligible
                             </button>
                             <button
                               type="button"
-                              className="whitespace-nowrap rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                              className="whitespace-nowrap text-sm font-medium text-[#6e6e73] transition-all hover:text-[#1d1d1f]"
                               onClick={() => setDrawer(r)}
                             >
                               View details
@@ -734,39 +711,38 @@ export function EligibilityDashboard() {
               </tbody>
             </table>
           </div>
-          <p className="border-t border-slate-100 px-4 py-2 text-xs text-slate-400">
+          <p className="border-t border-[#f5f5f5] px-4 py-3 text-xs text-[#aeaeb2]">
             Showing {filteredRows.length} of {rows.length} loaded · Realtime
             updates enabled
           </p>
         </div>
       </main>
 
-      {/* Drawer */}
       {drawer && (
         <div className="fixed inset-0 z-50 flex justify-end">
           <button
             type="button"
-            className="absolute inset-0 bg-slate-900/40 backdrop-blur-[1px]"
+            className="absolute inset-0 bg-[#1d1d1f]/25 backdrop-blur-[1px]"
             aria-label="Close drawer"
             onClick={() => setDrawer(null)}
           />
-          <aside className="relative flex h-full w-full max-w-md flex-col border-l border-slate-200 bg-white shadow-2xl">
-            <div className="flex items-start justify-between border-b border-slate-100 px-5 py-4">
+          <aside className="relative flex h-full w-full max-w-md flex-col border-l border-[#f0f0f0] bg-white shadow-[0_4px_16px_rgba(0,0,0,0.08)]">
+            <div className="flex items-start justify-between border-b border-[#f5f5f5] px-5 py-4">
               <div>
-                <h2 className="text-lg font-semibold text-slate-900">
+                <h2 className="text-lg font-semibold text-[#1d1d1f]">
                   {drawer.full_name ?? "Candidate"}
                 </h2>
-                <p className="text-sm text-slate-500">{drawer.email}</p>
+                <p className="text-sm text-[#6e6e73]">{drawer.email}</p>
               </div>
               <button
                 type="button"
-                className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"
+                className="rounded-xl p-2 text-[#aeaeb2] transition-all hover:bg-[#f5f5f7] hover:text-[#1d1d1f]"
                 onClick={() => setDrawer(null)}
               >
                 ✕
               </button>
             </div>
-            <div className="flex-1 overflow-y-auto px-5 py-4 text-sm">
+            <div className="flex-1 overflow-y-auto px-5 py-4 text-sm text-[#1d1d1f]">
               <dl className="space-y-4">
                 {(
                   [
@@ -805,20 +781,20 @@ export function EligibilityDashboard() {
                   ] as const
                 ).map(([k, v]) => (
                   <div key={k}>
-                    <dt className="text-xs font-medium uppercase tracking-wide text-slate-400">
+                    <dt className="text-xs uppercase tracking-widest text-[#aeaeb2]">
                       {k}
                     </dt>
-                    <dd className="mt-0.5 whitespace-pre-wrap break-words text-slate-800">
+                    <dd className="mt-0.5 whitespace-pre-wrap break-words text-[#1d1d1f]">
                       {v === null || v === "" ? "—" : String(v)}
                     </dd>
                   </div>
                 ))}
               </dl>
             </div>
-            <div className="border-t border-slate-100 px-5 py-3">
+            <div className="border-t border-[#f5f5f5] px-5 py-3">
               <button
                 type="button"
-                className="w-full rounded-lg bg-slate-900 py-2 text-sm font-medium text-white hover:bg-slate-800"
+                className="w-full rounded-xl bg-[#1d1d1f] py-2.5 text-sm font-medium text-white transition-all hover:bg-[#2d2d2f]"
                 onClick={() => setDrawer(null)}
               >
                 Close
@@ -827,6 +803,6 @@ export function EligibilityDashboard() {
           </aside>
         </div>
       )}
-    </div>
+    </>
   );
 }

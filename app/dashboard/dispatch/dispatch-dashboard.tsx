@@ -1,12 +1,9 @@
 "use client";
 
 import { endOfWeek, format, parseISO, startOfWeek } from "date-fns";
-import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { LogoutButton } from "@/components/logout-button";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
-import type { RealtimeChannel } from "@supabase/supabase-js";
 
 type DispatchStatus = "pending" | "dispatched" | "delivered";
 
@@ -43,16 +40,19 @@ function normalizeRow(
   return { ...row, candidates: candidate } as DispatchRow;
 }
 
+const cardChrome =
+  "rounded-2xl bg-white shadow-[0_4px_16px_rgba(0,0,0,0.08)] border border-[#f0f0f0]";
+
 function statusBadgeClass(s: DispatchStatus): string {
   switch (s) {
     case "pending":
-      return "bg-amber-50 text-amber-900 ring-amber-200";
+      return "bg-[#fafafa] text-[#6e6e73]";
     case "dispatched":
-      return "bg-sky-50 text-sky-900 ring-sky-200";
+      return "bg-[#eff6ff] text-[#3b82f6]";
     case "delivered":
-      return "bg-emerald-50 text-emerald-900 ring-emerald-200";
+      return "bg-[#f0fdf4] text-[#16a34a]";
     default:
-      return "bg-slate-100 text-slate-700 ring-slate-200";
+      return "bg-[#fafafa] text-[#6e6e73]";
   }
 }
 
@@ -243,88 +243,94 @@ function UpdateDispatchModal({
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
       <button
         type="button"
-        className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm"
+        className="absolute inset-0 bg-[#1d1d1f]/25 backdrop-blur-sm"
         aria-label="Close"
         onClick={onClose}
       />
-      <div className="relative max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
+      <div className="relative max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl border border-[#f0f0f0] bg-white p-6 shadow-[0_4px_16px_rgba(0,0,0,0.08)]">
         <div className="mb-4 flex items-start justify-between">
           <div>
-            <h2 className="text-lg font-semibold text-slate-900">
+            <h2 className="text-lg font-semibold text-[#1d1d1f]">
               Update dispatch
             </h2>
-            <p className="text-sm text-slate-500">
+            <p className="text-sm text-[#6e6e73]">
               {name ?? "Candidate"} · {email}
             </p>
           </div>
           <button
             type="button"
-            className="rounded-lg p-2 text-slate-400 hover:bg-slate-100"
+            className="rounded-xl p-2 text-[#aeaeb2] transition-all hover:bg-[#f5f5f7] hover:text-[#1d1d1f]"
             onClick={onClose}
           >
             ✕
           </button>
         </div>
 
-        <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4">
+        <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4 text-sm">
           {error && (
-            <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+            <p className="rounded-xl border border-[#f0f0f0] bg-[#f5f5f7] px-3 py-2 text-sm text-[#1d1d1f]">
               {error}
             </p>
           )}
 
           <label className="block text-sm">
-            <span className="font-medium text-slate-700">Tracking ID</span>
+            <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+              Tracking ID
+            </span>
             <input
               required
-              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2"
+              className="mt-1 w-full rounded-xl border border-[#e5e5e5] px-3 py-2.5 text-sm text-[#1d1d1f] focus:border-[#3b82f6] focus:outline-none focus:ring-0"
               value={trackingId}
               onChange={(e) => setTrackingId(e.target.value)}
             />
           </label>
 
           <label className="block text-sm">
-            <span className="font-medium text-slate-700">Dispatch date</span>
+            <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+              Dispatch date
+            </span>
             <input
               type="date"
-              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2"
+              className="mt-1 w-full rounded-xl border border-[#e5e5e5] px-3 py-2.5 text-sm text-[#1d1d1f] focus:border-[#3b82f6] focus:outline-none focus:ring-0"
               value={dispatchDate}
               onChange={(e) => setDispatchDate(e.target.value)}
             />
           </label>
 
           <label className="block text-sm">
-            <span className="font-medium text-slate-700">
+            <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
               Expected delivery date
             </span>
             <input
               required
               type="date"
-              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2"
+              className="mt-1 w-full rounded-xl border border-[#e5e5e5] px-3 py-2.5 text-sm text-[#1d1d1f] focus:border-[#3b82f6] focus:outline-none focus:ring-0"
               value={expectedDate}
               onChange={(e) => setExpectedDate(e.target.value)}
             />
           </label>
 
           <label className="block text-sm">
-            <span className="font-medium text-slate-700">Special comments</span>
+            <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+              Special comments
+            </span>
             <textarea
               rows={3}
-              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2"
+              className="mt-1 w-full rounded-xl border border-[#e5e5e5] px-3 py-2.5 text-sm text-[#1d1d1f] focus:border-[#3b82f6] focus:outline-none focus:ring-0"
               value={comments}
               onChange={(e) => setComments(e.target.value)}
             />
           </label>
 
-          <p className="text-xs text-slate-500">
-            Saving sets status to <strong>dispatched</strong> (unless already
+          <p className="text-xs text-[#6e6e73]">
+            Saving sets status to <strong className="font-medium text-[#1d1d1f]">dispatched</strong> (unless already
             delivered) and emails the candidate the dispatch confirmation.
           </p>
 
           <div className="flex justify-end gap-2 pt-2">
             <button
               type="button"
-              className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              className="rounded-xl border border-[#f0f0f0] bg-white px-4 py-2 text-sm font-medium text-[#1d1d1f] transition-all hover:bg-[#fafafa]"
               onClick={onClose}
             >
               Cancel
@@ -332,7 +338,7 @@ function UpdateDispatchModal({
             <button
               type="submit"
               disabled={submitting}
-              className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
+              className="rounded-xl bg-[#1d1d1f] px-4 py-2 text-sm font-medium text-white transition-all hover:bg-[#2d2d2f] disabled:opacity-50"
             >
               {submitting ? "Saving…" : "Save & notify"}
             </button>
@@ -429,28 +435,26 @@ export function DispatchDashboard() {
       return;
     }
 
-    let ch: RealtimeChannel | null = null;
+    const ch = supabase
+      .channel("dispatch-dashboard")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "dispatch" },
+        () => {
+          void loadRows();
+          void loadStats();
+        },
+      )
+      .subscribe();
 
-    (async () => {
+    void (async () => {
       setLoading(true);
       await Promise.all([loadRows(), loadStats()]);
       setLoading(false);
-
-      ch = supabase
-        .channel("dispatch-dashboard")
-        .on(
-          "postgres_changes",
-          { event: "*", schema: "public", table: "dispatch" },
-          () => {
-            void loadRows();
-            void loadStats();
-          },
-        )
-        .subscribe();
     })();
 
     return () => {
-      if (ch) void supabase.removeChannel(ch);
+      void supabase.removeChannel(ch);
     };
   }, [supabase, loadRows, loadStats]);
 
@@ -486,7 +490,7 @@ export function DispatchDashboard() {
 
   if (!supabase) {
     return (
-      <div className="mx-auto max-w-lg px-4 py-16 text-center text-slate-600">
+      <div className="mx-auto max-w-lg px-8 py-16 text-center text-sm text-[#6e6e73]">
         {error ?? "Cannot connect to Supabase."}
       </div>
     );
@@ -500,45 +504,23 @@ export function DispatchDashboard() {
   ];
 
   return (
-    <div className="min-h-screen bg-slate-50/80">
-      <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-4 py-4 sm:px-6">
-          <div>
-            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-              Dashboard
-            </p>
-            <h1 className="text-xl font-semibold text-slate-900">
-              Dispatch management
-            </h1>
-          </div>
-          <div className="flex flex-wrap items-center gap-3 text-sm font-medium">
-            <Link
-              href="/dashboard/eligibility"
-              className="text-slate-600 hover:text-slate-900"
-            >
-              Eligibility
-            </Link>
-            <Link
-              href="/dashboard/interviews"
-              className="text-slate-600 hover:text-slate-900"
-            >
-              Interviews
-            </Link>
-            <Link href="/dashboard" className="text-slate-600 hover:text-slate-900">
-              Home
-            </Link>
-            <LogoutButton />
-          </div>
-        </div>
+    <>
+      <header className="sticky top-0 z-30 bg-[#f5f5f7]/90 px-8 py-6 backdrop-blur-md">
+        <h1 className="text-2xl font-semibold tracking-tight text-[#1d1d1f]">
+          Dispatch
+        </h1>
+        <p className="mt-1 text-sm text-[#6e6e73]">
+          Track shipments and delivery status
+        </p>
       </header>
 
-      <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
+      <main className="mx-auto max-w-7xl px-8 pb-12 pt-2 text-sm text-[#1d1d1f]">
         {error && (
-          <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900">
+          <div className="mb-6 rounded-2xl border border-[#f0f0f0] bg-white px-4 py-3 text-sm text-[#1d1d1f] shadow-[0_4px_16px_rgba(0,0,0,0.08)]">
             {error}
             <button
               type="button"
-              className="ml-2 underline"
+              className="ml-2 font-medium text-[#3b82f6] hover:text-[#2563eb]"
               onClick={() => setError(null)}
             >
               Dismiss
@@ -547,45 +529,48 @@ export function DispatchDashboard() {
         )}
 
         <section className="mb-8 grid gap-4 sm:grid-cols-3">
-          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-            <p className="text-sm font-medium text-slate-500">
+          <div className={`p-6 ${cardChrome}`}>
+            <p className="mb-3 text-xs font-medium text-[#6e6e73]">
               Total pending dispatches
             </p>
-            <p className="mt-2 text-3xl font-semibold tabular-nums text-slate-900">
+            <p className="text-4xl font-bold tabular-nums tracking-tight text-[#1d1d1f]">
               {loading ? "…" : (stats?.pending ?? "—")}
             </p>
+            <div className="mt-4 h-0.5 w-8 rounded-full bg-[#3b82f6]" />
           </div>
-          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-            <p className="text-sm font-medium text-slate-500">
+          <div className={`p-6 ${cardChrome}`}>
+            <p className="mb-3 text-xs font-medium text-[#6e6e73]">
               Dispatched this week
             </p>
-            <p className="mt-2 text-3xl font-semibold tabular-nums text-slate-900">
+            <p className="text-4xl font-bold tabular-nums tracking-tight text-[#1d1d1f]">
               {loading ? "…" : (stats?.dispatchedWeek ?? "—")}
             </p>
-            <p className="mt-1 text-xs text-slate-400">Mon–Sun · dispatch date</p>
+            <p className="mt-1 text-sm text-[#6e6e73]">Mon–Sun · dispatch date</p>
+            <div className="mt-4 h-0.5 w-8 rounded-full bg-[#3b82f6]" />
           </div>
-          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-            <p className="text-sm font-medium text-slate-500">
+          <div className={`p-6 ${cardChrome}`}>
+            <p className="mb-3 text-xs font-medium text-[#6e6e73]">
               Delivered this week
             </p>
-            <p className="mt-2 text-3xl font-semibold tabular-nums text-slate-900">
+            <p className="text-4xl font-bold tabular-nums tracking-tight text-[#1d1d1f]">
               {loading ? "…" : (stats?.deliveredWeek ?? "—")}
             </p>
-            <p className="mt-1 text-xs text-slate-400">Mon–Sun · actual delivery</p>
+            <p className="mt-1 text-sm text-[#6e6e73]">Mon–Sun · actual delivery</p>
+            <div className="mt-4 h-0.5 w-8 rounded-full bg-[#3b82f6]" />
           </div>
         </section>
 
-        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex flex-wrap gap-1 rounded-lg border border-slate-200 bg-white p-1 shadow-sm">
+        <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="inline-flex rounded-full bg-white p-1 shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
             {tabs.map((t) => (
               <button
                 key={t.id}
                 type="button"
                 onClick={() => setFilter(t.id)}
-                className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                className={`rounded-full px-4 py-1.5 text-sm font-medium transition-all duration-200 ease-in-out ${
                   filter === t.id
-                    ? "bg-slate-900 text-white"
-                    : "text-slate-600 hover:bg-slate-50"
+                    ? "bg-[#1d1d1f] text-white"
+                    : "text-[#6e6e73] hover:text-[#1d1d1f]"
                 }`}
               >
                 {t.label}
@@ -596,52 +581,52 @@ export function DispatchDashboard() {
             type="button"
             onClick={exportCsv}
             disabled={filtered.length === 0}
-            className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+            className="text-sm font-medium text-[#3b82f6] transition-all hover:text-[#2563eb] disabled:cursor-not-allowed disabled:opacity-40"
           >
             Export CSV ({filtered.length} rows)
           </button>
         </div>
 
-        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className={`overflow-hidden ${cardChrome}`}>
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
-              <thead className="bg-slate-50">
-                <tr>
-                  <th className="px-3 py-3 font-semibold text-slate-700">
+            <table className="min-w-full text-left text-sm">
+              <thead>
+                <tr className="border-b border-[#f5f5f5]">
+                  <th className="px-3 py-3 text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
                     Name
                   </th>
-                  <th className="px-3 py-3 font-semibold text-slate-700">
+                  <th className="px-3 py-3 text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
                     Email
                   </th>
-                  <th className="px-3 py-3 font-semibold text-slate-700">
+                  <th className="px-3 py-3 text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
                     Phone
                   </th>
-                  <th className="min-w-[160px] px-3 py-3 font-semibold text-slate-700">
+                  <th className="min-w-[160px] px-3 py-3 text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
                     Shipping address
                   </th>
-                  <th className="px-3 py-3 font-semibold text-slate-700">
+                  <th className="px-3 py-3 text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
                     Status
                   </th>
-                  <th className="px-3 py-3 font-semibold text-slate-700">
+                  <th className="px-3 py-3 text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
                     Dispatch date
                   </th>
-                  <th className="px-3 py-3 font-semibold text-slate-700">
+                  <th className="px-3 py-3 text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
                     Tracking ID
                   </th>
-                  <th className="px-3 py-3 font-semibold text-slate-700">
+                  <th className="px-3 py-3 text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
                     Expected delivery
                   </th>
-                  <th className="px-3 py-3 font-semibold text-slate-700">
+                  <th className="px-3 py-3 text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
                     Actions
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody>
                 {loading ? (
                   <tr>
                     <td
                       colSpan={9}
-                      className="px-4 py-12 text-center text-slate-500"
+                      className="px-4 py-12 text-center text-sm text-[#6e6e73]"
                     >
                       Loading…
                     </td>
@@ -650,7 +635,7 @@ export function DispatchDashboard() {
                   <tr>
                     <td
                       colSpan={9}
-                      className="px-4 py-12 text-center text-slate-500"
+                      className="px-4 py-12 text-center text-sm text-[#6e6e73]"
                     >
                       No dispatch records for this filter.
                     </td>
@@ -665,41 +650,44 @@ export function DispatchDashboard() {
                       r.dispatch_status === "pending" ||
                       r.dispatch_status === "dispatched";
                     return (
-                      <tr key={r.id} className="hover:bg-slate-50/80">
-                        <td className="max-w-[120px] truncate px-3 py-3 font-medium text-slate-900">
+                      <tr
+                        key={r.id}
+                        className="border-b border-[#f5f5f5] last:border-b-0 hover:bg-[#fafafa]"
+                      >
+                        <td className="max-w-[120px] truncate px-3 py-3 font-medium text-[#1d1d1f]">
                           {c?.full_name ?? "—"}
                         </td>
-                        <td className="max-w-[160px] truncate px-3 py-3 text-slate-600">
+                        <td className="max-w-[160px] truncate px-3 py-3 text-[#6e6e73]">
                           {c?.email ?? "—"}
                         </td>
-                        <td className="max-w-[100px] truncate px-3 py-3 text-slate-600">
+                        <td className="max-w-[100px] truncate px-3 py-3 text-[#6e6e73]">
                           {c?.whatsapp_number ?? "—"}
                         </td>
-                        <td className="max-w-[200px] whitespace-pre-wrap break-words px-3 py-3 text-slate-600">
+                        <td className="max-w-[200px] whitespace-pre-wrap break-words px-3 py-3 text-[#6e6e73]">
                           {r.shipping_address ?? "—"}
                         </td>
                         <td className="px-3 py-3">
                           <span
-                            className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold capitalize ring-1 ring-inset ${statusBadgeClass(r.dispatch_status)}`}
+                            className={`inline-flex rounded-full px-3 py-1 text-xs font-medium capitalize ${statusBadgeClass(r.dispatch_status)}`}
                           >
                             {r.dispatch_status}
                           </span>
                         </td>
-                        <td className="whitespace-nowrap px-3 py-3 text-slate-600">
+                        <td className="whitespace-nowrap px-3 py-3 text-[#6e6e73]">
                           {formatDisplayDateTime(r.dispatch_date)}
                         </td>
-                        <td className="max-w-[120px] truncate px-3 py-3 font-mono text-xs text-slate-700">
+                        <td className="max-w-[120px] truncate px-3 py-3 font-mono text-xs text-[#1d1d1f]">
                           {r.tracking_id ?? "—"}
                         </td>
-                        <td className="whitespace-nowrap px-3 py-3 text-slate-600">
+                        <td className="whitespace-nowrap px-3 py-3 text-[#6e6e73]">
                           {formatDisplayDate(r.expected_delivery_date)}
                         </td>
                         <td className="px-3 py-3">
-                          <div className="flex flex-col gap-1">
+                          <div className="flex flex-col items-start gap-2">
                             {canUpdate && (
                               <button
                                 type="button"
-                                className="whitespace-nowrap rounded-md bg-slate-900 px-2 py-1 text-xs font-medium text-white hover:bg-slate-800"
+                                className="whitespace-nowrap text-sm font-medium text-[#3b82f6] transition-all hover:text-[#2563eb]"
                                 onClick={() => setUpdateRow(r)}
                               >
                                 Update dispatch
@@ -709,7 +697,7 @@ export function DispatchDashboard() {
                               <button
                                 type="button"
                                 disabled={busyId === r.id}
-                                className="whitespace-nowrap rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-800 hover:bg-emerald-100 disabled:opacity-50"
+                                className="whitespace-nowrap text-sm font-medium text-[#16a34a] transition-all hover:text-[#15803d] disabled:opacity-50"
                                 onClick={() => void markDelivered(r)}
                               >
                                 Mark delivered
@@ -738,6 +726,6 @@ export function DispatchDashboard() {
           void loadStats();
         }}
       />
-    </div>
+    </>
   );
 }

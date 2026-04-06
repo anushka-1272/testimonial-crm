@@ -122,57 +122,61 @@ export function ScheduleInterviewModal({
     setSubmitting(false);
   };
 
+  const inp =
+    "mt-1 w-full rounded-xl border border-[#e5e5e5] px-3 py-2.5 text-sm text-[#1d1d1f] focus:border-[#3b82f6] focus:outline-none focus:ring-0";
+  const lab = "text-xs font-medium uppercase tracking-widest text-[#aeaeb2]";
+
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
       <button
         type="button"
-        className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm"
+        className="absolute inset-0 bg-[#1d1d1f]/25 backdrop-blur-sm"
         aria-label="Close"
         onClick={onClose}
       />
-      <div className="relative max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
+      <div className="relative max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-[#f0f0f0] bg-white p-6 shadow-[0_4px_16px_rgba(0,0,0,0.08)]">
         <div className="mb-4 flex items-start justify-between">
           <div>
-            <h2 className="text-lg font-semibold text-slate-900">
+            <h2 className="text-lg font-semibold text-[#1d1d1f]">
               Schedule interview
             </h2>
-            <p className="text-sm text-slate-500">
+            <p className="text-sm text-[#6e6e73]">
               {candidate.full_name ?? "Candidate"} · {candidate.email}
             </p>
           </div>
           <button
             type="button"
-            className="rounded-lg p-2 text-slate-400 hover:bg-slate-100"
+            className="rounded-xl p-2 text-[#aeaeb2] transition-all hover:bg-[#f5f5f7] hover:text-[#1d1d1f]"
             onClick={onClose}
           >
             ✕
           </button>
         </div>
 
-        <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4">
+        <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4 text-sm">
           {error && (
-            <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+            <p className="rounded-xl border border-[#f0f0f0] bg-[#f5f5f7] px-3 py-2 text-sm text-[#1d1d1f]">
               {error}
             </p>
           )}
 
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="block text-sm">
-              <span className="font-medium text-slate-700">Date</span>
+              <span className={lab}>Date</span>
               <input
                 required
                 type="date"
-                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2"
+                className={inp}
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
               />
             </label>
             <label className="block text-sm">
-              <span className="font-medium text-slate-700">Time</span>
+              <span className={lab}>Time</span>
               <input
                 required
                 type="time"
-                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2"
+                className={inp}
                 value={time}
                 onChange={(e) => setTime(e.target.value)}
               />
@@ -180,9 +184,9 @@ export function ScheduleInterviewModal({
           </div>
 
           <label className="block text-sm">
-            <span className="font-medium text-slate-700">Interviewer</span>
+            <span className={lab}>Interviewer</span>
             <select
-              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2"
+              className={inp}
               value={interviewer}
               onChange={(e) =>
                 setInterviewer(e.target.value as (typeof INTERVIEWERS)[number])
@@ -197,9 +201,9 @@ export function ScheduleInterviewModal({
           </label>
 
           <label className="block text-sm">
-            <span className="font-medium text-slate-700">Interview type</span>
+            <span className={lab}>Interview type</span>
             <select
-              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2"
+              className={inp}
               value={interviewType}
               onChange={(e) =>
                 setInterviewType(e.target.value as "testimonial" | "project")
@@ -211,20 +215,20 @@ export function ScheduleInterviewModal({
           </label>
 
           <label className="block text-sm">
-            <span className="font-medium text-slate-700">Language</span>
+            <span className={lab}>Language</span>
             <input
               type="text"
-              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2"
+              className={inp}
               value={language}
               onChange={(e) => setLanguage(e.target.value)}
             />
           </label>
 
           <label className="block text-sm">
-            <span className="font-medium text-slate-700">Zoom link</span>
+            <span className={lab}>Zoom link</span>
             <input
               type="url"
-              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2"
+              className={inp}
               placeholder="https://..."
               value={zoomLink}
               onChange={(e) => setZoomLink(e.target.value)}
@@ -232,20 +236,20 @@ export function ScheduleInterviewModal({
           </label>
 
           <label className="block text-sm">
-            <span className="font-medium text-slate-700">POC</span>
+            <span className={lab}>POC</span>
             <input
               type="text"
-              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2"
+              className={inp}
               value={poc}
               onChange={(e) => setPoc(e.target.value)}
             />
           </label>
 
           <label className="block text-sm">
-            <span className="font-medium text-slate-700">Remarks</span>
+            <span className={lab}>Remarks</span>
             <textarea
               rows={2}
-              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2"
+              className={inp}
               value={remarks}
               onChange={(e) => setRemarks(e.target.value)}
             />
@@ -254,7 +258,7 @@ export function ScheduleInterviewModal({
           <div className="flex justify-end gap-2 pt-2">
             <button
               type="button"
-              className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              className="rounded-xl border border-[#f0f0f0] bg-white px-4 py-2 text-sm font-medium text-[#1d1d1f] transition-all hover:bg-[#fafafa]"
               onClick={onClose}
             >
               Cancel
@@ -262,7 +266,7 @@ export function ScheduleInterviewModal({
             <button
               type="submit"
               disabled={submitting}
-              className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
+              className="rounded-xl bg-[#1d1d1f] px-4 py-2 text-sm font-medium text-white transition-all hover:bg-[#2d2d2f] disabled:opacity-50"
             >
               {submitting ? "Saving…" : "Create & send confirmation"}
             </button>

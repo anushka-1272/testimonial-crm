@@ -103,27 +103,30 @@ export function PostInterviewDrawer({
     setSubmitting(false);
   };
 
+  const inp =
+    "mt-1 w-full rounded-xl border border-[#e5e5e5] px-3 py-2.5 text-sm text-[#1d1d1f] focus:border-[#3b82f6] focus:outline-none focus:ring-0";
+
   return (
     <div className="fixed inset-0 z-[70] flex justify-end">
       <button
         type="button"
-        className="absolute inset-0 bg-slate-900/40 backdrop-blur-[1px]"
+        className="absolute inset-0 bg-[#1d1d1f]/25 backdrop-blur-[1px]"
         aria-label="Close"
         onClick={onClose}
       />
-      <aside className="relative flex h-full w-full max-w-md flex-col border-l border-slate-200 bg-white shadow-2xl">
-        <div className="flex items-start justify-between border-b border-slate-100 px-5 py-4">
+      <aside className="relative flex h-full w-full max-w-md flex-col border-l border-[#f0f0f0] bg-white shadow-[0_4px_16px_rgba(0,0,0,0.08)]">
+        <div className="flex items-start justify-between border-b border-[#f5f5f5] px-5 py-4">
           <div>
-            <h2 className="text-lg font-semibold text-slate-900">
+            <h2 className="text-lg font-semibold text-[#1d1d1f]">
               Complete interview
             </h2>
-            <p className="text-sm text-slate-500">
+            <p className="text-sm text-[#6e6e73]">
               {name ?? "Candidate"} · Post-interview details
             </p>
           </div>
           <button
             type="button"
-            className="rounded-lg p-2 text-slate-400 hover:bg-slate-100"
+            className="rounded-xl p-2 text-[#aeaeb2] transition-all hover:bg-[#f5f5f7] hover:text-[#1d1d1f]"
             onClick={onClose}
           >
             ✕
@@ -132,17 +135,17 @@ export function PostInterviewDrawer({
 
         <form
           onSubmit={(e) => void handleSubmit(e)}
-          className="flex flex-1 flex-col overflow-hidden"
+          className="flex flex-1 flex-col overflow-hidden text-sm text-[#1d1d1f]"
         >
           <div className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
             {error && (
-              <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+              <p className="rounded-xl border border-[#f0f0f0] bg-[#f5f5f7] px-3 py-2 text-sm text-[#1d1d1f]">
                 {error}
               </p>
             )}
 
             <fieldset>
-              <legend className="text-sm font-medium text-slate-700">
+              <legend className="text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
                 Post-interview eligible?
               </legend>
               <div className="mt-2 flex gap-4">
@@ -168,30 +171,36 @@ export function PostInterviewDrawer({
             </fieldset>
 
             <label className="block text-sm">
-              <span className="font-medium text-slate-700">Category</span>
+              <span className="text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
+                Category
+              </span>
               <input
                 type="text"
-                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2"
+                className={inp}
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
               />
             </label>
 
             <label className="block text-sm">
-              <span className="font-medium text-slate-700">Funnel</span>
+              <span className="text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
+                Funnel
+              </span>
               <input
                 type="text"
-                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2"
+                className={inp}
                 value={funnel}
                 onChange={(e) => setFunnel(e.target.value)}
               />
             </label>
 
             <label className="block text-sm">
-              <span className="font-medium text-slate-700">Comments</span>
+              <span className="text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
+                Comments
+              </span>
               <textarea
                 rows={3}
-                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2"
+                className={inp}
                 value={comments}
                 onChange={(e) => setComments(e.target.value)}
               />
@@ -199,14 +208,14 @@ export function PostInterviewDrawer({
 
             {eligible === true && (
               <label className="block text-sm">
-                <span className="font-medium text-slate-700">
+                <span className="text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
                   Shipping address
                 </span>
                 <textarea
                   required={eligible === true}
                   rows={3}
                   placeholder="Full mailing address for dispatch"
-                  className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2"
+                  className={inp}
                   value={shippingAddress}
                   onChange={(e) => setShippingAddress(e.target.value)}
                 />
@@ -214,11 +223,11 @@ export function PostInterviewDrawer({
             )}
           </div>
 
-          <div className="border-t border-slate-100 px-5 py-3">
+          <div className="border-t border-[#f5f5f5] px-5 py-3">
             <div className="flex gap-2">
               <button
                 type="button"
-                className="flex-1 rounded-lg border border-slate-200 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                className="flex-1 rounded-xl border border-[#f0f0f0] bg-white py-2.5 text-sm font-medium text-[#1d1d1f] transition-all hover:bg-[#fafafa]"
                 onClick={onClose}
               >
                 Cancel
@@ -226,7 +235,7 @@ export function PostInterviewDrawer({
               <button
                 type="submit"
                 disabled={submitting}
-                className="flex-1 rounded-lg bg-slate-900 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
+                className="flex-1 rounded-xl bg-[#1d1d1f] py-2.5 text-sm font-medium text-white transition-all hover:bg-[#2d2d2f] disabled:opacity-50"
               >
                 {submitting ? "Saving…" : "Save & mark completed"}
               </button>

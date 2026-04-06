@@ -10,12 +10,9 @@ import {
   useSensors,
 } from "@dnd-kit/core";
 import { format, parseISO } from "date-fns";
-import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { LogoutButton } from "@/components/logout-button";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
-import type { RealtimeChannel } from "@supabase/supabase-js";
 
 import { PostInterviewDrawer } from "./post-interview-drawer";
 import {
@@ -32,32 +29,65 @@ const COL_CANCELLED = "col-cancelled";
 
 const INTERVIEW_SELECT = `id, candidate_id, scheduled_date, interviewer, zoom_link, language, invitation_sent, poc, remarks, reminder_count, interview_status, post_interview_eligible, category, funnel, comments, interview_type, candidates ( id, full_name, email )`;
 
+function interviewStatusBadgeClass(status: string): string {
+  switch (status) {
+    case "scheduled":
+    case "rescheduled":
+      return "bg-[#eff6ff] text-[#3b82f6]";
+    case "completed":
+      return "bg-[#f0fdf4] text-[#16a34a]";
+    case "cancelled":
+      return "bg-[#fef2f2] text-[#dc2626]";
+    default:
+      return "bg-[#fafafa] text-[#6e6e73]";
+  }
+}
+
+function interviewTypeBadgeClass(
+  type: "testimonial" | "project",
+): string {
+  return type === "testimonial"
+    ? "bg-[#eff6ff] text-[#3b82f6]"
+    : "bg-[#fafafa] text-[#6e6e73]";
+}
+
 function DroppableColumn({
   id,
   title,
   subtitle,
+  count,
   children,
 }: {
   id: string;
   title: string;
   subtitle?: string;
+  count: number;
   children: React.ReactNode;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id });
   return (
     <div
       ref={setNodeRef}
-      className={`flex min-h-[min(420px,70vh)] flex-1 min-w-[240px] flex-col rounded-xl border border-slate-200 bg-slate-50/80 shadow-sm transition-shadow ${
-        isOver ? "ring-2 ring-indigo-400 ring-offset-2" : ""
+      className={`flex min-h-[min(420px,70vh)] flex-1 min-w-[260px] flex-col rounded-2xl border border-[#f0f0f0] bg-white shadow-sm transition-shadow ${
+        isOver ? "ring-1 ring-[#3b82f6]/25" : ""
       }`}
     >
-      <div className="border-b border-slate-200 bg-white px-3 py-2.5">
-        <h3 className="text-sm font-semibold text-slate-900">{title}</h3>
-        {subtitle && (
-          <p className="text-xs text-slate-500">{subtitle}</p>
-        )}
+      <div className="border-b border-[#f5f5f5] px-4 py-3">
+        <div className="flex items-center justify-between gap-3">
+          <h3 className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+            {title}
+          </h3>
+          <span className="shrink-0 rounded-full bg-[#f5f5f7] px-2 py-0.5 text-xs text-[#1d1d1f]">
+            {count}
+          </span>
+        </div>
+        {subtitle ? (
+          <p className="mt-1.5 text-xs text-[#6e6e73]">{subtitle}</p>
+        ) : null}
       </div>
-      <div className="flex flex-1 flex-col gap-2 p-2">{children}</div>
+      <div className="flex flex-1 flex-col gap-2 rounded-b-2xl bg-[#f5f5f7] p-2">
+        {children}
+      </div>
     </div>
   );
 }
@@ -84,14 +114,14 @@ function CandidateCard({
     <div
       ref={setNodeRef}
       style={style}
-      className={`rounded-lg border border-slate-200 bg-white p-3 shadow-sm ${
+      className={`rounded-xl border border-[#f0f0f0] bg-white p-4 shadow-sm transition-shadow duration-200 ease-out hover:shadow-[0_4px_16px_rgba(0,0,0,0.08)] ${
         isDragging ? "opacity-60" : ""
       }`}
     >
       <div className="flex items-start gap-2">
         <button
           type="button"
-          className="mt-0.5 cursor-grab touch-none rounded border border-slate-200 bg-slate-50 px-1.5 py-1 text-xs text-slate-500 active:cursor-grabbing"
+          className="mt-0.5 cursor-grab touch-none rounded-lg border border-[#f0f0f0] bg-white px-1.5 py-1 text-xs text-[#aeaeb2] active:cursor-grabbing"
           {...listeners}
           {...attributes}
           aria-label="Drag"
@@ -99,13 +129,15 @@ function CandidateCard({
           ⋮⋮
         </button>
         <div className="min-w-0 flex-1">
-          <p className="truncate font-medium text-slate-900">
+          <p className="truncate text-sm font-semibold text-[#1d1d1f]">
             {candidate.full_name ?? "—"}
           </p>
-          <p className="truncate text-xs text-slate-500">{candidate.email}</p>
+          <p className="mt-1 truncate text-xs text-[#6e6e73]">
+            {candidate.email}
+          </p>
           <button
             type="button"
-            className="mt-2 w-full rounded-md bg-indigo-600 px-2 py-1.5 text-xs font-medium text-white hover:bg-indigo-700"
+            className="mt-3 w-full rounded-lg bg-[#1d1d1f] px-3 py-1.5 text-xs text-white transition-colors hover:bg-[#2d2d2f]"
             onClick={() => onSchedule(candidate)}
           >
             Schedule interview
@@ -149,34 +181,42 @@ function InterviewCard({
     <div
       ref={setNodeRef}
       style={style}
-      className={`rounded-lg border border-slate-200 bg-white p-3 shadow-sm ${
+      className={`rounded-xl border border-[#f0f0f0] bg-white p-4 shadow-sm transition-shadow duration-200 ease-out hover:shadow-[0_4px_16px_rgba(0,0,0,0.08)] ${
         isDragging ? "opacity-60" : ""
       }`}
     >
       <div className="flex items-start gap-2">
         <button
           type="button"
-          className="mt-0.5 cursor-grab touch-none rounded border border-slate-200 bg-slate-50 px-1.5 py-1 text-xs text-slate-500 active:cursor-grabbing"
+          className="mt-0.5 cursor-grab touch-none rounded-lg border border-[#f0f0f0] bg-white px-1.5 py-1 text-xs text-[#aeaeb2] active:cursor-grabbing"
           {...listeners}
           {...attributes}
           aria-label="Drag"
         >
           ⋮⋮
         </button>
-        <div className="min-w-0 flex-1 space-y-1 text-xs">
-          <p className="font-semibold text-slate-900">{name}</p>
-          <p className="text-slate-600">{when}</p>
-          <p className="text-slate-500">
-            <span className="font-medium text-slate-700">Interviewer:</span>{" "}
-            {interview.interviewer}
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold text-[#1d1d1f]">{name}</p>
+          <p className="mt-2 text-xs text-[#6e6e73]">{when}</p>
+          <p className="mt-1 text-xs text-[#6e6e73]">
+            Interviewer: {interview.interviewer}
           </p>
-          <span className="inline-block rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-slate-700">
-            {typeLabel}
-          </span>
+          <div className="mt-2.5 flex flex-wrap gap-1.5">
+            <span
+              className={`inline-flex rounded-full px-3 py-1 text-xs font-medium ${interviewTypeBadgeClass(interview.interview_type)}`}
+            >
+              {typeLabel}
+            </span>
+            <span
+              className={`inline-flex rounded-full px-3 py-1 text-xs font-medium capitalize ${interviewStatusBadgeClass(interview.interview_status)}`}
+            >
+              {interview.interview_status.replace(/_/g, " ")}
+            </span>
+          </div>
           {showComplete && (
             <button
               type="button"
-              className="mt-2 block w-full rounded-md bg-slate-900 px-2 py-1.5 text-xs font-medium text-white hover:bg-slate-800"
+              className="mt-3 block w-full rounded-lg border border-[#e5e5e5] bg-white px-3 py-1.5 text-xs text-[#1d1d1f] transition-colors hover:bg-[#f5f5f7]"
               onClick={() => onMarkComplete(interview)}
             >
               Mark completed…
@@ -264,34 +304,32 @@ export function InterviewsBoard() {
       return;
     }
 
-    let ch: RealtimeChannel | null = null;
+    const ch = supabase
+      .channel("interviews-dashboard")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "interviews" },
+        () => {
+          void loadData();
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "candidates" },
+        () => {
+          void loadData();
+        },
+      )
+      .subscribe();
 
-    (async () => {
+    void (async () => {
       setLoading(true);
       await loadData();
       setLoading(false);
-
-      ch = supabase
-        .channel("interviews-dashboard")
-        .on(
-          "postgres_changes",
-          { event: "*", schema: "public", table: "interviews" },
-          () => {
-            void loadData();
-          },
-        )
-        .on(
-          "postgres_changes",
-          { event: "*", schema: "public", table: "candidates" },
-          () => {
-            void loadData();
-          },
-        )
-        .subscribe();
     })();
 
     return () => {
-      if (ch) void supabase.removeChannel(ch);
+      void supabase.removeChannel(ch);
     };
   }, [supabase, loadData]);
 
@@ -382,7 +420,7 @@ export function InterviewsBoard() {
 
   if (!supabase) {
     return (
-      <div className="mx-auto max-w-lg px-4 py-16 text-center text-slate-600">
+      <div className="mx-auto max-w-lg px-8 py-16 text-center text-sm text-[#6e6e73]">
         {error ?? "Cannot connect to Supabase."}
       </div>
     );
@@ -390,45 +428,23 @@ export function InterviewsBoard() {
 
   return (
     <DndContext sensors={sensors} onDragEnd={(e) => void handleDragEnd(e)}>
-      <div className="min-h-screen bg-slate-50/80">
-        <header className="border-b border-slate-200 bg-white">
-          <div className="mx-auto flex max-w-[1600px] items-center justify-between px-4 py-4 sm:px-6">
-            <div>
-              <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                Dashboard
-              </p>
-              <h1 className="text-xl font-semibold text-slate-900">
-                Interview scheduling
-              </h1>
-            </div>
-            <div className="flex flex-wrap gap-4 text-sm font-medium">
-              <Link
-                href="/dashboard/eligibility"
-                className="text-slate-600 hover:text-slate-900"
-              >
-                Eligibility
-              </Link>
-              <Link
-                href="/dashboard/dispatch"
-                className="text-slate-600 hover:text-slate-900"
-              >
-                Dispatch
-              </Link>
-              <Link href="/dashboard" className="text-slate-600 hover:text-slate-900">
-                Home
-              </Link>
-              <LogoutButton />
-            </div>
-          </div>
+      <>
+        <header className="sticky top-0 z-30 bg-[#f5f5f7]/90 px-8 py-6 backdrop-blur-md">
+          <h1 className="text-2xl font-semibold tracking-tight text-[#1d1d1f]">
+            Interview scheduling
+          </h1>
+          <p className="mt-1 text-sm text-[#6e6e73]">
+            Kanban board · drag to update status
+          </p>
         </header>
 
-        <main className="mx-auto max-w-[1600px] px-4 py-6 sm:px-6">
+        <main className="mx-auto max-w-[1600px] px-8 pb-12 pt-2 text-sm text-[#1d1d1f]">
           {error && (
-            <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900">
+            <div className="mb-4 rounded-2xl border border-[#f0f0f0] bg-white px-4 py-3 text-sm text-[#1d1d1f] shadow-[0_4px_16px_rgba(0,0,0,0.08)]">
               {error}
               <button
                 type="button"
-                className="ml-2 underline"
+                className="ml-2 font-medium text-[#3b82f6] hover:text-[#2563eb]"
                 onClick={() => setError(null)}
               >
                 Dismiss
@@ -436,25 +452,18 @@ export function InterviewsBoard() {
             </div>
           )}
 
-          <p className="mb-4 text-sm text-slate-600">
-            Drag eligible candidates onto <strong>Scheduled</strong> to open the
-            scheduler, or use <strong>Schedule interview</strong>. Drag interviews
-            between columns to update status. Drop on{" "}
-            <strong>Completed</strong> (or use <strong>Mark completed</strong>) to
-            capture post-interview details.
-          </p>
-
           {loading ? (
-            <p className="text-slate-500">Loading board…</p>
+            <p className="text-sm text-[#6e6e73]">Loading board…</p>
           ) : (
             <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:overflow-x-auto lg:pb-2">
               <DroppableColumn
                 id={COL_ELIGIBLE}
                 title="Eligible"
                 subtitle="Not yet scheduled"
+                count={eligibleQueue.length}
               >
                 {eligibleQueue.length === 0 ? (
-                  <p className="px-2 py-6 text-center text-xs text-slate-400">
+                  <p className="px-2 py-6 text-center text-xs text-[#aeaeb2]">
                     No eligible candidates waiting.
                   </p>
                 ) : (
@@ -474,9 +483,13 @@ export function InterviewsBoard() {
                 )}
               </DroppableColumn>
 
-              <DroppableColumn id={COL_SCHEDULED} title="Scheduled">
+              <DroppableColumn
+                id={COL_SCHEDULED}
+                title="Scheduled"
+                count={byStatus.scheduled.length}
+              >
                 {byStatus.scheduled.length === 0 ? (
-                  <p className="px-2 py-6 text-center text-xs text-slate-400">
+                  <p className="px-2 py-6 text-center text-xs text-[#aeaeb2]">
                     Empty
                   </p>
                 ) : (
@@ -490,9 +503,13 @@ export function InterviewsBoard() {
                 )}
               </DroppableColumn>
 
-              <DroppableColumn id={COL_RESCHEDULED} title="Rescheduled">
+              <DroppableColumn
+                id={COL_RESCHEDULED}
+                title="Rescheduled"
+                count={byStatus.rescheduled.length}
+              >
                 {byStatus.rescheduled.length === 0 ? (
-                  <p className="px-2 py-6 text-center text-xs text-slate-400">
+                  <p className="px-2 py-6 text-center text-xs text-[#aeaeb2]">
                     Empty
                   </p>
                 ) : (
@@ -506,9 +523,13 @@ export function InterviewsBoard() {
                 )}
               </DroppableColumn>
 
-              <DroppableColumn id={COL_COMPLETED} title="Completed">
+              <DroppableColumn
+                id={COL_COMPLETED}
+                title="Completed"
+                count={byStatus.completed.length}
+              >
                 {byStatus.completed.length === 0 ? (
-                  <p className="px-2 py-6 text-center text-xs text-slate-400">
+                  <p className="px-2 py-6 text-center text-xs text-[#aeaeb2]">
                     Empty
                   </p>
                 ) : (
@@ -522,9 +543,13 @@ export function InterviewsBoard() {
                 )}
               </DroppableColumn>
 
-              <DroppableColumn id={COL_CANCELLED} title="Cancelled">
+              <DroppableColumn
+                id={COL_CANCELLED}
+                title="Cancelled"
+                count={byStatus.cancelled.length}
+              >
                 {byStatus.cancelled.length === 0 ? (
-                  <p className="px-2 py-6 text-center text-xs text-slate-400">
+                  <p className="px-2 py-6 text-center text-xs text-[#aeaeb2]">
                     Empty
                   </p>
                 ) : (
@@ -540,7 +565,7 @@ export function InterviewsBoard() {
             </div>
           )}
         </main>
-      </div>
+      </>
 
       <ScheduleInterviewModal
         key={scheduleFor?.id ?? "schedule-closed"}
