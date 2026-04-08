@@ -1,231 +1,380 @@
 "use client";
 
 import {
-  DndContext,
-  type DragEndEvent,
-  PointerSensor,
-  useDraggable,
-  useDroppable,
-  useSensor,
-  useSensors,
-} from "@dnd-kit/core";
-import { format, parseISO } from "date-fns";
+  endOfDay,
+  format,
+  parse,
+  parseISO,
+  startOfDay,
+} from "date-fns";
+import { Pencil } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { CandidateDetailModal } from "@/components/candidate-detail-modal";
+import { logActivity } from "@/lib/activity-logger";
+import {
+  effectiveInterviewLanguage,
+  formatInterviewLanguageLabel,
+  interviewLanguageBadgeClass,
+  matchesInterviewLanguageFilter,
+  type InterviewLanguageFilter,
+} from "@/lib/interview-language";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 
 import { PostInterviewDrawer } from "./post-interview-drawer";
+import { RescheduleInterviewModal } from "./reschedule-interview-modal";
+import { ProjectInterviewsPanel } from "./project-interviews-panel";
 import {
   ScheduleInterviewModal,
   type ScheduleCandidate,
+  type ScheduleProjectCandidate,
 } from "./schedule-interview-modal";
-import type { EligibleCandidate, InterviewWithCandidate } from "./types";
+import type {
+  EligibleCandidate,
+  InterviewWithCandidate,
+  LinkedInTrackStatus,
+  ProjectInterviewWithProjectCandidate,
+} from "./types";
 
-const COL_ELIGIBLE = "col-eligible";
-const COL_SCHEDULED = "col-scheduled";
-const COL_RESCHEDULED = "col-rescheduled";
-const COL_COMPLETED = "col-completed";
-const COL_CANCELLED = "col-cancelled";
+const PAGE_SIZE = 20;
 
-const INTERVIEW_SELECT = `id, candidate_id, scheduled_date, interviewer, zoom_link, language, invitation_sent, poc, remarks, reminder_count, interview_status, post_interview_eligible, category, funnel, comments, interview_type, candidates ( id, full_name, email )`;
+const TEAM_POC_MEMBERS = ["Harika", "Anushka", "Gargi", "Mudit"] as const;
 
-function interviewStatusBadgeClass(status: string): string {
+const INTERVIEW_SELECT = `id, candidate_id, scheduled_date, previous_scheduled_date, reschedule_reason, completed_at, interviewer, zoom_link, language, interview_language, invitation_sent, poc, remarks, reminder_count, interview_status, post_interview_eligible, reward_item, category, funnel, comments, interview_type, candidates ( id, full_name, email, whatsapp_number, poc_assigned )`;
+
+const cardChrome =
+  "rounded-2xl bg-white shadow-[0_4px_16px_rgba(0,0,0,0.08)] border border-[#f0f0f0]";
+
+type BoardTab =
+  | "eligible"
+  | "scheduled"
+  | "rescheduled"
+  | "completed"
+  | "project_interviews";
+
+type InterviewTypeFilter = "all" | "testimonial" | "project";
+
+const LANGUAGE_FILTER_OPTIONS: {
+  value: InterviewLanguageFilter;
+  label: string;
+}[] = [
+  { value: "all", label: "All" },
+  { value: "english", label: "English" },
+  { value: "hindi", label: "Hindi" },
+  { value: "kannada", label: "Kannada" },
+  { value: "telugu", label: "Telugu" },
+  { value: "marathi", label: "Marathi" },
+  { value: "bengali", label: "Bengali" },
+  { value: "other", label: "Other" },
+];
+
+type TableFilters = {
+  search: string;
+  interviewType: InterviewTypeFilter;
+  language: InterviewLanguageFilter;
+  page: number;
+};
+
+type PostInterviewEligibleFilter = "all" | "eligible" | "not_eligible";
+
+type CompletedTabFilters = TableFilters & {
+  postInterviewEligible: PostInterviewEligibleFilter;
+  interviewer: string;
+  completedFrom: string;
+  completedTo: string;
+  category: string;
+};
+
+type SimpleTab = Exclude<BoardTab, "completed" | "project_interviews">;
+
+const emptyFilters = (): TableFilters => ({
+  search: "",
+  interviewType: "all",
+  language: "all",
+  page: 0,
+});
+
+const defaultCompletedFilters = (): CompletedTabFilters => ({
+  ...emptyFilters(),
+  postInterviewEligible: "all",
+  interviewer: "all",
+  completedFrom: "",
+  completedTo: "",
+  category: "",
+});
+
+function matchesRowSearch(
+  name: string | null | undefined,
+  email: string | null | undefined,
+  q: string,
+): boolean {
+  const s = q.trim().toLowerCase();
+  if (!s) return true;
+  return (
+    (name ?? "").toLowerCase().includes(s) ||
+    (email ?? "").toLowerCase().includes(s)
+  );
+}
+
+function interviewCategoryLines(raw: string | null | undefined): string[] {
+  return (raw ?? "")
+    .split("\n")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+function filterCompletedInterviews(
+  rows: InterviewWithCandidate[],
+  f: CompletedTabFilters,
+): InterviewWithCandidate[] {
+  return rows.filter((i) => {
+    if (
+      f.interviewType !== "all" &&
+      i.interview_type !== f.interviewType
+    )
+      return false;
+    if (
+      f.postInterviewEligible === "eligible" &&
+      i.post_interview_eligible !== true
+    )
+      return false;
+    if (
+      f.postInterviewEligible === "not_eligible" &&
+      i.post_interview_eligible !== false
+    )
+      return false;
+    if (f.interviewer !== "all" && i.interviewer !== f.interviewer)
+      return false;
+    if (f.category) {
+      const lines = interviewCategoryLines(i.category);
+      if (!lines.includes(f.category)) return false;
+    }
+    if (f.completedFrom) {
+      const from = startOfDay(
+        parse(f.completedFrom, "yyyy-MM-dd", new Date()),
+      );
+      if (!i.completed_at || parseISO(i.completed_at) < from) return false;
+    }
+    if (f.completedTo) {
+      const to = endOfDay(parse(f.completedTo, "yyyy-MM-dd", new Date()));
+      if (!i.completed_at || parseISO(i.completed_at) > to) return false;
+    }
+    if (
+      f.language !== "all" &&
+      !matchesInterviewLanguageFilter(
+        effectiveInterviewLanguage(i),
+        f.language,
+      )
+    )
+      return false;
+    const q = f.search.trim().toLowerCase();
+    if (q) {
+      const name = (i.candidates?.full_name ?? "").toLowerCase();
+      const email = (i.candidates?.email ?? "").toLowerCase();
+      const phone = (i.candidates?.whatsapp_number ?? "").toLowerCase();
+      const categoryBlob = interviewCategoryLines(i.category)
+        .join(" ")
+        .toLowerCase();
+      if (
+        !name.includes(q) &&
+        !email.includes(q) &&
+        !phone.includes(q) &&
+        !categoryBlob.includes(q)
+      )
+        return false;
+    }
+    return true;
+  });
+}
+
+function truncateWithTooltip(text: string | null | undefined, maxLen: number) {
+  const t = text?.trim() ?? "";
+  if (!t) return { display: "—" as string, title: undefined as string | undefined };
+  if (t.length <= maxLen) return { display: t, title: undefined };
+  return { display: `${t.slice(0, maxLen)}…`, title: t };
+}
+
+const REWARD_NO_DISPATCH = "No Dispatch";
+const REWARD_JBL_CLIP = "JBL Clip 5";
+
+const LINKEDIN_STATUSES: readonly LinkedInTrackStatus[] = [
+  "pending_post",
+  "posted",
+  "verified",
+  "eligible",
+  "not_eligible",
+] as const;
+
+function normalizeLinkedInTrackStatus(
+  raw: string | null | undefined,
+): LinkedInTrackStatus {
+  const s = raw?.trim() ?? "";
+  return (LINKEDIN_STATUSES as readonly string[]).includes(s)
+    ? (s as LinkedInTrackStatus)
+    : "pending_post";
+}
+
+function linkedInPipelineBadge(status: LinkedInTrackStatus | null) {
+  if (!status) return <span className="text-[#6e6e73]">—</span>;
   switch (status) {
-    case "scheduled":
-    case "rescheduled":
-      return "bg-[#eff6ff] text-[#3b82f6]";
-    case "completed":
-      return "bg-[#f0fdf4] text-[#16a34a]";
-    case "cancelled":
-      return "bg-[#fef2f2] text-[#dc2626]";
+    case "pending_post":
+      return (
+        <span className="inline-flex rounded-full bg-[#f3e8ff] px-2.5 py-1 text-xs font-medium text-[#7c3aed]">
+          Pending Post
+        </span>
+      );
+    case "posted":
+      return (
+        <span className="inline-flex rounded-full bg-[#dbeafe] px-2.5 py-1 text-xs font-medium text-[#1d4ed8]">
+          Posted
+        </span>
+      );
+    case "verified":
+      return (
+        <span className="inline-flex rounded-full bg-[#ccfbf1] px-2.5 py-1 text-xs font-medium text-[#0f766e]">
+          Verified
+        </span>
+      );
+    case "eligible":
+      return (
+        <span className="inline-flex rounded-full bg-[#f0fdf4] px-2.5 py-1 text-xs font-medium text-[#16a34a]">
+          Eligible
+        </span>
+      );
+    case "not_eligible":
+      return (
+        <span className="inline-flex rounded-full bg-[#fef2f2] px-2.5 py-1 text-xs font-medium text-[#dc2626]">
+          Not Eligible
+        </span>
+      );
     default:
-      return "bg-[#fafafa] text-[#6e6e73]";
+      return <span className="text-[#6e6e73]">—</span>;
   }
 }
 
-function interviewTypeBadgeClass(
-  type: "testimonial" | "project",
-): string {
-  return type === "testimonial"
-    ? "bg-[#eff6ff] text-[#3b82f6]"
-    : "bg-[#fafafa] text-[#6e6e73]";
-}
-
-function DroppableColumn({
-  id,
-  title,
-  subtitle,
-  count,
-  children,
-}: {
-  id: string;
-  title: string;
-  subtitle?: string;
-  count: number;
-  children: React.ReactNode;
-}) {
-  const { setNodeRef, isOver } = useDroppable({ id });
+function linkedInTrackColumnBadge() {
   return (
-    <div
-      ref={setNodeRef}
-      className={`flex min-h-[min(420px,70vh)] flex-1 min-w-[260px] flex-col rounded-2xl border border-[#f0f0f0] bg-white shadow-sm transition-shadow ${
-        isOver ? "ring-1 ring-[#3b82f6]/25" : ""
-      }`}
-    >
-      <div className="border-b border-[#f5f5f5] px-4 py-3">
-        <div className="flex items-center justify-between gap-3">
-          <h3 className="text-xs uppercase tracking-widest text-[#aeaeb2]">
-            {title}
-          </h3>
-          <span className="shrink-0 rounded-full bg-[#f5f5f7] px-2 py-0.5 text-xs text-[#1d1d1f]">
-            {count}
-          </span>
-        </div>
-        {subtitle ? (
-          <p className="mt-1.5 text-xs text-[#6e6e73]">{subtitle}</p>
-        ) : null}
-      </div>
-      <div className="flex flex-1 flex-col gap-2 rounded-b-2xl bg-[#f5f5f7] p-2">
-        {children}
-      </div>
-    </div>
+    <span className="inline-flex rounded-full bg-[#f3e8ff] px-2.5 py-1 text-xs font-medium text-[#7c3aed]">
+      LinkedIn
+    </span>
   );
 }
 
-function CandidateCard({
-  candidate,
-  onSchedule,
-}: {
-  candidate: EligibleCandidate;
-  onSchedule: (c: EligibleCandidate) => void;
-}) {
-  const { attributes, listeners, setNodeRef, transform, isDragging } =
-    useDraggable({
-      id: `candidate-${candidate.id}`,
-      data: { kind: "candidate" as const, candidate },
-    });
-  const style = transform
-    ? {
-        transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
-      }
-    : undefined;
+function postInterviewEligibleBadge(
+  v: boolean | null,
+  rewardItem: string | null | undefined,
+) {
+  if (v === true && rewardItem?.trim() === REWARD_NO_DISPATCH) {
+    return (
+      <span className="inline-flex rounded-full bg-[#fef9c3] px-3 py-1 text-xs font-medium text-[#854d0e]">
+        No Dispatch
+      </span>
+    );
+  }
+  if (v === true) {
+    return (
+      <span className="inline-flex rounded-full bg-[#f0fdf4] px-3 py-1 text-xs font-medium text-[#16a34a]">
+        Eligible
+      </span>
+    );
+  }
+  if (v === false) {
+    return (
+      <span className="inline-flex rounded-full bg-[#fef2f2] px-3 py-1 text-xs font-medium text-[#dc2626]">
+        Not Eligible
+      </span>
+    );
+  }
+  return <span className="text-[#6e6e73]">—</span>;
+}
 
+function interviewTypeBadge(t: "testimonial" | "project" | null | undefined) {
+  if (t === "testimonial") {
+    return (
+      <span className="inline-flex rounded-full bg-[#f0fdf4] px-3 py-1 text-xs font-medium text-[#16a34a]">
+        Testimonial
+      </span>
+    );
+  }
+  if (t === "project") {
+    return (
+      <span className="inline-flex rounded-full bg-[#eff6ff] px-3 py-1 text-xs font-medium text-[#2563eb]">
+        Project
+      </span>
+    );
+  }
+  return <span className="text-[#6e6e73]">—</span>;
+}
+
+function interviewLanguageBadge(i: InterviewWithCandidate) {
+  const eff = effectiveInterviewLanguage(i);
   return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      className={`rounded-xl border border-[#f0f0f0] bg-white p-4 shadow-sm transition-shadow duration-200 ease-out hover:shadow-[0_4px_16px_rgba(0,0,0,0.08)] ${
-        isDragging ? "opacity-60" : ""
-      }`}
-    >
-      <div className="flex items-start gap-2">
-        <button
-          type="button"
-          className="mt-0.5 cursor-grab touch-none rounded-lg border border-[#f0f0f0] bg-white px-1.5 py-1 text-xs text-[#aeaeb2] active:cursor-grabbing"
-          {...listeners}
-          {...attributes}
-          aria-label="Drag"
-        >
-          ⋮⋮
-        </button>
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-semibold text-[#1d1d1f]">
-            {candidate.full_name ?? "—"}
-          </p>
-          <p className="mt-1 truncate text-xs text-[#6e6e73]">
-            {candidate.email}
-          </p>
-          <button
-            type="button"
-            className="mt-3 w-full rounded-lg bg-[#1d1d1f] px-3 py-1.5 text-xs text-white transition-colors hover:bg-[#2d2d2f]"
-            onClick={() => onSchedule(candidate)}
-          >
-            Schedule interview
-          </button>
-        </div>
-      </div>
-    </div>
+    <span className={interviewLanguageBadgeClass(eff)}>
+      {formatInterviewLanguageLabel(eff)}
+    </span>
   );
 }
 
-function InterviewCard({
-  interview,
-  onMarkComplete,
-}: {
-  interview: InterviewWithCandidate;
-  onMarkComplete: (i: InterviewWithCandidate) => void;
-}) {
-  const { attributes, listeners, setNodeRef, transform, isDragging } =
-    useDraggable({
-      id: `interview-${interview.id}`,
-      data: { kind: "interview" as const, interview },
-    });
-  const style = transform
-    ? {
-        transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
-      }
-    : undefined;
+function formatDateTime(iso: string | null | undefined) {
+  if (!iso) return "—";
+  try {
+    return format(parseISO(iso), "MMM d, yyyy h:mm a");
+  } catch {
+    return "—";
+  }
+}
 
-  const name = interview.candidates?.full_name ?? "—";
-  const when = interview.scheduled_date
-    ? format(parseISO(interview.scheduled_date), "MMM d, yyyy h:mm a")
-    : "TBD";
-  const typeLabel =
-    interview.interview_type === "testimonial" ? "Testimonial" : "Project";
+function formatDateOnly(iso: string | null | undefined) {
+  if (!iso) return "—";
+  try {
+    return format(parseISO(iso), "MMM d, yyyy");
+  } catch {
+    return "—";
+  }
+}
 
-  const showComplete =
-    interview.interview_status === "scheduled" ||
-    interview.interview_status === "rescheduled";
+function pocOptionsFor(candidate: EligibleCandidate): string[] {
+  const current = candidate.poc_assigned?.trim();
+  const roster = new Set<string>(TEAM_POC_MEMBERS);
+  if (current && !roster.has(current))
+    return [...TEAM_POC_MEMBERS, current];
+  return [...TEAM_POC_MEMBERS];
+}
 
-  return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      className={`rounded-xl border border-[#f0f0f0] bg-white p-4 shadow-sm transition-shadow duration-200 ease-out hover:shadow-[0_4px_16px_rgba(0,0,0,0.08)] ${
-        isDragging ? "opacity-60" : ""
-      }`}
-    >
-      <div className="flex items-start gap-2">
-        <button
-          type="button"
-          className="mt-0.5 cursor-grab touch-none rounded-lg border border-[#f0f0f0] bg-white px-1.5 py-1 text-xs text-[#aeaeb2] active:cursor-grabbing"
-          {...listeners}
-          {...attributes}
-          aria-label="Drag"
-        >
-          ⋮⋮
-        </button>
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-[#1d1d1f]">{name}</p>
-          <p className="mt-2 text-xs text-[#6e6e73]">{when}</p>
-          <p className="mt-1 text-xs text-[#6e6e73]">
-            Interviewer: {interview.interviewer}
-          </p>
-          <div className="mt-2.5 flex flex-wrap gap-1.5">
-            <span
-              className={`inline-flex rounded-full px-3 py-1 text-xs font-medium ${interviewTypeBadgeClass(interview.interview_type)}`}
-            >
-              {typeLabel}
-            </span>
-            <span
-              className={`inline-flex rounded-full px-3 py-1 text-xs font-medium capitalize ${interviewStatusBadgeClass(interview.interview_status)}`}
-            >
-              {interview.interview_status.replace(/_/g, " ")}
-            </span>
-          </div>
-          {showComplete && (
-            <button
-              type="button"
-              className="mt-3 block w-full rounded-lg border border-[#e5e5e5] bg-white px-3 py-1.5 text-xs text-[#1d1d1f] transition-colors hover:bg-[#f5f5f7]"
-              onClick={() => onMarkComplete(interview)}
-            >
-              Mark completed…
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
-  );
+function normalizeInterviewRow(
+  row: Record<string, unknown>,
+): InterviewWithCandidate {
+  const r = row as Record<string, unknown> & {
+    candidates:
+      | {
+          id: string;
+          full_name: string | null;
+          email: string;
+          whatsapp_number?: string | null;
+          poc_assigned?: string | null;
+        }
+      | {
+          id: string;
+          full_name: string | null;
+          email: string;
+          whatsapp_number?: string | null;
+          poc_assigned?: string | null;
+        }[]
+      | null;
+  };
+  const c = r.candidates;
+  const candidate =
+    c == null ? null : Array.isArray(c) ? (c[0] ?? null) : c;
+  return {
+    ...r,
+    previous_scheduled_date:
+      (r.previous_scheduled_date as string | null) ?? null,
+    reschedule_reason: (r.reschedule_reason as string | null) ?? null,
+    completed_at: (r.completed_at as string | null) ?? null,
+    reward_item: (r.reward_item as string | null) ?? null,
+    interview_language: (r.interview_language as string | null | undefined) ?? null,
+    candidates: candidate,
+  } as InterviewWithCandidate;
 }
 
 export function InterviewsBoard() {
@@ -233,10 +382,41 @@ export function InterviewsBoard() {
   const [interviews, setInterviews] = useState<InterviewWithCandidate[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<BoardTab>("eligible");
   const [scheduleFor, setScheduleFor] = useState<ScheduleCandidate | null>(
     null,
   );
-  const [postFor, setPostFor] = useState<InterviewWithCandidate | null>(null);
+  const [scheduleProjectFor, setScheduleProjectFor] =
+    useState<ScheduleProjectCandidate | null>(null);
+  const [postFor, setPostFor] = useState<
+    InterviewWithCandidate | ProjectInterviewWithProjectCandidate | null
+  >(null);
+  const [rescheduleCtx, setRescheduleCtx] = useState<{
+    interview: InterviewWithCandidate | ProjectInterviewWithProjectCandidate;
+    mode: "from_scheduled" | "from_rescheduled";
+  } | null>(null);
+  const [projectPendingCount, setProjectPendingCount] = useState(0);
+
+  const [pocSavingId, setPocSavingId] = useState<string | null>(null);
+  /** Eligible row id showing POC dropdown while a POC is already assigned (badge hidden). */
+  const [pocEditingId, setPocEditingId] = useState<string | null>(null);
+  const [detailCandidateId, setDetailCandidateId] = useState<string | null>(
+    null,
+  );
+
+  const [filters, setFilters] = useState<Record<SimpleTab, TableFilters>>({
+    eligible: emptyFilters(),
+    scheduled: emptyFilters(),
+    rescheduled: emptyFilters(),
+  });
+  const [completedFilters, setCompletedFilters] = useState<CompletedTabFilters>(
+    defaultCompletedFilters,
+  );
+  const [completedPopoverId, setCompletedPopoverId] = useState<string | null>(
+    null,
+  );
+  const [liBusyId, setLiBusyId] = useState<string | null>(null);
+  const [linkedInListPage, setLinkedInListPage] = useState(0);
 
   const supabase = useMemo(() => {
     try {
@@ -248,39 +428,55 @@ export function InterviewsBoard() {
 
   const loadData = useCallback(async () => {
     if (!supabase) return;
-    const [{ data: elig, error: e1 }, { data: inv, error: e2 }] =
-      await Promise.all([
-        supabase
-          .from("candidates")
-          .select("id, full_name, email")
-          .eq("eligibility_status", "eligible"),
-        supabase
-          .from("interviews")
-          .select(INTERVIEW_SELECT)
-          .order("scheduled_date", { ascending: true }),
-      ]);
+    const [
+      { data: elig, error: e1 },
+      { data: inv, error: e2 },
+      { data: pcIds, error: e3 },
+      { data: piBusy, error: e4 },
+    ] = await Promise.all([
+      supabase
+        .from("candidates")
+        .select(
+          "id, full_name, email, interview_type, poc_assigned, poc_assigned_at, linkedin_track, linkedin_track_status",
+        )
+        .eq("eligibility_status", "eligible"),
+      supabase
+        .from("interviews")
+        .select(INTERVIEW_SELECT)
+        .order("scheduled_date", { ascending: true }),
+      supabase.from("project_candidates").select("id"),
+      supabase
+        .from("project_interviews")
+        .select("project_candidate_id, interview_status"),
+    ]);
 
-    if (e1 || e2) {
-      setError(e1?.message ?? e2?.message ?? "Failed to load");
+    if (e1 || e2 || e3 || e4) {
+      setError(
+        e1?.message ??
+          e2?.message ??
+          e3?.message ??
+          e4?.message ??
+          "Failed to load",
+      );
       return;
     }
 
-    const list = (inv ?? []).map((row) => {
-      const r = row as Record<string, unknown> & {
-        candidates:
-          | { id: string; full_name: string | null; email: string }
-          | { id: string; full_name: string | null; email: string }[]
-          | null;
-      };
-      const c = r.candidates;
-      const candidate =
-        c == null
-          ? null
-          : Array.isArray(c)
-            ? c[0] ?? null
-            : c;
-      return { ...r, candidates: candidate } as InterviewWithCandidate;
-    });
+    const busyProj = new Set(
+      (piBusy ?? [])
+        .filter(
+          (r) =>
+            r.interview_status === "scheduled" ||
+            r.interview_status === "rescheduled",
+        )
+        .map((r) => r.project_candidate_id),
+    );
+    setProjectPendingCount(
+      (pcIds ?? []).filter((r) => !busyProj.has(r.id)).length,
+    );
+
+    const list = (inv ?? []).map((row) =>
+      normalizeInterviewRow(row as Record<string, unknown>),
+    );
     const busy = new Set(
       list
         .filter(
@@ -291,7 +487,26 @@ export function InterviewsBoard() {
         .map((i) => i.candidate_id),
     );
 
-    const queue = (elig ?? []).filter((c) => !busy.has(c.id)) as EligibleCandidate[];
+    const queue = (elig ?? [])
+      .filter((c) => !busy.has(c.id))
+      .map((row) => {
+        const r = row as Record<string, unknown>;
+        const onTrack = Boolean(r.linkedin_track);
+        return {
+          id: r.id as string,
+          full_name: r.full_name as string | null,
+          email: r.email as string,
+          interview_type: r.interview_type as EligibleCandidate["interview_type"],
+          poc_assigned: r.poc_assigned as string | null,
+          poc_assigned_at: r.poc_assigned_at as string | null,
+          linkedin_track: onTrack,
+          linkedin_track_status: onTrack
+            ? normalizeLinkedInTrackStatus(
+                r.linkedin_track_status as string | null,
+              )
+            : null,
+        } satisfies EligibleCandidate;
+      });
     setEligibleQueue(queue);
     setInterviews(list);
     setError(null);
@@ -320,6 +535,20 @@ export function InterviewsBoard() {
           void loadData();
         },
       )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "project_candidates" },
+        () => {
+          void loadData();
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "project_interviews" },
+        () => {
+          void loadData();
+        },
+      )
       .subscribe();
 
     void (async () => {
@@ -333,18 +562,30 @@ export function InterviewsBoard() {
     };
   }, [supabase, loadData]);
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: { distance: 8 },
-    }),
-  );
+  useEffect(() => {
+    if (activeTab !== "eligible") setPocEditingId(null);
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab !== "completed") setCompletedPopoverId(null);
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (!completedPopoverId) return;
+    const onDocClick = (e: MouseEvent) => {
+      const el = e.target as HTMLElement | null;
+      if (el?.closest("[data-completed-popover-root]")) return;
+      setCompletedPopoverId(null);
+    };
+    document.addEventListener("click", onDocClick);
+    return () => document.removeEventListener("click", onDocClick);
+  }, [completedPopoverId]);
 
   const byStatus = useMemo(() => {
     const m = {
       scheduled: [] as InterviewWithCandidate[],
       rescheduled: [] as InterviewWithCandidate[],
       completed: [] as InterviewWithCandidate[],
-      cancelled: [] as InterviewWithCandidate[],
     };
     for (const i of interviews) {
       switch (i.interview_status) {
@@ -357,9 +598,6 @@ export function InterviewsBoard() {
         case "completed":
           m.completed.push(i);
           break;
-        case "cancelled":
-          m.cancelled.push(i);
-          break;
         default:
           break;
       }
@@ -367,56 +605,441 @@ export function InterviewsBoard() {
     return m;
   }, [interviews]);
 
-  const handleDragEnd = async (event: DragEndEvent) => {
-    if (!supabase) return;
-    const { active, over } = event;
-    if (!over) return;
-    const overId = String(over.id);
-    const activeId = String(active.id);
+  const counts = useMemo(
+    () => ({
+      eligible: eligibleQueue.length,
+      scheduled: byStatus.scheduled.length,
+      rescheduled: byStatus.rescheduled.length,
+      completed: byStatus.completed.length,
+    }),
+    [eligibleQueue.length, byStatus],
+  );
 
-    if (activeId.startsWith("candidate-")) {
-      if (overId === COL_SCHEDULED) {
-        const id = activeId.replace("candidate-", "");
-        const c = eligibleQueue.find((x) => x.id === id);
-        if (c) {
-          setScheduleFor({
-            id: c.id,
-            full_name: c.full_name,
-            email: c.email,
-          });
+  const updateFilter = useCallback(
+    (tab: SimpleTab, patch: Partial<Omit<TableFilters, "page">>) => {
+      setFilters((prev) => ({
+        ...prev,
+        [tab]: {
+          ...prev[tab],
+          ...patch,
+          page:
+            "search" in patch ||
+            "interviewType" in patch ||
+            "language" in patch
+              ? 0
+              : prev[tab].page,
+        },
+      }));
+    },
+    [],
+  );
+
+  const patchCompletedFilters = useCallback(
+    (patch: Partial<CompletedTabFilters>) => {
+      setCompletedFilters((prev) => {
+        const keys = Object.keys(patch);
+        const onlyPage =
+          keys.length === 1 && keys[0] === "page" && patch.page !== undefined;
+        if (onlyPage) {
+          return { ...prev, page: patch.page! };
         }
-      }
-      return;
-    }
+        return {
+          ...prev,
+          ...patch,
+          page: "page" in patch ? (patch.page ?? prev.page) : 0,
+        };
+      });
+    },
+    [],
+  );
 
-    if (activeId.startsWith("interview-")) {
-      const id = activeId.replace("interview-", "");
-      const inv = interviews.find((x) => x.id === id);
-      if (!inv) return;
+  const clearCompletedFilters = useCallback(() => {
+    setCompletedPopoverId(null);
+    setCompletedFilters(defaultCompletedFilters());
+  }, []);
 
-      if (overId === COL_COMPLETED) {
-        if (inv.interview_status !== "completed") {
-          setPostFor(inv);
-        }
+  const setPage = useCallback(
+    (tab: Exclude<BoardTab, "project_interviews">, page: number) => {
+      if (tab === "completed") {
+        patchCompletedFilters({ page });
         return;
       }
+      setFilters((prev) => ({
+        ...prev,
+        [tab]: { ...prev[tab], page },
+      }));
+    },
+    [patchCompletedFilters],
+  );
 
-      const map: Record<string, "scheduled" | "rescheduled" | "cancelled"> = {
-        [COL_SCHEDULED]: "scheduled",
-        [COL_RESCHEDULED]: "rescheduled",
-        [COL_CANCELLED]: "cancelled",
-      };
-      const next = map[overId];
-      if (next && inv.interview_status !== next) {
-        const { error: uErr } = await supabase
-          .from("interviews")
-          .update({ interview_status: next })
-          .eq("id", id);
-        if (uErr) setError(uErr.message);
-        else void loadData();
+  const filterEligible = useCallback(
+    (rows: EligibleCandidate[], f: TableFilters) =>
+      rows.filter((c) => {
+        if (
+          f.interviewType !== "all" &&
+          c.interview_type !== f.interviewType
+        )
+          return false;
+        return matchesRowSearch(c.full_name, c.email, f.search);
+      }),
+    [],
+  );
+
+  const filterInterviews = useCallback(
+    (rows: InterviewWithCandidate[], f: TableFilters) =>
+      rows.filter((i) => {
+        if (f.interviewType !== "all" && i.interview_type !== f.interviewType)
+          return false;
+        if (
+          f.language !== "all" &&
+          !matchesInterviewLanguageFilter(
+            effectiveInterviewLanguage(i),
+            f.language,
+          )
+        )
+          return false;
+        const name = i.candidates?.full_name;
+        const email = i.candidates?.email;
+        return matchesRowSearch(name, email, f.search);
+      }),
+    [],
+  );
+
+  const eligibleFiltered = useMemo(
+    () => filterEligible(eligibleQueue, filters.eligible),
+    [eligibleQueue, filters.eligible, filterEligible],
+  );
+
+  const interviewEligibleFiltered = useMemo(
+    () => eligibleFiltered.filter((c) => !c.linkedin_track),
+    [eligibleFiltered],
+  );
+
+  const linkedInTrackFiltered = useMemo(
+    () => eligibleFiltered.filter((c) => c.linkedin_track),
+    [eligibleFiltered],
+  );
+
+  useEffect(() => {
+    setLinkedInListPage(0);
+  }, [
+    filters.eligible.search,
+    filters.eligible.interviewType,
+    linkedInTrackFiltered.length,
+  ]);
+
+  const scheduledFiltered = useMemo(
+    () => filterInterviews(byStatus.scheduled, filters.scheduled),
+    [byStatus.scheduled, filters.scheduled, filterInterviews],
+  );
+
+  const rescheduledFiltered = useMemo(
+    () => filterInterviews(byStatus.rescheduled, filters.rescheduled),
+    [byStatus.rescheduled, filters.rescheduled, filterInterviews],
+  );
+
+  const completedCategoryOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const i of byStatus.completed) {
+      for (const line of interviewCategoryLines(i.category)) {
+        set.add(line);
       }
     }
+    return [...set].sort((a, b) => a.localeCompare(b));
+  }, [byStatus.completed]);
+
+  const completedFiltered = useMemo(
+    () => filterCompletedInterviews(byStatus.completed, completedFilters),
+    [byStatus.completed, completedFilters],
+  );
+
+  const paginate = <T,>(rows: T[], page: number) => {
+    const start = page * PAGE_SIZE;
+    return {
+      slice: rows.slice(start, start + PAGE_SIZE),
+      totalPages: Math.max(1, Math.ceil(rows.length / PAGE_SIZE)),
+      total: rows.length,
+    };
   };
+
+  const eligiblePage = useMemo(
+    () => paginate(interviewEligibleFiltered, filters.eligible.page),
+    [interviewEligibleFiltered, filters.eligible.page],
+  );
+
+  const linkedInPageData = useMemo(() => {
+    const start = linkedInListPage * PAGE_SIZE;
+    const total = linkedInTrackFiltered.length;
+    return {
+      slice: linkedInTrackFiltered.slice(start, start + PAGE_SIZE),
+      totalPages: Math.max(1, Math.ceil(total / PAGE_SIZE)),
+      total,
+    };
+  }, [linkedInTrackFiltered, linkedInListPage]);
+
+  const scheduledPage = useMemo(
+    () => paginate(scheduledFiltered, filters.scheduled.page),
+    [scheduledFiltered, filters.scheduled.page],
+  );
+  const rescheduledPage = useMemo(
+    () => paginate(rescheduledFiltered, filters.rescheduled.page),
+    [rescheduledFiltered, filters.rescheduled.page],
+  );
+  const completedPage = useMemo(
+    () => paginate(completedFiltered, completedFilters.page),
+    [completedFiltered, completedFilters.page],
+  );
+
+  const handlePocChange = async (candidate: EligibleCandidate, value: string) => {
+    if (!supabase) return;
+    const name = value.trim() || null;
+    setPocSavingId(candidate.id);
+    const { error: uErr } = await supabase
+      .from("candidates")
+      .update({
+        poc_assigned: name,
+        poc_assigned_at: name ? new Date().toISOString() : null,
+      })
+      .eq("id", candidate.id);
+    setPocSavingId(null);
+    if (uErr) {
+      setError(uErr.message);
+      return;
+    }
+    if (name) {
+      const candDisplay =
+        candidate.full_name?.trim() || candidate.email || "Candidate";
+      const { data: authPoc } = await supabase.auth.getUser();
+      if (authPoc.user) {
+        await logActivity({
+          supabase,
+          user: authPoc.user,
+          action_type: "interviews",
+          entity_type: "candidate",
+          entity_id: candidate.id,
+          candidate_name: candDisplay,
+          description: `Assigned ${name} as POC for ${candDisplay}`,
+        });
+      }
+    }
+    setPocEditingId((prev) => (prev === candidate.id ? null : prev));
+    void loadData();
+  };
+
+  const moveCandidateToLinkedInTrack = async (c: EligibleCandidate) => {
+    if (!supabase) return;
+    const confirmed = window.confirm(
+      "Move this candidate to LinkedIn Track?\n\nThey will be removed from interview scheduling.",
+    );
+    if (!confirmed) return;
+    setLiBusyId(c.id);
+    const { error: uErr } = await supabase
+      .from("candidates")
+      .update({
+        linkedin_track: true,
+        linkedin_track_status: "pending_post",
+      })
+      .eq("id", c.id);
+    setLiBusyId(null);
+    if (uErr) {
+      setError(uErr.message);
+      return;
+    }
+    const display = c.full_name?.trim() || c.email || "Candidate";
+    const { data: authLi } = await supabase.auth.getUser();
+    if (authLi.user) {
+      await logActivity({
+        supabase,
+        user: authLi.user,
+        action_type: "interviews",
+        entity_type: "candidate",
+        entity_id: c.id,
+        candidate_name: display,
+        description: `Moved ${display} to LinkedIn track (pending post)`,
+      });
+    }
+    void loadData();
+  };
+
+  const setLinkedInPipelineStatus = async (
+    c: EligibleCandidate,
+    next: LinkedInTrackStatus,
+    logDescription: string,
+  ) => {
+    if (!supabase) return;
+    setLiBusyId(c.id);
+    const { error: uErr } = await supabase
+      .from("candidates")
+      .update({ linkedin_track_status: next })
+      .eq("id", c.id);
+    setLiBusyId(null);
+    if (uErr) {
+      setError(uErr.message);
+      return;
+    }
+    const display = c.full_name?.trim() || c.email || "Candidate";
+    const { data: authS } = await supabase.auth.getUser();
+    if (authS.user) {
+      await logActivity({
+        supabase,
+        user: authS.user,
+        action_type: "interviews",
+        entity_type: "candidate",
+        entity_id: c.id,
+        candidate_name: display,
+        description: logDescription,
+      });
+    }
+    void loadData();
+  };
+
+  const markLinkedInEligibleWithDispatch = async (c: EligibleCandidate) => {
+    if (!supabase) return;
+    if (c.linkedin_track_status === "eligible") return;
+    setLiBusyId(c.id);
+    const prevStatus: LinkedInTrackStatus =
+      c.linkedin_track_status ?? "pending_post";
+    const { error: uErr } = await supabase
+      .from("candidates")
+      .update({ linkedin_track_status: "eligible" })
+      .eq("id", c.id);
+    if (uErr) {
+      setLiBusyId(null);
+      setError(uErr.message);
+      return;
+    }
+    const { error: dErr } = await supabase.from("dispatch").insert({
+      candidate_id: c.id,
+      shipping_address: null,
+      dispatch_status: "pending",
+      reward_item: REWARD_JBL_CLIP,
+      special_comments:
+        "LinkedIn track reward — collect shipping address before dispatch.",
+    });
+    if (dErr) {
+      await supabase
+        .from("candidates")
+        .update({ linkedin_track_status: prevStatus })
+        .eq("id", c.id);
+      setLiBusyId(null);
+      setError(dErr.message);
+      return;
+    }
+    const display = c.full_name?.trim() || c.email || "Candidate";
+    const { data: authE } = await supabase.auth.getUser();
+    if (authE.user) {
+      await logActivity({
+        supabase,
+        user: authE.user,
+        action_type: "interviews",
+        entity_type: "candidate",
+        entity_id: c.id,
+        candidate_name: display,
+        description: `LinkedIn track: marked ${display} eligible — ${REWARD_JBL_CLIP} dispatch created`,
+      });
+    }
+    setLiBusyId(null);
+    void loadData();
+  };
+
+  const tableWrap =
+    "overflow-hidden rounded-2xl border border-[#f0f0f0] bg-white shadow-sm";
+  const thBase =
+    "border-b border-gray-100 bg-[#fafafa] py-3 px-4 text-xs font-semibold tracking-wider text-gray-400";
+  const tdBase =
+    "border-b border-gray-100 py-4 px-4 text-sm align-middle text-[#1d1d1f]";
+
+  const thName = `${thBase} min-w-[180px] text-left`;
+  const thEmail = `${thBase} min-w-[220px] text-left`;
+  const thInterviewType = `${thBase} min-w-[150px] text-center`;
+  const thLanguage = `${thBase} min-w-[120px] text-center`;
+  const thTrack = `${thBase} min-w-[130px] text-left`;
+  const thLinkedInStatus = `${thBase} min-w-[140px] text-left`;
+  const thPocAssigned = `${thBase} min-w-[160px] text-left`;
+  const thActions = `${thBase} min-w-[120px] text-right`;
+
+  const tdName = `${tdBase} min-w-[180px] text-left`;
+  const tdEmail = `${tdBase} min-w-[220px] text-left text-[#6e6e73]`;
+  const tdInterviewType = `${tdBase} min-w-[150px] text-center`;
+  const tdLanguage = `${tdBase} min-w-[120px] text-center`;
+  const tdTrack = `${tdBase} min-w-[130px] text-left align-top`;
+  const tdLinkedInStatus = `${tdBase} min-w-[140px] text-left align-top`;
+  const tdPocAssigned = `${tdBase} min-w-[160px] text-left`;
+  const tdActions = `${tdBase} min-w-[120px] text-right`;
+
+  const thDateTime = `${thBase} min-w-[170px] text-left`;
+  const tdDateTime = `${tdBase} min-w-[170px] text-left`;
+  const thInterviewer = `${thBase} min-w-[120px] text-left`;
+  const tdInterviewer = `${tdBase} min-w-[120px] text-left`;
+  const thPocInterview = `${thBase} min-w-[120px] text-left`;
+  const tdPocInterview = `${tdBase} min-w-[120px] text-left text-[#6e6e73]`;
+
+  const thReason = `${thBase} min-w-[180px] text-left`;
+  const tdReason = `${tdBase} min-w-[180px] text-left text-[#6e6e73]`;
+
+  const thDateOnly = `${thBase} min-w-[130px] text-left`;
+  const tdDateOnly = `${tdBase} min-w-[130px] text-left`;
+  const thCompletedOn = `${thBase} min-w-[170px] text-left`;
+  const tdCompletedOn = `${tdBase} min-w-[170px] text-left`;
+  const thPhone = `${thBase} min-w-[130px] text-left`;
+  const tdPhone = `${tdBase} min-w-[130px] text-left text-[#6e6e73]`;
+  const thPostInterview = `${thBase} min-w-[160px] text-left`;
+  const tdPostInterview = `${tdBase} min-w-[160px] text-left`;
+  const thCategoryCol = `${thBase} min-w-[120px] text-left`;
+  const tdCategoryCol = `${tdBase} min-w-[120px] text-left text-[#6e6e73]`;
+  const thFunnelCol = `${thBase} min-w-[120px] text-left`;
+  const tdFunnelCol = `${tdBase} min-w-[120px] text-left text-[#6e6e73]`;
+  const thCommentsCol = `${thBase} min-w-[160px] text-left`;
+  const tdCommentsCol = `${tdBase} min-w-[160px] text-left text-[#6e6e73]`;
+
+  const filterInp =
+    "w-full rounded-xl border border-[#e5e5e5] bg-white px-3 py-2 text-sm text-[#1d1d1f] focus:border-[#3b82f6] focus:outline-none focus:ring-0";
+  const nameLinkBtn =
+    "max-w-full min-w-0 truncate text-left font-medium text-[#3b82f6] hover:underline focus:outline-none focus:ring-2 focus:ring-[#3b82f6]/25 rounded-sm";
+
+  const renderPagination = (
+    tab: Exclude<BoardTab, "project_interviews">,
+    totalPages: number,
+    total: number,
+  ) => {
+    const page =
+      tab === "completed"
+        ? completedFilters.page
+        : filters[tab as SimpleTab].page;
+    if (total === 0) return null;
+    return (
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#f0f0f0] bg-[#fafafa] px-4 py-3 text-xs text-[#6e6e73]">
+        <span>
+          Showing {page * PAGE_SIZE + 1}–
+          {Math.min((page + 1) * PAGE_SIZE, total)} of {total}
+        </span>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            disabled={page <= 0}
+            className="rounded-lg border border-[#e5e5e5] bg-white px-3 py-1.5 font-medium text-[#1d1d1f] transition-colors hover:bg-[#f5f5f7] disabled:cursor-not-allowed disabled:opacity-40"
+            onClick={() => setPage(tab, page - 1)}
+          >
+            Previous
+          </button>
+          <button
+            type="button"
+            disabled={page >= totalPages - 1}
+            className="rounded-lg border border-[#e5e5e5] bg-white px-3 py-1.5 font-medium text-[#1d1d1f] transition-colors hover:bg-[#f5f5f7] disabled:cursor-not-allowed disabled:opacity-40"
+            onClick={() => setPage(tab, page + 1)}
+          >
+            Next
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  const emptyState = (
+    <div className="py-16 text-center text-sm text-[#aeaeb2]">
+      No entries here yet
+    </div>
+  );
 
   if (!supabase) {
     return (
@@ -427,153 +1050,1193 @@ export function InterviewsBoard() {
   }
 
   return (
-    <DndContext sensors={sensors} onDragEnd={(e) => void handleDragEnd(e)}>
-      <>
-        <header className="sticky top-0 z-30 bg-[#f5f5f7]/90 px-8 py-6 backdrop-blur-md">
-          <h1 className="text-2xl font-semibold tracking-tight text-[#1d1d1f]">
-            Interview scheduling
-          </h1>
-          <p className="mt-1 text-sm text-[#6e6e73]">
-            Kanban board · drag to update status
-          </p>
-        </header>
+    <>
+      <header className="sticky top-0 z-30 bg-[#f5f5f7]/90 px-8 py-6 backdrop-blur-md">
+        <h1 className="text-2xl font-semibold tracking-tight text-[#1d1d1f]">
+          Interview scheduling
+        </h1>
+        <p className="mt-1 text-sm text-[#6e6e73]">
+          Tabbed tables · real-time updates
+        </p>
+      </header>
 
-        <main className="mx-auto max-w-[1600px] px-8 pb-12 pt-2 text-sm text-[#1d1d1f]">
-          {error && (
-            <div className="mb-4 rounded-2xl border border-[#f0f0f0] bg-white px-4 py-3 text-sm text-[#1d1d1f] shadow-[0_4px_16px_rgba(0,0,0,0.08)]">
-              {error}
-              <button
-                type="button"
-                className="ml-2 font-medium text-[#3b82f6] hover:text-[#2563eb]"
-                onClick={() => setError(null)}
-              >
-                Dismiss
-              </button>
-            </div>
-          )}
+      <main className="mx-auto max-w-[1600px] px-8 pb-12 pt-2 text-sm text-[#1d1d1f]">
+        {error && (
+          <div className="mb-4 rounded-2xl border border-[#f0f0f0] bg-white px-4 py-3 text-sm text-[#1d1d1f] shadow-[0_4px_16px_rgba(0,0,0,0.08)]">
+            {error}
+            <button
+              type="button"
+              className="ml-2 font-medium text-[#3b82f6] hover:text-[#2563eb]"
+              onClick={() => setError(null)}
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
 
-          {loading ? (
-            <p className="text-sm text-[#6e6e73]">Loading board…</p>
-          ) : (
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:overflow-x-auto lg:pb-2">
-              <DroppableColumn
-                id={COL_ELIGIBLE}
-                title="Eligible"
-                subtitle="Not yet scheduled"
-                count={eligibleQueue.length}
-              >
-                {eligibleQueue.length === 0 ? (
-                  <p className="px-2 py-6 text-center text-xs text-[#aeaeb2]">
-                    No eligible candidates waiting.
+        {loading ? (
+          <p className="text-sm text-[#6e6e73]">Loading…</p>
+        ) : (
+          <>
+            <section className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {(
+                [
+                  {
+                    key: "eligible" as const,
+                    label: "Eligible",
+                    value: counts.eligible,
+                    accent: "bg-[#16a34a]",
+                  },
+                  {
+                    key: "scheduled",
+                    label: "Scheduled",
+                    value: counts.scheduled,
+                    accent: "bg-[#2563eb]",
+                  },
+                  {
+                    key: "rescheduled",
+                    label: "Rescheduled",
+                    value: counts.rescheduled,
+                    accent: "bg-[#ea580c]",
+                  },
+                  {
+                    key: "completed",
+                    label: "Completed",
+                    value: counts.completed,
+                    accent: "bg-[#059669]",
+                  },
+                ] as const
+              ).map((card) => (
+                <div key={card.key} className={`p-6 ${cardChrome}`}>
+                  <p className="mb-3 text-xs font-medium text-[#6e6e73]">
+                    {card.label}
                   </p>
-                ) : (
-                  eligibleQueue.map((c) => (
-                    <CandidateCard
-                      key={c.id}
-                      candidate={c}
-                      onSchedule={(x) =>
-                        setScheduleFor({
-                          id: x.id,
-                          full_name: x.full_name,
-                          email: x.email,
-                        })
+                  <p className="text-4xl font-bold tabular-nums tracking-tight text-[#1d1d1f]">
+                    {card.value}
+                  </p>
+                  <div className={`mt-4 h-0.5 w-8 rounded-full ${card.accent}`} />
+                </div>
+              ))}
+            </section>
+
+            <div className="mb-6 flex flex-wrap gap-2 border-b border-[#e5e5e5] pb-1">
+              {(
+                [
+                  ["eligible", "Eligible", counts.eligible],
+                  ["scheduled", "Scheduled", counts.scheduled],
+                  ["rescheduled", "Rescheduled", counts.rescheduled],
+                  ["completed", "Completed", counts.completed],
+                  [
+                    "project_interviews",
+                    "Project Interviews",
+                    projectPendingCount,
+                  ],
+                ] as const
+              ).map(([id, label, n]) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setActiveTab(id)}
+                  className={
+                    activeTab === id
+                      ? "rounded-full bg-[#1d1d1f] px-4 py-2 text-sm font-medium text-white"
+                      : "rounded-full px-4 py-2 text-sm font-medium text-[#6e6e73] transition-colors hover:text-[#1d1d1f]"
+                  }
+                >
+                  {label}{" "}
+                  <span className={activeTab === id ? "text-white/80" : ""}>
+                    ({n})
+                  </span>
+                </button>
+              ))}
+            </div>
+
+            {activeTab === "project_interviews" && (
+              <ProjectInterviewsPanel
+                supabase={supabase}
+                onError={setError}
+                onPipelineChanged={() => void loadData()}
+                onScheduleProject={(c) => {
+                  setScheduleFor(null);
+                  setScheduleProjectFor(c);
+                }}
+                onPostProjectInterview={(i) => setPostFor(i)}
+                onRescheduleProjectInterview={(i, mode) =>
+                  setRescheduleCtx({ interview: i, mode })
+                }
+              />
+            )}
+
+            {activeTab === "eligible" && (
+              <section className="space-y-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                  <label className="flex min-w-0 flex-1 flex-col gap-1">
+                    <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+                      Search
+                    </span>
+                    <input
+                      type="search"
+                      placeholder="Name or email"
+                      className={filterInp}
+                      value={filters.eligible.search}
+                      onChange={(e) =>
+                        updateFilter("eligible", { search: e.target.value })
                       }
                     />
-                  ))
-                )}
-              </DroppableColumn>
+                  </label>
+                  <label className="flex w-full flex-col gap-1 sm:w-48 sm:shrink-0">
+                    <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+                      Interview type
+                    </span>
+                    <select
+                      className={filterInp}
+                      value={filters.eligible.interviewType}
+                      onChange={(e) =>
+                        updateFilter("eligible", {
+                          interviewType: e.target
+                            .value as InterviewTypeFilter,
+                        })
+                      }
+                    >
+                      <option value="all">All</option>
+                      <option value="testimonial">Testimonial</option>
+                      <option value="project">Project</option>
+                    </select>
+                  </label>
+                </div>
 
-              <DroppableColumn
-                id={COL_SCHEDULED}
-                title="Scheduled"
-                count={byStatus.scheduled.length}
-              >
-                {byStatus.scheduled.length === 0 ? (
-                  <p className="px-2 py-6 text-center text-xs text-[#aeaeb2]">
-                    Empty
-                  </p>
-                ) : (
-                  byStatus.scheduled.map((i) => (
-                    <InterviewCard
-                      key={i.id}
-                      interview={i}
-                      onMarkComplete={setPostFor}
-                    />
-                  ))
-                )}
-              </DroppableColumn>
+                <div className={tableWrap}>
+                  <div className="w-full overflow-x-auto">
+                    <table className="w-full min-w-[940px] table-auto border-collapse">
+                      <thead>
+                        <tr>
+                          <th className={thName}>Name</th>
+                          <th className={thEmail}>Email</th>
+                          <th className={thInterviewType}>Interview type</th>
+                          <th className={thTrack}>Track</th>
+                          <th className={thPocAssigned}>POC assigned</th>
+                          <th className={thActions}>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {eligiblePage.slice.length === 0 ? (
+                          <tr>
+                            <td className={tdBase} colSpan={6}>
+                              {emptyState}
+                            </td>
+                          </tr>
+                        ) : (
+                          eligiblePage.slice.map((c) => {
+                            const hasPoc = Boolean(c.poc_assigned?.trim());
+                            const showPocDropdown =
+                              !hasPoc || pocEditingId === c.id;
+                            return (
+                              <tr key={c.id}>
+                                <td className={tdName}>
+                                  <button
+                                    type="button"
+                                    className={nameLinkBtn}
+                                    onClick={() =>
+                                      setDetailCandidateId(c.id)
+                                    }
+                                  >
+                                    {c.full_name?.trim() || "—"}
+                                  </button>
+                                </td>
+                                <td className={tdEmail}>{c.email}</td>
+                                <td className={tdInterviewType}>
+                                  <div className="flex items-center justify-center">
+                                    {interviewTypeBadge(c.interview_type)}
+                                  </div>
+                                </td>
+                                <td className={tdTrack}>
+                                  <div className="flex flex-col gap-1.5">
+                                    <span className="text-[#6e6e73]">—</span>
+                                    <button
+                                      type="button"
+                                      disabled={liBusyId === c.id}
+                                      className="w-fit text-left text-xs font-medium text-[#7c3aed] hover:underline disabled:cursor-not-allowed disabled:opacity-50"
+                                      onClick={() =>
+                                        void moveCandidateToLinkedInTrack(c)
+                                      }
+                                    >
+                                      → LinkedIn
+                                    </button>
+                                  </div>
+                                </td>
+                                <td className={tdPocAssigned}>
+                                  {showPocDropdown ? (
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <select
+                                        disabled={pocSavingId === c.id}
+                                        className="max-w-[180px] rounded-lg border border-[#e5e5e5] bg-white px-2 py-1.5 text-xs text-[#1d1d1f] focus:border-[#3b82f6] focus:outline-none disabled:opacity-50"
+                                        value={c.poc_assigned ?? ""}
+                                        onChange={(e) =>
+                                          void handlePocChange(
+                                            c,
+                                            e.target.value,
+                                          )
+                                        }
+                                        aria-label={
+                                          hasPoc
+                                            ? "Change POC assignment"
+                                            : "Assign POC"
+                                        }
+                                      >
+                                        <option value="">Assign POC...</option>
+                                        {pocOptionsFor(c).map((n) => (
+                                          <option key={n} value={n}>
+                                            {n}
+                                          </option>
+                                        ))}
+                                      </select>
+                                      {hasPoc ? (
+                                        <button
+                                          type="button"
+                                          className="text-xs font-medium text-[#6e6e73] underline decoration-[#d1d5db] underline-offset-2 hover:text-[#1d1d1f]"
+                                          onClick={() => setPocEditingId(null)}
+                                        >
+                                          Cancel
+                                        </button>
+                                      ) : null}
+                                    </div>
+                                  ) : (
+                                    <div className="flex items-center gap-2">
+                                      <span className="inline-flex rounded-full bg-[#f5f5f7] px-2.5 py-1 text-xs font-medium text-[#6e6e73]">
+                                        {c.poc_assigned}
+                                      </span>
+                                      <button
+                                        type="button"
+                                        className="inline-flex items-center justify-center rounded-lg p-1 text-[#3b82f6] transition-colors hover:bg-[#eff6ff] hover:text-[#2563eb]"
+                                        onClick={() => setPocEditingId(c.id)}
+                                        aria-label="Change POC"
+                                      >
+                                        <Pencil
+                                          className="h-3.5 w-3.5 shrink-0"
+                                          aria-hidden
+                                        />
+                                      </button>
+                                    </div>
+                                  )}
+                                </td>
+                                <td className={tdActions}>
+                                  <div className="flex justify-end">
+                                    <button
+                                      type="button"
+                                      disabled={!hasPoc}
+                                      title={
+                                        hasPoc ? undefined : "Assign a POC first"
+                                      }
+                                      className="rounded-lg bg-[#1d1d1f] px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-[#2d2d2f] disabled:cursor-not-allowed disabled:bg-[#d1d5db] disabled:text-[#6b7280]"
+                                      onClick={() => {
+                                        setScheduleProjectFor(null);
+                                        setScheduleFor({
+                                          id: c.id,
+                                          full_name: c.full_name,
+                                          email: c.email,
+                                          interview_type: c.interview_type,
+                                        });
+                                      }}
+                                    >
+                                      Schedule
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                  {renderPagination(
+                    "eligible",
+                    eligiblePage.totalPages,
+                    eligiblePage.total,
+                  )}
+                </div>
 
-              <DroppableColumn
-                id={COL_RESCHEDULED}
-                title="Rescheduled"
-                count={byStatus.rescheduled.length}
-              >
-                {byStatus.rescheduled.length === 0 ? (
-                  <p className="px-2 py-6 text-center text-xs text-[#aeaeb2]">
-                    Empty
-                  </p>
-                ) : (
-                  byStatus.rescheduled.map((i) => (
-                    <InterviewCard
-                      key={i.id}
-                      interview={i}
-                      onMarkComplete={setPostFor}
-                    />
-                  ))
-                )}
-              </DroppableColumn>
+                {linkedInTrackFiltered.length > 0 ? (
+                  <div className="mt-10 space-y-3">
+                    <div>
+                      <h2 className="text-base font-semibold text-[#1d1d1f]">
+                        LinkedIn track
+                      </h2>
+                      <p className="mt-1 text-xs text-[#6e6e73]">
+                        These candidates are no longer in the interview
+                        scheduling queue. Update posting status and reward
+                        eligibility below.
+                      </p>
+                    </div>
+                    <div className={tableWrap}>
+                      <div className="w-full overflow-x-auto">
+                        <table className="w-full min-w-[980px] table-auto border-collapse">
+                          <thead>
+                            <tr>
+                              <th className={thName}>Name</th>
+                              <th className={thEmail}>Email</th>
+                              <th className={thInterviewType}>
+                                Interview type
+                              </th>
+                              <th className={thTrack}>Track</th>
+                              <th className={thLinkedInStatus}>
+                                LinkedIn status
+                              </th>
+                              <th className={thActions}>Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {linkedInPageData.slice.map((c) => {
+                              const st = c.linkedin_track_status;
+                              const display =
+                                c.full_name?.trim() || c.email || "Candidate";
+                              const busy = liBusyId === c.id;
+                              return (
+                                <tr key={c.id}>
+                                  <td className={tdName}>
+                                    <button
+                                      type="button"
+                                      className={nameLinkBtn}
+                                      onClick={() =>
+                                        setDetailCandidateId(c.id)
+                                      }
+                                    >
+                                      {c.full_name?.trim() || "—"}
+                                    </button>
+                                  </td>
+                                  <td className={tdEmail}>{c.email}</td>
+                                  <td className={tdInterviewType}>
+                                    <div className="flex items-center justify-center">
+                                      {interviewTypeBadge(c.interview_type)}
+                                    </div>
+                                  </td>
+                                  <td className={tdTrack}>
+                                    {linkedInTrackColumnBadge()}
+                                  </td>
+                                  <td className={tdLinkedInStatus}>
+                                    {linkedInPipelineBadge(st)}
+                                  </td>
+                                  <td className={tdActions}>
+                                    <div className="flex flex-wrap items-center justify-end gap-1.5">
+                                      {st === "pending_post" ? (
+                                        <button
+                                          type="button"
+                                          disabled={busy}
+                                          className="rounded-lg border border-[#e5e5e5] bg-white px-2.5 py-1.5 text-xs font-medium text-[#1d1d1f] hover:bg-[#f5f5f7] disabled:opacity-50"
+                                          onClick={() =>
+                                            void setLinkedInPipelineStatus(
+                                              c,
+                                              "posted",
+                                              `LinkedIn track: marked ${display} as posted`,
+                                            )
+                                          }
+                                        >
+                                          Mark Posted
+                                        </button>
+                                      ) : null}
+                                      {st === "posted" ? (
+                                        <button
+                                          type="button"
+                                          disabled={busy}
+                                          className="rounded-lg border border-[#e5e5e5] bg-white px-2.5 py-1.5 text-xs font-medium text-[#1d1d1f] hover:bg-[#f5f5f7] disabled:opacity-50"
+                                          onClick={() =>
+                                            void setLinkedInPipelineStatus(
+                                              c,
+                                              "verified",
+                                              `LinkedIn track: confirmed ${display} LinkedIn post (verified)`,
+                                            )
+                                          }
+                                        >
+                                          Mark Verified
+                                        </button>
+                                      ) : null}
+                                      {st === "posted" || st === "verified" ? (
+                                        <>
+                                          <button
+                                            type="button"
+                                            disabled={busy}
+                                            className="rounded-lg bg-[#16a34a] px-2.5 py-1.5 text-xs font-medium text-white hover:bg-[#15803d] disabled:opacity-50"
+                                            onClick={() =>
+                                              void markLinkedInEligibleWithDispatch(
+                                                c,
+                                              )
+                                            }
+                                          >
+                                            Mark Eligible
+                                          </button>
+                                          <button
+                                            type="button"
+                                            disabled={busy}
+                                            className="rounded-lg bg-[#dc2626] px-2.5 py-1.5 text-xs font-medium text-white hover:bg-[#b91c1c] disabled:opacity-50"
+                                            onClick={() =>
+                                              void setLinkedInPipelineStatus(
+                                                c,
+                                                "not_eligible",
+                                                `LinkedIn track: marked ${display} not eligible`,
+                                              )
+                                            }
+                                          >
+                                            Mark Not Eligible
+                                          </button>
+                                        </>
+                                      ) : null}
+                                      {st === "eligible" ||
+                                      st === "not_eligible" ? (
+                                        <span className="text-xs text-[#aeaeb2]">
+                                          —
+                                        </span>
+                                      ) : null}
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                      {linkedInPageData.total > 0 ? (
+                        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#f0f0f0] bg-[#fafafa] px-4 py-3 text-xs text-[#6e6e73]">
+                          <span>
+                            Showing {linkedInListPage * PAGE_SIZE + 1}–
+                            {Math.min(
+                              (linkedInListPage + 1) * PAGE_SIZE,
+                              linkedInPageData.total,
+                            )}{" "}
+                            of {linkedInPageData.total}
+                          </span>
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              disabled={linkedInListPage <= 0}
+                              className="rounded-lg border border-[#e5e5e5] bg-white px-3 py-1.5 font-medium text-[#1d1d1f] transition-colors hover:bg-[#f5f5f7] disabled:cursor-not-allowed disabled:opacity-40"
+                              onClick={() =>
+                                setLinkedInListPage((p) => Math.max(0, p - 1))
+                              }
+                            >
+                              Previous
+                            </button>
+                            <button
+                              type="button"
+                              disabled={
+                                linkedInListPage >=
+                                linkedInPageData.totalPages - 1
+                              }
+                              className="rounded-lg border border-[#e5e5e5] bg-white px-3 py-1.5 font-medium text-[#1d1d1f] transition-colors hover:bg-[#f5f5f7] disabled:cursor-not-allowed disabled:opacity-40"
+                              onClick={() =>
+                                setLinkedInListPage((p) => p + 1)
+                              }
+                            >
+                              Next
+                            </button>
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : null}
+              </section>
+            )}
 
-              <DroppableColumn
-                id={COL_COMPLETED}
-                title="Completed"
-                count={byStatus.completed.length}
-              >
-                {byStatus.completed.length === 0 ? (
-                  <p className="px-2 py-6 text-center text-xs text-[#aeaeb2]">
-                    Empty
-                  </p>
-                ) : (
-                  byStatus.completed.map((i) => (
-                    <InterviewCard
-                      key={i.id}
-                      interview={i}
-                      onMarkComplete={setPostFor}
+            {activeTab === "scheduled" && (
+              <section className="space-y-4">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+                  <label className="flex min-w-0 flex-1 flex-col gap-1">
+                    <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+                      Search
+                    </span>
+                    <input
+                      type="search"
+                      placeholder="Name or email"
+                      className={filterInp}
+                      value={filters.scheduled.search}
+                      onChange={(e) =>
+                        updateFilter("scheduled", { search: e.target.value })
+                      }
                     />
-                  ))
-                )}
-              </DroppableColumn>
+                  </label>
+                  <div className="flex w-full flex-col gap-3 sm:flex-row lg:w-auto lg:shrink-0">
+                    <label className="flex w-full flex-col gap-1 sm:w-48">
+                      <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+                        Interview type
+                      </span>
+                      <select
+                        className={filterInp}
+                        value={filters.scheduled.interviewType}
+                        onChange={(e) =>
+                          updateFilter("scheduled", {
+                            interviewType: e.target
+                              .value as InterviewTypeFilter,
+                          })
+                        }
+                      >
+                        <option value="all">All</option>
+                        <option value="testimonial">Testimonial</option>
+                        <option value="project">Project</option>
+                      </select>
+                    </label>
+                    <label className="flex w-full flex-col gap-1 sm:w-48">
+                      <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+                        Language
+                      </span>
+                      <select
+                        className={filterInp}
+                        value={filters.scheduled.language}
+                        onChange={(e) =>
+                          updateFilter("scheduled", {
+                            language: e.target
+                              .value as InterviewLanguageFilter,
+                          })
+                        }
+                      >
+                        {LANGUAGE_FILTER_OPTIONS.map(({ value, label }) => (
+                          <option key={value} value={value}>
+                            {label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+                </div>
 
-              <DroppableColumn
-                id={COL_CANCELLED}
-                title="Cancelled"
-                count={byStatus.cancelled.length}
-              >
-                {byStatus.cancelled.length === 0 ? (
-                  <p className="px-2 py-6 text-center text-xs text-[#aeaeb2]">
-                    Empty
-                  </p>
-                ) : (
-                  byStatus.cancelled.map((i) => (
-                    <InterviewCard
-                      key={i.id}
-                      interview={i}
-                      onMarkComplete={setPostFor}
+                <div className={tableWrap}>
+                  <div className="w-full overflow-x-auto">
+                    <table className="w-full min-w-[1220px] table-auto border-collapse">
+                      <thead>
+                        <tr>
+                          <th className={thName}>Name</th>
+                          <th className={thEmail}>Email</th>
+                          <th className={thInterviewType}>Interview type</th>
+                          <th className={thLanguage}>Language</th>
+                          <th className={thDateTime}>Date &amp; time</th>
+                          <th className={thInterviewer}>Interviewer</th>
+                          <th className={thPocInterview}>POC</th>
+                          <th className={thActions}>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {scheduledPage.slice.length === 0 ? (
+                          <tr>
+                            <td className={tdBase} colSpan={8}>
+                              {emptyState}
+                            </td>
+                          </tr>
+                        ) : (
+                          scheduledPage.slice.map((i) => (
+                            <tr key={i.id}>
+                              <td className={tdName}>
+                                <button
+                                  type="button"
+                                  className={nameLinkBtn}
+                                  onClick={() =>
+                                    setDetailCandidateId(i.candidate_id)
+                                  }
+                                >
+                                  {i.candidates?.full_name?.trim() || "—"}
+                                </button>
+                              </td>
+                              <td className={tdEmail}>
+                                {i.candidates?.email}
+                              </td>
+                              <td className={tdInterviewType}>
+                                <div className="flex items-center justify-center">
+                                  {interviewTypeBadge(i.interview_type)}
+                                </div>
+                              </td>
+                              <td className={tdLanguage}>
+                                <div className="flex items-center justify-center">
+                                  {interviewLanguageBadge(i)}
+                                </div>
+                              </td>
+                              <td className={tdDateTime}>
+                                {formatDateTime(i.scheduled_date)}
+                              </td>
+                              <td className={tdInterviewer}>
+                                {i.interviewer}
+                              </td>
+                              <td className={tdPocInterview}>
+                                {i.poc?.trim() ||
+                                  i.candidates?.poc_assigned?.trim() ||
+                                  "—"}
+                              </td>
+                              <td className={tdActions}>
+                                <div className="flex flex-wrap items-center justify-end gap-2">
+                                  <button
+                                    type="button"
+                                    className="rounded-lg bg-[#ea580c] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#c2410c]"
+                                    onClick={() =>
+                                      setRescheduleCtx({
+                                        interview: i,
+                                        mode: "from_scheduled",
+                                      })
+                                    }
+                                  >
+                                    Reschedule
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="rounded-lg bg-[#16a34a] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#15803d]"
+                                    onClick={() => setPostFor(i)}
+                                  >
+                                    Mark completed
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                  {renderPagination(
+                    "scheduled",
+                    scheduledPage.totalPages,
+                    scheduledPage.total,
+                  )}
+                </div>
+              </section>
+            )}
+
+            {activeTab === "rescheduled" && (
+              <section className="space-y-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                  <label className="flex min-w-0 flex-1 flex-col gap-1">
+                    <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+                      Search
+                    </span>
+                    <input
+                      type="search"
+                      placeholder="Name or email"
+                      className={filterInp}
+                      value={filters.rescheduled.search}
+                      onChange={(e) =>
+                        updateFilter("rescheduled", { search: e.target.value })
+                      }
                     />
-                  ))
-                )}
-              </DroppableColumn>
-            </div>
-          )}
-        </main>
-      </>
+                  </label>
+                  <label className="flex w-full flex-col gap-1 sm:w-48 sm:shrink-0">
+                    <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+                      Interview type
+                    </span>
+                    <select
+                      className={filterInp}
+                      value={filters.rescheduled.interviewType}
+                      onChange={(e) =>
+                        updateFilter("rescheduled", {
+                          interviewType: e.target
+                            .value as InterviewTypeFilter,
+                        })
+                      }
+                    >
+                      <option value="all">All</option>
+                      <option value="testimonial">Testimonial</option>
+                      <option value="project">Project</option>
+                    </select>
+                  </label>
+                </div>
+
+                <div className={tableWrap}>
+                  <div className="w-full overflow-x-auto">
+                    <table className="w-full min-w-[1280px] table-auto border-collapse">
+                      <thead>
+                        <tr>
+                          <th className={thName}>Name</th>
+                          <th className={thEmail}>Email</th>
+                          <th className={thInterviewType}>Interview type</th>
+                          <th className={thDateTime}>Original date</th>
+                          <th className={thReason}>Reschedule reason</th>
+                          <th className={thDateTime}>New date</th>
+                          <th className={thInterviewer}>Interviewer</th>
+                          <th className={thActions}>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {rescheduledPage.slice.length === 0 ? (
+                          <tr>
+                            <td className={tdBase} colSpan={8}>
+                              {emptyState}
+                            </td>
+                          </tr>
+                        ) : (
+                          rescheduledPage.slice.map((i) => (
+                            <tr key={i.id}>
+                              <td className={tdName}>
+                                <button
+                                  type="button"
+                                  className={nameLinkBtn}
+                                  onClick={() =>
+                                    setDetailCandidateId(i.candidate_id)
+                                  }
+                                >
+                                  {i.candidates?.full_name?.trim() || "—"}
+                                </button>
+                              </td>
+                              <td className={tdEmail}>
+                                {i.candidates?.email}
+                              </td>
+                              <td className={tdInterviewType}>
+                                <div className="flex items-center justify-center">
+                                  {interviewTypeBadge(i.interview_type)}
+                                </div>
+                              </td>
+                              <td className={tdDateTime}>
+                                {formatDateTime(i.previous_scheduled_date)}
+                              </td>
+                              <td
+                                className={`${tdReason} max-w-[220px] truncate`}
+                                title={i.reschedule_reason ?? undefined}
+                              >
+                                {i.reschedule_reason?.trim() || "—"}
+                              </td>
+                              <td className={tdDateTime}>
+                                {formatDateTime(i.scheduled_date)}
+                              </td>
+                              <td className={tdInterviewer}>
+                                {i.interviewer}
+                              </td>
+                              <td className={tdActions}>
+                                <div className="flex flex-wrap items-center justify-end gap-2">
+                                  <button
+                                    type="button"
+                                    className="rounded-lg bg-[#1d1d1f] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#2d2d2f]"
+                                    onClick={() =>
+                                      setRescheduleCtx({
+                                        interview: i,
+                                        mode: "from_rescheduled",
+                                      })
+                                    }
+                                  >
+                                    Schedule again
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="rounded-lg bg-[#16a34a] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#15803d]"
+                                    onClick={() => setPostFor(i)}
+                                  >
+                                    Mark completed
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                  {renderPagination(
+                    "rescheduled",
+                    rescheduledPage.totalPages,
+                    rescheduledPage.total,
+                  )}
+                </div>
+              </section>
+            )}
+
+            {activeTab === "completed" && (
+              <section className="space-y-4">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+                  <label className="flex min-w-0 flex-1 flex-col gap-1">
+                    <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+                      Search
+                    </span>
+                    <input
+                      type="search"
+                      placeholder="Name, email, or phone"
+                      className={filterInp}
+                      value={completedFilters.search}
+                      onChange={(e) =>
+                        patchCompletedFilters({ search: e.target.value })
+                      }
+                    />
+                  </label>
+                  <div className="flex w-full flex-col gap-3 sm:flex-row lg:w-auto lg:shrink-0">
+                    <label className="flex w-full flex-col gap-1 sm:w-48">
+                      <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+                        Interview type
+                      </span>
+                      <select
+                        className={filterInp}
+                        value={completedFilters.interviewType}
+                        onChange={(e) =>
+                          patchCompletedFilters({
+                            interviewType: e.target
+                              .value as InterviewTypeFilter,
+                          })
+                        }
+                      >
+                        <option value="all">All</option>
+                        <option value="testimonial">Testimonial</option>
+                        <option value="project">Project</option>
+                      </select>
+                    </label>
+                    <label className="flex w-full flex-col gap-1 sm:w-48">
+                      <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+                        Language
+                      </span>
+                      <select
+                        className={filterInp}
+                        value={completedFilters.language}
+                        onChange={(e) =>
+                          patchCompletedFilters({
+                            language: e.target
+                              .value as InterviewLanguageFilter,
+                          })
+                        }
+                      >
+                        {LANGUAGE_FILTER_OPTIONS.map(({ value, label }) => (
+                          <option key={value} value={value}>
+                            {label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-3 rounded-2xl border border-[#f0f0f0] bg-white p-4 shadow-sm">
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+                    <label className="flex flex-col gap-1">
+                      <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+                        Post-interview eligible
+                      </span>
+                      <select
+                        className={filterInp}
+                        value={completedFilters.postInterviewEligible}
+                        onChange={(e) =>
+                          patchCompletedFilters({
+                            postInterviewEligible: e.target
+                              .value as PostInterviewEligibleFilter,
+                          })
+                        }
+                      >
+                        <option value="all">All</option>
+                        <option value="eligible">Eligible</option>
+                        <option value="not_eligible">Not eligible</option>
+                      </select>
+                    </label>
+                    <label className="flex flex-col gap-1">
+                      <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+                        Interviewer
+                      </span>
+                      <select
+                        className={filterInp}
+                        value={completedFilters.interviewer}
+                        onChange={(e) =>
+                          patchCompletedFilters({
+                            interviewer: e.target.value,
+                          })
+                        }
+                      >
+                        <option value="all">All</option>
+                        {TEAM_POC_MEMBERS.map((n) => (
+                          <option key={n} value={n}>
+                            {n}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="flex flex-col gap-1">
+                      <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+                        Completed from
+                      </span>
+                      <input
+                        type="date"
+                        className={filterInp}
+                        value={completedFilters.completedFrom}
+                        onChange={(e) =>
+                          patchCompletedFilters({
+                            completedFrom: e.target.value,
+                          })
+                        }
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1">
+                      <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+                        Completed to
+                      </span>
+                      <input
+                        type="date"
+                        className={filterInp}
+                        value={completedFilters.completedTo}
+                        onChange={(e) =>
+                          patchCompletedFilters({
+                            completedTo: e.target.value,
+                          })
+                        }
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1 sm:col-span-2 lg:col-span-1 xl:col-span-2">
+                      <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+                        Category
+                      </span>
+                      <select
+                        className={filterInp}
+                        value={completedFilters.category}
+                        onChange={(e) =>
+                          patchCompletedFilters({
+                            category: e.target.value,
+                          })
+                        }
+                      >
+                        <option value="">All</option>
+                        {completedCategoryOptions.map((c) => (
+                          <option key={c} value={c}>
+                            {c}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+                  <div className="flex justify-end border-t border-gray-100 pt-3">
+                    <button
+                      type="button"
+                      className="text-sm font-medium text-[#3b82f6] hover:text-[#2563eb]"
+                      onClick={clearCompletedFilters}
+                    >
+                      Clear all filters
+                    </button>
+                  </div>
+                </div>
+
+                <div className={tableWrap}>
+                  <div className="w-full overflow-x-auto">
+                    <table className="w-full min-w-[1520px] table-auto border-collapse">
+                      <thead>
+                        <tr>
+                          <th className={thName}>Name</th>
+                          <th className={thPhone}>Phone</th>
+                          <th className={thInterviewType}>Interview type</th>
+                          <th className={thLanguage}>Language</th>
+                          <th className={thInterviewer}>Interviewer</th>
+                          <th className={thCompletedOn}>Completed on</th>
+                          <th className={thPostInterview}>
+                            Post-interview eligible
+                          </th>
+                          <th className={thCategoryCol}>Category</th>
+                          <th className={thFunnelCol}>Funnel</th>
+                          <th className={thCommentsCol}>Comments</th>
+                          <th className={thActions}>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {completedPage.slice.length === 0 ? (
+                          <tr>
+                            <td className={tdBase} colSpan={11}>
+                              {emptyState}
+                            </td>
+                          </tr>
+                        ) : (
+                          completedPage.slice.map((i) => {
+                            const commentsPreview = truncateWithTooltip(
+                              i.comments,
+                              40,
+                            );
+                            const catLines = interviewCategoryLines(i.category);
+                            return (
+                              <tr key={i.id}>
+                                <td className={tdName}>
+                                  <button
+                                    type="button"
+                                    className={nameLinkBtn}
+                                    onClick={() =>
+                                      setDetailCandidateId(i.candidate_id)
+                                    }
+                                  >
+                                    {i.candidates?.full_name?.trim() || "—"}
+                                  </button>
+                                </td>
+                                <td className={tdPhone}>
+                                  {i.candidates?.whatsapp_number?.trim() ||
+                                    "—"}
+                                </td>
+                                <td className={tdInterviewType}>
+                                  <div className="flex items-center justify-center">
+                                    {interviewTypeBadge(i.interview_type)}
+                                  </div>
+                                </td>
+                                <td className={tdLanguage}>
+                                  <div className="flex items-center justify-center">
+                                    {interviewLanguageBadge(i)}
+                                  </div>
+                                </td>
+                                <td className={tdInterviewer}>
+                                  {i.interviewer}
+                                </td>
+                                <td className={tdCompletedOn}>
+                                  {formatDateTime(i.completed_at)}
+                                </td>
+                                <td className={tdPostInterview}>
+                                  {postInterviewEligibleBadge(
+                                    i.post_interview_eligible,
+                                    i.reward_item,
+                                  )}
+                                </td>
+                                <td className={tdCategoryCol}>
+                                  {catLines.length ? catLines.join(" · ") : "—"}
+                                </td>
+                                <td className={tdFunnelCol}>
+                                  {i.funnel?.trim() || "—"}
+                                </td>
+                                <td
+                                  className={tdCommentsCol}
+                                  title={commentsPreview.title}
+                                >
+                                  <span className="block max-w-[200px] truncate">
+                                    {commentsPreview.display}
+                                  </span>
+                                </td>
+                                <td className={`${tdActions} relative`}>
+                                  <div
+                                    className="relative flex justify-end"
+                                    data-completed-popover-root
+                                  >
+                                    <button
+                                      type="button"
+                                      className="text-sm font-medium text-[#3b82f6] hover:text-[#2563eb]"
+                                      onMouseDown={(e) => e.stopPropagation()}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setCompletedPopoverId((id) =>
+                                          id === i.id ? null : i.id,
+                                        );
+                                      }}
+                                    >
+                                      View details
+                                    </button>
+                                    {completedPopoverId === i.id ? (
+                                      <div
+                                        className="absolute right-0 top-full z-50 mt-2 w-80 rounded-xl border border-[#f0f0f0] bg-white p-4 text-left shadow-[0_8px_24px_rgba(0,0,0,0.12)]"
+                                        onMouseDown={(e) =>
+                                          e.stopPropagation()
+                                        }
+                                        role="dialog"
+                                        aria-label="Post-interview details"
+                                      >
+                                        <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">
+                                          Post-interview details
+                                        </p>
+                                        <dl className="mt-3 space-y-3 text-sm">
+                                          <div>
+                                            <dt className="text-xs text-[#aeaeb2]">
+                                              Post-interview eligible
+                                            </dt>
+                                            <dd className="mt-0.5 text-[#1d1d1f]">
+                                              {i.post_interview_eligible ===
+                                              true
+                                                ? i.reward_item?.trim() ===
+                                                  REWARD_NO_DISPATCH
+                                                  ? "Eligible — no physical dispatch"
+                                                  : "Eligible"
+                                                : i.post_interview_eligible ===
+                                                    false
+                                                  ? "Not eligible"
+                                                  : "—"}
+                                            </dd>
+                                          </div>
+                                          <div>
+                                            <dt className="text-xs text-[#aeaeb2]">
+                                              Reward item
+                                            </dt>
+                                            <dd className="mt-0.5 text-[#1d1d1f]">
+                                              {i.reward_item?.trim() || "—"}
+                                            </dd>
+                                          </div>
+                                          <div>
+                                            <dt className="text-xs text-[#aeaeb2]">
+                                              Category
+                                            </dt>
+                                            <dd className="mt-0.5 whitespace-pre-wrap break-words text-[#1d1d1f]">
+                                              {catLines.length
+                                                ? catLines.join("\n")
+                                                : "—"}
+                                            </dd>
+                                          </div>
+                                          <div>
+                                            <dt className="text-xs text-[#aeaeb2]">
+                                              Funnel
+                                            </dt>
+                                            <dd className="mt-0.5 whitespace-pre-wrap break-words text-[#1d1d1f]">
+                                              {i.funnel?.trim() || "—"}
+                                            </dd>
+                                          </div>
+                                          <div>
+                                            <dt className="text-xs text-[#aeaeb2]">
+                                              Comments
+                                            </dt>
+                                            <dd className="mt-0.5 whitespace-pre-wrap break-words text-[#1d1d1f]">
+                                              {i.comments?.trim() || "—"}
+                                            </dd>
+                                          </div>
+                                          <div>
+                                            <dt className="text-xs text-[#aeaeb2]">
+                                              Completed on
+                                            </dt>
+                                            <dd className="mt-0.5 text-[#1d1d1f]">
+                                              {formatDateTime(i.completed_at)}
+                                            </dd>
+                                          </div>
+                                        </dl>
+                                        <button
+                                          type="button"
+                                          className="mt-4 text-xs font-medium text-[#3b82f6] hover:text-[#2563eb]"
+                                          onClick={() =>
+                                            setCompletedPopoverId(null)
+                                          }
+                                        >
+                                          Close
+                                        </button>
+                                      </div>
+                                    ) : null}
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                  {renderPagination(
+                    "completed",
+                    completedPage.totalPages,
+                    completedPage.total,
+                  )}
+                </div>
+              </section>
+            )}
+          </>
+        )}
+      </main>
 
       <ScheduleInterviewModal
-        key={scheduleFor?.id ?? "schedule-closed"}
-        open={!!scheduleFor}
+        key={
+          scheduleFor?.id ?? scheduleProjectFor?.id ?? "schedule-closed"
+        }
+        open={!!scheduleFor || !!scheduleProjectFor}
         candidate={scheduleFor}
+        projectCandidate={scheduleProjectFor}
         supabase={supabase}
-        onClose={() => setScheduleFor(null)}
+        onClose={() => {
+          setScheduleFor(null);
+          setScheduleProjectFor(null);
+        }}
         onCreated={() => void loadData()}
+      />
+
+      <CandidateDetailModal
+        open={!!detailCandidateId}
+        candidateId={detailCandidateId}
+        supabase={supabase}
+        onClose={() => setDetailCandidateId(null)}
+      />
+
+      <RescheduleInterviewModal
+        key={rescheduleCtx?.interview.id ?? "reschedule-closed"}
+        open={!!rescheduleCtx}
+        interview={rescheduleCtx?.interview ?? null}
+        mode={rescheduleCtx?.mode ?? "from_scheduled"}
+        supabase={supabase}
+        onClose={() => setRescheduleCtx(null)}
+        onSaved={() => void loadData()}
       />
 
       <PostInterviewDrawer
@@ -584,6 +2247,6 @@ export function InterviewsBoard() {
         onClose={() => setPostFor(null)}
         onSaved={() => void loadData()}
       />
-    </DndContext>
+    </>
   );
 }

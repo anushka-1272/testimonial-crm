@@ -1,8 +1,9 @@
 "use client";
 
-import { format } from "date-fns";
+import { format, formatDistanceToNow, parseISO } from "date-fns";
 import { Bell, ChevronDown, ChevronRight } from "lucide-react";
-import { Fragment, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 
@@ -51,17 +52,17 @@ function greetNameFromEmail(email: string | undefined): string {
   return local.charAt(0).toUpperCase() + local.slice(1);
 }
 
-function activityPrimaryLine(label: string): string {
-  const i = label.indexOf(" — ");
-  if (i === -1) return label;
-  return label.slice(0, i).trim() || label;
-}
+type RecentActivityRow = {
+  id: string;
+  created_at: string;
+  user_name: string | null;
+  description: string;
+};
 
-function activitySecondaryLine(label: string): string | null {
-  const i = label.indexOf(" — ");
-  if (i === -1) return null;
-  const rest = label.slice(i + 3).trim();
-  return rest || null;
+function avatarHue(s: string): string {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return `hsl(${h % 360} 65% 42%)`;
 }
 
 const cardChrome =
@@ -86,9 +87,10 @@ export default function DashboardPage() {
     completed: 0,
     dispatched: 0,
   });
-  const [activity, setActivity] = useState<
-    { type: string; label: string; time: string }[]
-  >([]);
+  const [recentActivity, setRecentActivity] = useState<RecentActivityRow[]>(
+    [],
+  );
+  const [recentLoading, setRecentLoading] = useState(true);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -102,7 +104,7 @@ export default function DashboardPage() {
     return () => sub.subscription.unsubscribe();
   }, [supabase]);
 
-  async function fetchStats() {
+  const fetchStats = useCallback(async () => {
     setLoading(true);
     const from = getDateRange(period);
 
@@ -128,10 +130,8 @@ export default function DashboardPage() {
     const { count: testimonials } = await testQ;
 
     let projQ = supabase
-      .from("interviews")
-      .select("*", { count: "exact", head: true })
-      .eq("interview_status", "completed")
-      .eq("interview_type", "project");
+      .from("project_candidates")
+      .select("*", { count: "exact", head: true });
     if (from) projQ = projQ.gte("created_at", from);
     const { count: projects } = await projQ;
 
@@ -187,40 +187,43 @@ export default function DashboardPage() {
       dispatched: fDispatched || 0,
     });
 
-    const { data: recentCandidates } = await supabase
-      .from("candidates")
-      .select("full_name, eligibility_status, created_at")
-      .order("created_at", { ascending: false })
-      .limit(5);
-    const { data: recentInterviews } = await supabase
-      .from("interviews")
-      .select("interview_status, created_at, interviewer")
-      .order("created_at", { ascending: false })
-      .limit(5);
-    const combined = [
-      ...(recentCandidates || []).map((c) => ({
-        type: "candidate",
-        label: `${c.full_name} — ${c.eligibility_status}`,
-        time: c.created_at,
-      })),
-      ...(recentInterviews || []).map((i) => ({
-        type: "interview",
-        label: `Interview ${i.interview_status} — ${i.interviewer}`,
-        time: i.created_at,
-      })),
-    ]
-      .sort(
-        (a, b) =>
-          new Date(b.time).getTime() - new Date(a.time).getTime(),
-      )
-      .slice(0, 10);
-    setActivity(combined);
     setLoading(false);
-  }
+  }, [supabase, period]);
+
+  const fetchRecentActivity = useCallback(async () => {
+    setRecentLoading(true);
+    const { data } = await supabase
+      .from("activity_log")
+      .select("id, created_at, user_name, description")
+      .order("created_at", { ascending: false })
+      .limit(20);
+    setRecentActivity((data ?? []) as RecentActivityRow[]);
+    setRecentLoading(false);
+  }, [supabase]);
 
   useEffect(() => {
     void fetchStats();
-  }, [period]);
+  }, [fetchStats]);
+
+  useEffect(() => {
+    void fetchRecentActivity();
+  }, [fetchRecentActivity]);
+
+  useEffect(() => {
+    const ch = supabase
+      .channel("dashboard-activity-log")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "activity_log" },
+        () => {
+          void fetchRecentActivity();
+        },
+      )
+      .subscribe();
+    return () => {
+      void supabase.removeChannel(ch);
+    };
+  }, [supabase, fetchRecentActivity]);
 
   const funnelSteps = useMemo(
     () => [
@@ -373,39 +376,46 @@ export default function DashboardPage() {
                 Recent activity
               </h2>
               <p className="mb-6 text-sm text-[#6e6e73]">
-                Latest candidates & interviews
+                Latest changes from your team
               </p>
-              {loading ? (
+              {recentLoading ? (
                 <p className="text-sm text-[#6e6e73]">Loading…</p>
-              ) : activity.length === 0 ? (
-                <p className="text-sm text-[#6e6e73]">No activity yet.</p>
+              ) : recentActivity.length === 0 ? (
+                <p className="text-sm text-[#6e6e73]">No activity yet</p>
               ) : (
-                <ul className="relative space-y-0 border-l border-[#f5f5f7] pl-5">
-                  {activity.map((a, i) => {
-                    const primary = activityPrimaryLine(a.label);
-                    const secondary = activitySecondaryLine(a.label);
+                <ul className="space-y-4">
+                  {recentActivity.map((a) => {
+                    const uname = a.user_name?.trim() || "Someone";
                     return (
-                      <li
-                        key={`${a.type}-${a.time}-${i}`}
-                        className="relative pb-6 last:pb-0"
-                      >
-                        <span className="absolute -left-[22px] top-1.5 h-1.5 w-1.5 rounded-full bg-[#aeaeb2]" />
-                        <p className="text-sm font-medium text-[#1d1d1f]">
-                          {primary}
-                        </p>
-                        {secondary ? (
-                          <p className="mt-0.5 text-xs text-[#6e6e73]">
-                            {secondary}
+                      <li key={a.id} className="flex gap-3">
+                        <div
+                          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-medium text-white"
+                          style={{ backgroundColor: avatarHue(uname) }}
+                        >
+                          {initials(uname)}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm text-[#1d1d1f]">
+                            <span className="font-semibold">{uname}</span>{" "}
+                            {a.description}
                           </p>
-                        ) : null}
-                        <p className="mt-1 text-xs text-[#aeaeb2]">
-                          {format(new Date(a.time), "MMM d, yyyy · h:mm a")}
-                        </p>
+                          <p className="mt-1 text-xs text-[#aeaeb2]">
+                            {formatDistanceToNow(parseISO(a.created_at), {
+                              addSuffix: true,
+                            })}
+                          </p>
+                        </div>
                       </li>
                     );
                   })}
                 </ul>
               )}
+              <Link
+                href="/dashboard/activity"
+                className="mt-6 inline-block text-sm font-medium text-[#3b82f6] transition-colors hover:text-[#2563eb]"
+              >
+                View all activity
+              </Link>
             </section>
           </div>
 

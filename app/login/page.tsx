@@ -1,31 +1,211 @@
 "use client";
 
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
-import { Loader2 } from "lucide-react";
+import { Loader2, X } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { type FormEvent, useEffect, useState } from "react";
+import {
+  type FormEvent,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 
 import { LogoOnDark, LogoOnLight } from "@/components/brand-logo";
+import {
+  digitsOnly,
+  resolveSupportStatus,
+  type SupportDispatch,
+  type SupportInterview,
+  type SupportLookupPayload,
+  type SupportCandidate,
+} from "@/lib/support-lookup";
 
 const inputClass =
   "w-full rounded-xl border border-[#e5e5e5] px-4 py-3 text-sm text-[#1d1d1f] placeholder:text-[#aeaeb2] focus:border-[#3b82f6] focus:outline-none focus:ring-1 focus:ring-[#3b82f6]";
+
+const CANDIDATE_LOOKUP_SELECT =
+  "id, full_name, email, whatsapp_number, eligibility_status, interview_type, poc_assigned";
+
+const INTERVIEW_LOOKUP_SELECT =
+  "interview_status, scheduled_date, interviewer, reschedule_reason, interview_type, reward_item";
+
+const DISPATCH_LOOKUP_SELECT =
+  "dispatch_status, tracking_id, expected_delivery_date, reward_item";
+
+const COOLDOWN_SECONDS = 30;
+
+function CandidateLookupResultCard({
+  payload,
+}: {
+  payload: SupportLookupPayload;
+}) {
+  const status = resolveSupportStatus(payload);
+  const { candidate, interview, dispatch } = payload;
+  const typeForBadge = interview?.interview_type ?? candidate.interview_type;
+  const reward =
+    dispatch?.reward_item?.trim() ||
+    (interview?.interview_status === "completed"
+      ? interview.reward_item?.trim()
+      : null) ||
+    null;
+
+  return (
+    <div className="mt-5 rounded-2xl border border-[#f0f0f0] bg-[#fafafa] p-5 text-left">
+      <p className="text-xl font-bold text-[#1d1d1f]">
+        {candidate.full_name?.trim() || "—"}
+      </p>
+      <div className="mt-3 space-y-1 text-sm text-[#6e6e73]">
+        <p className="break-all">
+          <span className="text-[#9ca3af]">Email </span>
+          {candidate.email}
+        </p>
+        <p>
+          <span className="text-[#9ca3af]">Phone </span>
+          {candidate.whatsapp_number?.trim() ? (
+            candidate.whatsapp_number
+          ) : (
+            <span className="text-[#d1d5db]">—</span>
+          )}
+        </p>
+      </div>
+      <div className="mt-4">
+        <p className="mb-2 text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
+          Interview type
+        </p>
+        {interviewTypeBadge(typeForBadge)}
+      </div>
+      <div className="mt-4 border-t border-[#e5e5e5] pt-4">
+        <p className="mb-2 text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
+          Current status
+        </p>
+        <span
+          className={`inline-flex flex-wrap items-center gap-x-1 rounded-full px-3 py-1.5 text-xs font-semibold ${status.badgeClass}`}
+        >
+          {status.title}
+        </span>
+        {status.lines.length > 0 ? (
+          <div className="mt-3 space-y-1.5 text-sm leading-snug text-[#6e6e73]">
+            {status.lines.map((line, i) => (
+              <p key={i}>{line}</p>
+            ))}
+          </div>
+        ) : null}
+      </div>
+      {candidate.poc_assigned?.trim() ? (
+        <div className="mt-4 border-t border-[#e5e5e5] pt-4">
+          <p className="text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
+            POC assigned
+          </p>
+          <p className="mt-1 text-sm font-medium text-[#1d1d1f]">
+            {candidate.poc_assigned}
+          </p>
+        </div>
+      ) : null}
+      {reward ? (
+        <div className="mt-4 border-t border-[#e5e5e5] pt-4">
+          <p className="text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
+            Reward item
+          </p>
+          <p className="mt-1 text-sm text-[#1d1d1f]">{reward}</p>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function interviewTypeBadge(t: string | null | undefined) {
+  if (t === "testimonial") {
+    return (
+      <span className="inline-flex rounded-full bg-[#f0fdf4] px-2.5 py-1 text-xs font-medium text-[#16a34a]">
+        Testimonial
+      </span>
+    );
+  }
+  if (t === "project") {
+    return (
+      <span className="inline-flex rounded-full bg-[#eff6ff] px-2.5 py-1 text-xs font-medium text-[#2563eb]">
+        Project
+      </span>
+    );
+  }
+  return (
+    <span className="text-xs font-medium text-[#6e6e73]">Not set</span>
+  );
+}
+
+function mapAuthError(message: string): string {
+  if (message === "Request rate limit reached") {
+    return "Too many attempts. Please wait a moment and try again.";
+  }
+  if (message === "Invalid login credentials") {
+    return "Invalid email or password. Please try again.";
+  }
+  return "Something went wrong. Please try again.";
+}
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [cooldownRemaining, setCooldownRemaining] = useState(0);
   const [rightVisible, setRightVisible] = useState(false);
+  const [lookupModalOpen, setLookupModalOpen] = useState(false);
+  const [lookupModalQuery, setLookupModalQuery] = useState("");
+  const [lookupLoading, setLookupLoading] = useState(false);
+  const [lookupPayload, setLookupPayload] = useState<SupportLookupPayload | null>(
+    null,
+  );
+  const [lookupNotFound, setLookupNotFound] = useState(false);
+  const [lookupMultiPhone, setLookupMultiPhone] = useState(false);
+  const errorDelayRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const router = useRouter();
   const supabase = createClientComponentClient();
+
+  const closeLookupModal = useCallback(() => {
+    setLookupModalOpen(false);
+    setLookupModalQuery("");
+    setLookupPayload(null);
+    setLookupNotFound(false);
+    setLookupMultiPhone(false);
+    setLookupLoading(false);
+  }, []);
 
   useEffect(() => {
     const id = requestAnimationFrame(() => setRightVisible(true));
     return () => cancelAnimationFrame(id);
   }, []);
 
+  useEffect(() => {
+    return () => {
+      if (errorDelayRef.current) clearTimeout(errorDelayRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (cooldownRemaining <= 0) return;
+    const t = setInterval(() => {
+      setCooldownRemaining((c) => (c <= 1 ? 0 : c - 1));
+    }, 1000);
+    return () => clearInterval(t);
+  }, [cooldownRemaining > 0]);
+
+  useEffect(() => {
+    if (!lookupModalOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeLookupModal();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [lookupModalOpen, closeLookupModal]);
+
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (errorDelayRef.current) {
+      clearTimeout(errorDelayRef.current);
+      errorDelayRef.current = null;
+    }
     setError("");
     setLoading(true);
     const { error: signErr } = await supabase.auth.signInWithPassword({
@@ -34,16 +214,99 @@ export default function LoginPage() {
     });
     setLoading(false);
     if (signErr) {
-      setError(
-        signErr.message === "Invalid login credentials"
-          ? "Invalid email or password."
-          : signErr.message,
-      );
+      setCooldownRemaining(COOLDOWN_SECONDS);
+      errorDelayRef.current = setTimeout(() => {
+        setError(mapAuthError(signErr.message));
+        errorDelayRef.current = null;
+      }, 500);
       return;
     }
     router.push("/dashboard");
     router.refresh();
   }
+
+  const runSupportLookup = useCallback(async () => {
+    const raw = lookupModalQuery.trim();
+    setLookupPayload(null);
+    setLookupNotFound(false);
+    setLookupMultiPhone(false);
+    if (!raw) return;
+
+    setLookupLoading(true);
+    try {
+      let candidate: SupportCandidate | null = null;
+
+      if (raw.includes("@")) {
+        const { data, error } = await supabase
+          .from("candidates")
+          .select(CANDIDATE_LOOKUP_SELECT)
+          .ilike("email", raw)
+          .limit(2);
+        if (error) {
+          setLookupNotFound(true);
+          return;
+        }
+        const rows = (data ?? []) as SupportCandidate[];
+        if (rows.length === 1) candidate = rows[0];
+        else setLookupNotFound(true);
+      } else {
+        const digits = digitsOnly(raw);
+        if (digits.length < 8) {
+          setLookupNotFound(true);
+          return;
+        }
+        const { data, error } = await supabase
+          .from("candidates")
+          .select(CANDIDATE_LOOKUP_SELECT)
+          .ilike("whatsapp_number", `%${digits}%`)
+          .limit(15);
+        if (error) {
+          setLookupNotFound(true);
+          return;
+        }
+        const rows = (data ?? []) as SupportCandidate[];
+        const normalized = rows.filter((r) => {
+          const w = digitsOnly(r.whatsapp_number ?? "");
+          if (!w) return false;
+          return (
+            w === digits ||
+            w.endsWith(digits) ||
+            digits.endsWith(w) ||
+            w.includes(digits)
+          );
+        });
+        if (normalized.length === 1) candidate = normalized[0];
+        else if (normalized.length === 0) setLookupNotFound(true);
+        else setLookupMultiPhone(true);
+      }
+
+      if (!candidate) return;
+
+      const { data: intRows } = await supabase
+        .from("interviews")
+        .select(INTERVIEW_LOOKUP_SELECT)
+        .eq("candidate_id", candidate.id)
+        .order("created_at", { ascending: false })
+        .limit(1);
+
+      const interview = (intRows?.[0] ?? null) as SupportInterview | null;
+
+      const { data: dispRows } = await supabase
+        .from("dispatch")
+        .select(DISPATCH_LOOKUP_SELECT)
+        .eq("candidate_id", candidate.id)
+        .order("created_at", { ascending: false })
+        .limit(1);
+
+      const dispatch = (dispRows?.[0] ?? null) as SupportDispatch | null;
+
+      setLookupPayload({ candidate, interview, dispatch });
+    } finally {
+      setLookupLoading(false);
+    }
+  }, [lookupModalQuery, supabase]);
+
+  const submitDisabled = loading || cooldownRemaining > 0;
 
   return (
     <div className="flex min-h-screen flex-col font-sans lg:flex-row">
@@ -165,8 +428,8 @@ export default function LoginPage() {
 
               <button
                 type="submit"
-                disabled={loading}
-                className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-[#1d1d1f] py-3 text-sm font-medium text-white transition-all duration-200 hover:bg-[#2d2d2f] disabled:opacity-70"
+                disabled={submitDisabled}
+                className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-[#1d1d1f] py-3 text-sm font-medium text-white transition-all duration-200 hover:bg-[#2d2d2f] disabled:cursor-not-allowed disabled:opacity-70"
               >
                 {loading ? (
                   <>
@@ -176,11 +439,26 @@ export default function LoginPage() {
                     />
                     Signing in...
                   </>
+                ) : cooldownRemaining > 0 ? (
+                  `Try again in ${cooldownRemaining}s...`
                 ) : (
                   "Sign in"
                 )}
               </button>
             </form>
+
+            <button
+              type="button"
+              onClick={() => {
+                setLookupModalOpen(true);
+                setLookupPayload(null);
+                setLookupNotFound(false);
+                setLookupMultiPhone(false);
+              }}
+              className="mt-3 flex w-full items-center justify-center rounded-xl border-2 border-[#1d1d1f] bg-white py-3 text-sm font-medium text-[#1d1d1f] transition-colors hover:bg-[#fafafa]"
+            >
+              🔍 Candidate Lookup
+            </button>
 
             <p className="mt-8 text-center text-xs text-[#aeaeb2]">
               © 2026 House of Ed-Tech. All rights reserved.
@@ -188,6 +466,107 @@ export default function LoginPage() {
           </div>
         </div>
       </div>
+
+      {lookupModalOpen ? (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+          role="presentation"
+        >
+          <button
+            type="button"
+            className="absolute inset-0 bg-[#0f1729]/65 backdrop-blur-[2px]"
+            aria-label="Close dialog"
+            onClick={closeLookupModal}
+          />
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="candidate-lookup-title"
+            className="relative z-10 flex max-h-[min(90vh,720px)] w-full max-w-md flex-col overflow-hidden rounded-2xl bg-white shadow-xl"
+          >
+            <div className="flex shrink-0 items-start justify-between gap-4 border-b border-[#f0f0f0] px-6 pb-4 pt-5">
+              <div className="min-w-0 pr-2">
+                <h2
+                  id="candidate-lookup-title"
+                  className="text-lg font-semibold text-[#1d1d1f]"
+                >
+                  Candidate Lookup
+                </h2>
+                <p className="mt-1 text-sm text-[#6e6e73]">
+                  Enter mobile number or email to check status
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={closeLookupModal}
+                className="shrink-0 rounded-lg p-2 text-[#6e6e73] transition-colors hover:bg-[#f5f5f7] hover:text-[#1d1d1f]"
+                aria-label="Close"
+              >
+                <X className="h-5 w-5" strokeWidth={2} />
+              </button>
+            </div>
+
+            <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-6 py-5">
+              <input
+                type="text"
+                value={lookupModalQuery}
+                onChange={(e) => setLookupModalQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    void runSupportLookup();
+                  }
+                }}
+                placeholder="Mobile number or email…"
+                autoComplete="off"
+                className={inputClass}
+                aria-label="Mobile number or email"
+              />
+              <button
+                type="button"
+                disabled={lookupLoading}
+                onClick={() => void runSupportLookup()}
+                className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-[#1d1d1f] py-3 text-sm font-medium text-white transition-colors hover:bg-[#2d2d2f] disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                {lookupLoading ? (
+                  <>
+                    <Loader2
+                      className="h-4 w-4 shrink-0 animate-spin"
+                      aria-hidden
+                    />
+                    Searching…
+                  </>
+                ) : (
+                  "Search"
+                )}
+              </button>
+
+              <div className="mt-6 min-h-[120px]">
+                {lookupLoading ? (
+                  <div className="flex flex-col items-center justify-center py-10">
+                    <Loader2
+                      className="h-8 w-8 animate-spin text-[#1d1d1f]"
+                      aria-hidden
+                    />
+                    <p className="mt-3 text-sm text-[#6e6e73]">Searching…</p>
+                  </div>
+                ) : lookupMultiPhone ? (
+                  <p className="py-8 text-center text-sm text-[#6e6e73]">
+                    Several records match this number. Please search using the
+                    email on your application.
+                  </p>
+                ) : lookupNotFound && !lookupPayload ? (
+                  <p className="py-8 text-center text-sm text-[#6e6e73]">
+                    No candidate found
+                  </p>
+                ) : lookupPayload ? (
+                  <CandidateLookupResultCard payload={lookupPayload} />
+                ) : null}
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

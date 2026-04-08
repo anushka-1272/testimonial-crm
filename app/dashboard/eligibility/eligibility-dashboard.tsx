@@ -1,16 +1,19 @@
 "use client";
 
 import { endOfDay, parseISO, startOfDay, startOfWeek } from "date-fns";
-import { Loader2, RefreshCw } from "lucide-react";
+import { Check, Loader2, RefreshCw, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
   formatAchievementSummary,
   truncateText,
 } from "@/lib/candidate-summary";
+import { logActivity } from "@/lib/activity-logger";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 
 type EligibilityStatus = "pending_review" | "eligible" | "not_eligible";
+
+export type InterviewTrack = "testimonial" | "project";
 
 export type CandidateRow = {
   id: string;
@@ -40,6 +43,7 @@ export type CandidateRow = {
   human_reviewed_by: string | null;
   human_reviewed_at: string | null;
   congratulation_call_pending: boolean;
+  interview_type: InterviewTrack | null;
 };
 
 type DashboardStats = {
@@ -50,7 +54,7 @@ type DashboardStats = {
 };
 
 const SELECT_COLUMNS =
-  "id, created_at, form_filled_date, email, full_name, whatsapp_number, role_before_program, salary_before_program, primary_goal, achievement_type, achievement_title, achieved_on_date, program_joined_date, quantified_result, skills_modules_helped, how_program_helped, proof_document_url, proof_description, linkedin_url, instagram_url, declaration_accepted, ai_eligibility_score, ai_eligibility_reason, eligibility_status, human_reviewed_by, human_reviewed_at, congratulation_call_pending";
+  "id, created_at, form_filled_date, email, full_name, whatsapp_number, role_before_program, salary_before_program, primary_goal, achievement_type, achievement_title, achieved_on_date, program_joined_date, quantified_result, skills_modules_helped, how_program_helped, proof_document_url, proof_description, linkedin_url, instagram_url, declaration_accepted, ai_eligibility_score, ai_eligibility_reason, eligibility_status, human_reviewed_by, human_reviewed_at, congratulation_call_pending, interview_type";
 
 const cardChrome =
   "rounded-2xl bg-white shadow-[0_4px_16px_rgba(0,0,0,0.08)] border border-[#f0f0f0]";
@@ -87,6 +91,47 @@ function statusLabel(status: EligibilityStatus): string {
   }
 }
 
+function interviewTypeTableCell(t: InterviewTrack | null | undefined) {
+  if (t === "testimonial") {
+    return (
+      <span className="inline-flex rounded-full bg-[#f0fdf4] px-3 py-1 text-xs font-medium text-[#16a34a]">
+        Testimonial
+      </span>
+    );
+  }
+  if (t === "project") {
+    return (
+      <span className="inline-flex rounded-full bg-[#eff6ff] px-3 py-1 text-xs font-medium text-[#2563eb]">
+        Project
+      </span>
+    );
+  }
+  return <span className="text-[#6e6e73]">—</span>;
+}
+
+function DetailField({
+  label,
+  value,
+  className = "",
+}: {
+  label: string;
+  value: string | null | undefined;
+  className?: string;
+}) {
+  const display =
+    value == null || String(value).trim() === "" ? null : String(value);
+  return (
+    <div className={className}>
+      <dt className="text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
+        {label}
+      </dt>
+      <dd className="mt-1 whitespace-pre-wrap break-words text-[#1d1d1f]">
+        {display ?? <span className="text-[#6e6e73]">—</span>}
+      </dd>
+    </div>
+  );
+}
+
 export function EligibilityDashboard() {
   const [rows, setRows] = useState<CandidateRow[]>([]);
   const [stats, setStats] = useState<DashboardStats | null>(null);
@@ -102,7 +147,9 @@ export function EligibilityDashboard() {
   const [dateTo, setDateTo] = useState<string>("");
 
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [drawer, setDrawer] = useState<CandidateRow | null>(null);
+  const [detailCandidate, setDetailCandidate] = useState<CandidateRow | null>(
+    null,
+  );
 
   const supabase = useMemo(() => {
     try {
@@ -244,7 +291,7 @@ export function EligibilityDashboard() {
     });
   };
 
-  const markEligible = async (r: CandidateRow) => {
+  const markEligible = async (r: CandidateRow, interviewType: InterviewTrack) => {
     if (!supabase) return;
     setBusyId(r.id);
     const { error: uErr } = await supabase
@@ -252,6 +299,7 @@ export function EligibilityDashboard() {
       .update({
         eligibility_status: "eligible",
         congratulation_call_pending: true,
+        interview_type: interviewType,
       })
       .eq("id", r.id);
     setBusyId(null);
@@ -259,11 +307,44 @@ export function EligibilityDashboard() {
       setError(uErr.message);
       return;
     }
+    const { data: auth } = await supabase.auth.getUser();
+    const actor = auth.user;
+    if (actor) {
+      const display = r.full_name?.trim() || r.email || "Candidate";
+      const trackLabel =
+        interviewType === "testimonial" ? "Testimonial" : "Project";
+      if (
+        r.eligibility_status === "eligible" &&
+        r.interview_type !== interviewType
+      ) {
+        await logActivity({
+          supabase,
+          user: actor,
+          action_type: "eligibility",
+          entity_type: "candidate",
+          entity_id: r.id,
+          candidate_name: display,
+          description: `Changed interview type for ${display} to ${trackLabel}`,
+          metadata: { from: r.interview_type, to: interviewType },
+        });
+      } else if (r.eligibility_status !== "eligible") {
+        await logActivity({
+          supabase,
+          user: actor,
+          action_type: "eligibility",
+          entity_type: "candidate",
+          entity_id: r.id,
+          candidate_name: display,
+          description: `Marked ${display} as Eligible (${trackLabel})`,
+        });
+      }
+    }
     setSelected((prev) => {
       const n = new Set(prev);
       n.delete(r.id);
       return n;
     });
+    setDetailCandidate((prev) => (prev?.id === r.id ? null : prev));
   };
 
   const markNotEligible = async (r: CandidateRow) => {
@@ -295,12 +376,27 @@ export function EligibilityDashboard() {
     } catch {
       setError("Network error sending rejection email");
     }
+    const { data: authNe } = await supabase.auth.getUser();
+    const actorNe = authNe.user;
+    if (actorNe) {
+      const display = r.full_name?.trim() || r.email || "Candidate";
+      await logActivity({
+        supabase,
+        user: actorNe,
+        action_type: "eligibility",
+        entity_type: "candidate",
+        entity_id: r.id,
+        candidate_name: display,
+        description: `Marked ${display} as Not Eligible`,
+      });
+    }
     setBusyId(null);
     setSelected((prev) => {
       const n = new Set(prev);
       n.delete(r.id);
       return n;
     });
+    setDetailCandidate((prev) => (prev?.id === r.id ? null : prev));
   };
 
   const bulkMarkEligible = async () => {
@@ -312,11 +408,33 @@ export function EligibilityDashboard() {
       .update({
         eligibility_status: "eligible",
         congratulation_call_pending: true,
+        interview_type: "testimonial",
       })
       .in("id", ids);
     setBulkBusy(false);
     if (uErr) setError(uErr.message);
-    else setSelected(new Set());
+    else {
+      const { data: authBulk } = await supabase.auth.getUser();
+      const actorBulk = authBulk.user;
+      if (actorBulk) {
+        for (const id of ids) {
+          const row = rows.find((x) => x.id === id);
+          if (!row) continue;
+          const display =
+            row.full_name?.trim() || row.email || "Candidate";
+          await logActivity({
+            supabase,
+            user: actorBulk,
+            action_type: "eligibility",
+            entity_type: "candidate",
+            entity_id: id,
+            candidate_name: display,
+            description: `Marked ${display} as Eligible (Testimonial)`,
+          });
+        }
+      }
+      setSelected(new Set());
+    }
   };
 
   const bulkMarkNotEligible = async () => {
@@ -348,6 +466,24 @@ export function EligibilityDashboard() {
         /* continue others */
       }
       await new Promise((res) => setTimeout(res, 400));
+    }
+    const { data: authBn } = await supabase.auth.getUser();
+    const actorBn = authBn.user;
+    if (actorBn) {
+      for (const id of ids) {
+        const row = rows.find((x) => x.id === id);
+        if (!row) continue;
+        const display = row.full_name?.trim() || row.email || "Candidate";
+        await logActivity({
+          supabase,
+          user: actorBn,
+          action_type: "eligibility",
+          entity_type: "candidate",
+          entity_id: id,
+          candidate_name: display,
+          description: `Marked ${display} as Not Eligible`,
+        });
+      }
     }
     setBulkBusy(false);
     setSelected(new Set());
@@ -659,6 +795,9 @@ export function EligibilityDashboard() {
                     Status
                   </th>
                   <th className="px-3 py-3 text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
+                    Interview type
+                  </th>
+                  <th className="px-3 py-3 text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
                     Actions
                   </th>
                 </tr>
@@ -667,7 +806,7 @@ export function EligibilityDashboard() {
                 {loading ? (
                   <tr>
                     <td
-                      colSpan={9}
+                      colSpan={10}
                       className="px-4 py-12 text-center text-sm text-[#6e6e73]"
                     >
                       Loading candidates…
@@ -676,7 +815,7 @@ export function EligibilityDashboard() {
                 ) : filteredRows.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={9}
+                      colSpan={10}
                       className="px-4 py-12 text-center text-sm text-[#6e6e73]"
                     >
                       No candidates match the current filters.
@@ -742,28 +881,49 @@ export function EligibilityDashboard() {
                             {statusLabel(r.eligibility_status)}
                           </span>
                         </td>
+                        <td className="px-3 py-3 align-top whitespace-nowrap">
+                          {interviewTypeTableCell(r.interview_type)}
+                        </td>
                         <td className="px-3 py-3 align-top">
-                          <div className="flex flex-col items-start gap-2 sm:flex-row sm:flex-wrap">
+                          <div className="flex flex-col items-start gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                disabled={busyId === r.id}
+                                title="Mark eligible for a testimonial interview"
+                                aria-label="Mark eligible as testimonial"
+                                className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[#bbf7d0] bg-[#f0fdf4] text-xs font-bold text-[#16a34a] transition-colors hover:bg-[#dcfce7] disabled:opacity-50"
+                                onClick={() =>
+                                  void markEligible(r, "testimonial")
+                                }
+                              >
+                                T
+                              </button>
+                              <button
+                                type="button"
+                                disabled={busyId === r.id}
+                                title="Mark eligible for a project interview"
+                                aria-label="Mark eligible as project"
+                                className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[#bfdbfe] bg-[#eff6ff] text-xs font-bold text-[#2563eb] transition-colors hover:bg-[#dbeafe] disabled:opacity-50"
+                                onClick={() => void markEligible(r, "project")}
+                              >
+                                P
+                              </button>
+                            </div>
                             <button
                               type="button"
                               disabled={busyId === r.id}
-                              className="whitespace-nowrap text-sm font-medium text-[#3b82f6] transition-all hover:text-[#2563eb] disabled:opacity-50"
-                              onClick={() => void markEligible(r)}
-                            >
-                              Mark eligible
-                            </button>
-                            <button
-                              type="button"
-                              disabled={busyId === r.id}
-                              className="whitespace-nowrap text-sm font-medium text-[#ef4444] transition-all hover:text-[#dc2626] disabled:opacity-50"
+                              title="Mark Not Eligible"
+                              aria-label="Mark Not Eligible"
+                              className="inline-flex items-center justify-center rounded-lg border border-[#fecaca] bg-[#fef2f2] p-2 text-[#dc2626] transition-colors hover:bg-[#fee2e2] disabled:opacity-50"
                               onClick={() => void markNotEligible(r)}
                             >
-                              Mark not eligible
+                              <X className="h-4 w-4" strokeWidth={2.5} />
                             </button>
                             <button
                               type="button"
                               className="whitespace-nowrap text-sm font-medium text-[#6e6e73] transition-all hover:text-[#1d1d1f]"
-                              onClick={() => setDrawer(r)}
+                              onClick={() => setDetailCandidate(r)}
                             >
                               View details
                             </button>
@@ -783,89 +943,198 @@ export function EligibilityDashboard() {
         </div>
       </main>
 
-      {drawer && (
-        <div className="fixed inset-0 z-50 flex justify-end">
+      {detailCandidate && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <button
             type="button"
-            className="absolute inset-0 bg-[#1d1d1f]/25 backdrop-blur-[1px]"
-            aria-label="Close drawer"
-            onClick={() => setDrawer(null)}
+            className="absolute inset-0 bg-[#1d1d1f]/60 backdrop-blur-sm"
+            aria-label="Close details"
+            onClick={() => setDetailCandidate(null)}
           />
-          <aside className="relative flex h-full w-full max-w-md flex-col border-l border-[#f0f0f0] bg-white shadow-[0_4px_16px_rgba(0,0,0,0.08)]">
-            <div className="flex items-start justify-between border-b border-[#f5f5f5] px-5 py-4">
-              <div>
-                <h2 className="text-lg font-semibold text-[#1d1d1f]">
-                  {drawer.full_name ?? "Candidate"}
-                </h2>
-                <p className="text-sm text-[#6e6e73]">{drawer.email}</p>
-              </div>
+          <div
+            className="relative flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-xl"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="candidate-detail-title"
+          >
+            <div className="flex items-start justify-between border-b border-[#f5f5f5] px-6 py-4">
+              <h2
+                id="candidate-detail-title"
+                className="pr-8 text-xl font-semibold text-[#1d1d1f]"
+              >
+                {detailCandidate.full_name ?? "Candidate"}
+              </h2>
               <button
                 type="button"
-                className="rounded-xl p-2 text-[#aeaeb2] transition-all hover:bg-[#f5f5f7] hover:text-[#1d1d1f]"
-                onClick={() => setDrawer(null)}
+                className="shrink-0 rounded-lg p-2 text-[#aeaeb2] transition-all hover:bg-[#f5f5f7] hover:text-[#1d1d1f]"
+                aria-label="Close"
+                onClick={() => setDetailCandidate(null)}
               >
-                ✕
+                <X className="h-5 w-5" strokeWidth={2} />
               </button>
             </div>
-            <div className="flex-1 overflow-y-auto px-5 py-4 text-sm text-[#1d1d1f]">
-              <dl className="space-y-4">
-                {(
-                  [
-                    ["Created", drawer.created_at],
-                    ["Form filled", drawer.form_filled_date],
-                    ["WhatsApp", drawer.whatsapp_number],
-                    ["Role / industry", drawer.role_before_program],
-                    ["Salary (before)", drawer.salary_before_program],
-                    ["Primary goal", drawer.primary_goal],
-                    ["Achievement type", drawer.achievement_type],
-                    ["Achievement title", drawer.achievement_title],
-                    ["Achieved on", drawer.achieved_on_date],
-                    ["Program joined", drawer.program_joined_date],
-                    ["Quantified result", drawer.quantified_result],
-                    ["Skills / modules", drawer.skills_modules_helped],
-                    ["How program helped", drawer.how_program_helped],
-                    ["Proof URL", drawer.proof_document_url],
-                    ["Proof description", drawer.proof_description],
-                    ["LinkedIn", drawer.linkedin_url],
-                    ["Instagram", drawer.instagram_url],
-                    [
-                      "Declaration accepted",
-                      drawer.declaration_accepted == null
-                        ? "—"
-                        : String(drawer.declaration_accepted),
-                    ],
-                    ["AI score", drawer.ai_eligibility_score ?? "—"],
-                    ["AI reason", drawer.ai_eligibility_reason],
-                    ["Status", statusLabel(drawer.eligibility_status)],
-                    [
-                      "Congratulation call pending",
-                      String(drawer.congratulation_call_pending),
-                    ],
-                    ["Reviewed by", drawer.human_reviewed_by],
-                    ["Reviewed at", drawer.human_reviewed_at],
-                  ] as const
-                ).map(([k, v]) => (
-                  <div key={k}>
-                    <dt className="text-xs uppercase tracking-widest text-[#aeaeb2]">
-                      {k}
-                    </dt>
-                    <dd className="mt-0.5 whitespace-pre-wrap break-words text-[#1d1d1f]">
-                      {v === null || v === "" ? "—" : String(v)}
-                    </dd>
-                  </div>
-                ))}
+
+            <div className="flex-1 overflow-y-auto px-6 py-5 text-sm text-[#1d1d1f]">
+              <dl className="grid gap-5 sm:grid-cols-2">
+                <DetailField
+                  label="Name"
+                  value={detailCandidate.full_name}
+                  className="sm:col-span-2"
+                />
+                <div className="sm:col-span-2">
+                  <dt className="text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
+                    Interview type
+                  </dt>
+                  <dd className="mt-1">
+                    {interviewTypeTableCell(detailCandidate.interview_type)}
+                  </dd>
+                </div>
+                <DetailField label="Email" value={detailCandidate.email} />
+                <DetailField
+                  label="Phone"
+                  value={detailCandidate.whatsapp_number}
+                />
+                <DetailField
+                  label="Role"
+                  value={detailCandidate.role_before_program}
+                />
+                <DetailField
+                  label="Salary"
+                  value={detailCandidate.salary_before_program}
+                />
+                <DetailField
+                  label="Achievement type"
+                  value={detailCandidate.achievement_type}
+                  className="sm:col-span-2"
+                />
+                <DetailField
+                  label="Achievement title"
+                  value={detailCandidate.achievement_title}
+                  className="sm:col-span-2"
+                />
+                <DetailField
+                  label="Quantified result"
+                  value={detailCandidate.quantified_result}
+                  className="sm:col-span-2"
+                />
+                <DetailField
+                  label="How program helped"
+                  value={detailCandidate.how_program_helped}
+                  className="sm:col-span-2"
+                />
+                <div className="sm:col-span-2">
+                  <dt className="text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
+                    Proof
+                  </dt>
+                  <dd className="mt-2 space-y-2">
+                    {detailCandidate.proof_document_url?.trim() ? (
+                      <a
+                        href={detailCandidate.proof_document_url.trim()}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex rounded-xl bg-[#1d1d1f] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#2d2d2f]"
+                      >
+                        View Proof
+                      </a>
+                    ) : (
+                      <span className="text-[#6e6e73]">—</span>
+                    )}
+                    {detailCandidate.proof_description?.trim() ? (
+                      <p className="whitespace-pre-wrap text-[#6e6e73]">
+                        {detailCandidate.proof_description}
+                      </p>
+                    ) : null}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
+                    LinkedIn
+                  </dt>
+                  <dd className="mt-1 break-all">
+                    {detailCandidate.linkedin_url?.trim() ? (
+                      <a
+                        href={detailCandidate.linkedin_url.trim()}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[#3b82f6] hover:underline"
+                      >
+                        {detailCandidate.linkedin_url.trim()}
+                      </a>
+                    ) : (
+                      <span className="text-[#6e6e73]">—</span>
+                    )}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
+                    Instagram
+                  </dt>
+                  <dd className="mt-1 break-all">
+                    {detailCandidate.instagram_url?.trim() ? (
+                      <a
+                        href={detailCandidate.instagram_url.trim()}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[#3b82f6] hover:underline"
+                      >
+                        {detailCandidate.instagram_url.trim()}
+                      </a>
+                    ) : (
+                      <span className="text-[#6e6e73]">—</span>
+                    )}
+                  </dd>
+                </div>
+                <DetailField
+                  label="AI score"
+                  value={
+                    detailCandidate.ai_eligibility_score == null
+                      ? null
+                      : String(detailCandidate.ai_eligibility_score)
+                  }
+                />
+                <DetailField
+                  label="AI reason"
+                  value={detailCandidate.ai_eligibility_reason}
+                  className="sm:col-span-2"
+                />
               </dl>
             </div>
-            <div className="border-t border-[#f5f5f5] px-5 py-3">
+
+            <div className="grid grid-cols-1 gap-3 border-t border-[#f5f5f5] px-6 py-4 sm:grid-cols-2">
               <button
                 type="button"
-                className="w-full rounded-xl bg-[#1d1d1f] py-2.5 text-sm font-medium text-white transition-all hover:bg-[#2d2d2f]"
-                onClick={() => setDrawer(null)}
+                disabled={busyId === detailCandidate.id}
+                title="Mark eligible for a testimonial interview"
+                className="inline-flex items-center justify-center gap-2 rounded-lg border border-[#bbf7d0] bg-[#f0fdf4] px-4 py-2.5 text-sm font-medium text-[#16a34a] transition-colors hover:bg-[#dcfce7] disabled:opacity-50"
+                onClick={() =>
+                  void markEligible(detailCandidate, "testimonial")
+                }
               >
-                Close
+                <Check className="h-4 w-4 shrink-0" strokeWidth={2.5} />
+                Testimonial
+              </button>
+              <button
+                type="button"
+                disabled={busyId === detailCandidate.id}
+                title="Mark eligible for a project interview"
+                className="inline-flex items-center justify-center gap-2 rounded-lg border border-[#bfdbfe] bg-[#eff6ff] px-4 py-2.5 text-sm font-medium text-[#2563eb] transition-colors hover:bg-[#dbeafe] disabled:opacity-50"
+                onClick={() => void markEligible(detailCandidate, "project")}
+              >
+                <Check className="h-4 w-4 shrink-0" strokeWidth={2.5} />
+                Project
+              </button>
+              <button
+                type="button"
+                disabled={busyId === detailCandidate.id}
+                title="Mark Not Eligible"
+                className="inline-flex items-center justify-center gap-2 rounded-lg border border-[#fecaca] bg-[#fef2f2] px-4 py-2.5 text-sm font-medium text-[#dc2626] transition-colors hover:bg-[#fee2e2] disabled:opacity-50 sm:col-span-2"
+                onClick={() => void markNotEligible(detailCandidate)}
+              >
+                <X className="h-4 w-4 shrink-0" strokeWidth={2.5} />
+                Mark Not Eligible
               </button>
             </div>
-          </aside>
+          </div>
         </div>
       )}
     </>

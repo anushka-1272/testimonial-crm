@@ -2,7 +2,10 @@
 
 import {
   ArrowRight,
+  BarChart2,
   Calendar,
+  Film,
+  History,
   LayoutDashboard,
   Package,
   Settings,
@@ -23,6 +26,12 @@ const NAV = [
     isActive: (p: string) => p === "/dashboard",
   },
   {
+    href: "/dashboard/analytics",
+    label: "Analytics",
+    icon: BarChart2,
+    isActive: (p: string) => p.startsWith("/dashboard/analytics"),
+  },
+  {
     href: "/dashboard/eligibility",
     label: "Eligibility",
     icon: Users,
@@ -39,6 +48,18 @@ const NAV = [
     label: "Dispatch",
     icon: Package,
     isActive: (p: string) => p.startsWith("/dashboard/dispatch"),
+  },
+  {
+    href: "/dashboard/activity",
+    label: "Activity",
+    icon: History,
+    isActive: (p: string) => p.startsWith("/dashboard/activity"),
+  },
+  {
+    href: "/dashboard/post-production",
+    label: "Post Production",
+    icon: Film,
+    isActive: (p: string) => p.startsWith("/dashboard/post-production"),
   },
   {
     href: "/dashboard/settings/criteria",

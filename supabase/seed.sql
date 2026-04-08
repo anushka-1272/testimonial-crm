@@ -32,7 +32,8 @@ insert into public.candidates (
   full_name,
   eligibility_status,
   declaration_accepted,
-  role_before_program
+  role_before_program,
+  interview_type
 )
 values
   (
@@ -41,7 +42,8 @@ values
     'Seed Candidate — Harika slot',
     'eligible',
     true,
-    'Software Engineer'
+    'Software Engineer',
+    'testimonial'
   ),
   (
     'a0000001-0000-4000-8000-000000000002',
@@ -49,7 +51,8 @@ values
     'Seed Candidate — Gargi slot',
     'eligible',
     true,
-    'Teacher'
+    'Teacher',
+    'testimonial'
   ),
   (
     'a0000001-0000-4000-8000-000000000003',
@@ -57,7 +60,8 @@ values
     'Seed Candidate — Mudit slot',
     'eligible',
     true,
-    'Analyst'
+    'Analyst',
+    'project'
   ),
   (
     'a0000001-0000-4000-8000-000000000004',
@@ -65,7 +69,8 @@ values
     'Seed Candidate — Anushka slot',
     'eligible',
     true,
-    'Associate'
+    'Associate',
+    'testimonial'
   );
 
 insert into public.interviews (

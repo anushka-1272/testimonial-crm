@@ -8,6 +8,76 @@ export type InterviewWithCandidate = {
   id: string;
   candidate_id: string;
   scheduled_date: string | null;
+  previous_scheduled_date: string | null;
+  reschedule_reason: string | null;
+  completed_at: string | null;
+  interviewer: string;
+  zoom_link: string | null;
+  language: string | null;
+  interview_language: string | null;
+  invitation_sent: boolean | null;
+  poc: string | null;
+  remarks: string | null;
+  reminder_count: number;
+  interview_status: InterviewColumnStatus;
+  post_interview_eligible: boolean | null;
+  reward_item: string | null;
+  category: string | null;
+  funnel: string | null;
+  comments: string | null;
+  interview_type: "testimonial" | "project";
+  candidates: {
+    id: string;
+    full_name: string | null;
+    email: string;
+    whatsapp_number?: string | null;
+    poc_assigned?: string | null;
+  } | null;
+};
+
+/** LinkedIn track pipeline (candidates.linkedin_track_status). */
+export type LinkedInTrackStatus =
+  | "pending_post"
+  | "posted"
+  | "verified"
+  | "eligible"
+  | "not_eligible";
+
+export type EligibleCandidate = {
+  id: string;
+  full_name: string | null;
+  email: string;
+  interview_type: "testimonial" | "project" | null;
+  poc_assigned: string | null;
+  poc_assigned_at: string | null;
+  linkedin_track: boolean;
+  linkedin_track_status: LinkedInTrackStatus | null;
+};
+
+export type ProjectCandidateRow = {
+  id: string;
+  created_at?: string;
+  email: string;
+  whatsapp_number: string | null;
+  project_title: string | null;
+  problem_statement: string | null;
+  target_user: string | null;
+  ai_usage: string | null;
+  demo_link: string | null;
+  status: string;
+  poc_assigned: string | null;
+  poc_assigned_at: string | null;
+  interview_type: string | null;
+};
+
+/** Project pipeline interview row (joined with project_candidates). */
+export type ProjectInterviewWithProjectCandidate = {
+  id: string;
+  project_candidate_id: string;
+  scheduled_date: string | null;
+  previous_scheduled_date: string | null;
+  reschedule_reason: string | null;
+  completed_at: string | null;
   interviewer: string;
   zoom_link: string | null;
   language: string | null;
@@ -17,19 +87,16 @@ export type InterviewWithCandidate = {
   reminder_count: number;
   interview_status: InterviewColumnStatus;
   post_interview_eligible: boolean | null;
+  reward_item: string | null;
   category: string | null;
   funnel: string | null;
   comments: string | null;
-  interview_type: "testimonial" | "project";
-  candidates: {
-    id: string;
-    full_name: string | null;
-    email: string;
-  } | null;
+  interview_type: "project";
+  project_candidates: ProjectCandidateRow | null;
 };
 
-export type EligibleCandidate = {
-  id: string;
-  full_name: string | null;
-  email: string;
-};
+export function isProjectInterviewRow(
+  row: InterviewWithCandidate | ProjectInterviewWithProjectCandidate,
+): row is ProjectInterviewWithProjectCandidate {
+  return "project_candidate_id" in row && Boolean(row.project_candidate_id);
+}

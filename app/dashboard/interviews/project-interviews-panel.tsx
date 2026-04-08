@@ -1,0 +1,1120 @@
+"use client";
+
+import { format, parseISO } from "date-fns";
+import { Loader2, Pencil, RefreshCw } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+
+import type { SupabaseClient } from "@supabase/supabase-js";
+
+import { ProjectCandidateDetailModal } from "@/components/project-candidate-detail-modal";
+import { logActivity } from "@/lib/activity-logger";
+
+import type { ScheduleProjectCandidate } from "./schedule-interview-modal";
+import type {
+  ProjectCandidateRow,
+  ProjectInterviewWithProjectCandidate,
+} from "./types";
+
+const PAGE_SIZE = 20;
+const TEAM_POC_MEMBERS = ["Harika", "Anushka", "Gargi", "Mudit"] as const;
+
+const PROJECT_INTERVIEW_SELECT = `id, project_candidate_id, scheduled_date, previous_scheduled_date, reschedule_reason, completed_at, interviewer, zoom_link, language, invitation_sent, poc, remarks, reminder_count, interview_status, post_interview_eligible, reward_item, category, funnel, comments, interview_type, project_candidates ( id, email, whatsapp_number, project_title, problem_statement, target_user, ai_usage, demo_link, status, poc_assigned, poc_assigned_at, interview_type )`;
+
+type ProjectSubTab = "pending" | "scheduled" | "rescheduled" | "completed";
+
+type TabFilters = { search: string; page: number };
+
+function formatDateTime(iso: string | null | undefined) {
+  if (!iso) return "—";
+  try {
+    return format(parseISO(iso), "MMM d, yyyy h:mm a");
+  } catch {
+    return "—";
+  }
+}
+
+function projectDisplayName(pc: ProjectCandidateRow): string {
+  const e = pc.email?.trim();
+  if (!e) return "—";
+  const local = e.split("@")[0] ?? "";
+  if (!local) return "—";
+  return local.charAt(0).toUpperCase() + local.slice(1);
+}
+
+function matchesPendingSearch(pc: ProjectCandidateRow, q: string): boolean {
+  const s = q.trim().toLowerCase();
+  if (!s) return true;
+  return (
+    projectDisplayName(pc).toLowerCase().includes(s) ||
+    (pc.email ?? "").toLowerCase().includes(s) ||
+    (pc.whatsapp_number ?? "").toLowerCase().includes(s) ||
+    (pc.project_title ?? "").toLowerCase().includes(s)
+  );
+}
+
+function matchesInterviewSearch(
+  i: ProjectInterviewWithProjectCandidate,
+  q: string,
+): boolean {
+  const pc = i.project_candidates;
+  if (!pc) return false;
+  return matchesPendingSearch(pc, q);
+}
+
+function pocOptionsFor(pc: ProjectCandidateRow): string[] {
+  const current = pc.poc_assigned?.trim();
+  const roster = new Set<string>(TEAM_POC_MEMBERS);
+  if (current && !roster.has(current)) return [...TEAM_POC_MEMBERS, current];
+  return [...TEAM_POC_MEMBERS];
+}
+
+function normalizeProjectInterviewRow(
+  row: Record<string, unknown>,
+): ProjectInterviewWithProjectCandidate {
+  const r = row as Record<string, unknown> & {
+    project_candidates: ProjectCandidateRow | ProjectCandidateRow[] | null;
+  };
+  const c = r.project_candidates;
+  const pc = c == null ? null : Array.isArray(c) ? (c[0] ?? null) : c;
+  return {
+    ...(r as object),
+    previous_scheduled_date:
+      (r.previous_scheduled_date as string | null) ?? null,
+    reschedule_reason: (r.reschedule_reason as string | null) ?? null,
+    completed_at: (r.completed_at as string | null) ?? null,
+    reward_item: (r.reward_item as string | null) ?? null,
+    category: (r.category as string | null) ?? null,
+    funnel: (r.funnel as string | null) ?? null,
+    comments: (r.comments as string | null) ?? null,
+    project_candidates: pc,
+  } as ProjectInterviewWithProjectCandidate;
+}
+
+const REWARD_NO_DISPATCH = "No Dispatch";
+
+function postInterviewEligibleBadge(
+  v: boolean | null,
+  rewardItem: string | null | undefined,
+) {
+  if (v === true && rewardItem?.trim() === REWARD_NO_DISPATCH) {
+    return (
+      <span className="inline-flex rounded-full bg-[#fef9c3] px-3 py-1 text-xs font-medium text-[#854d0e]">
+        No Dispatch
+      </span>
+    );
+  }
+  if (v === true) {
+    return (
+      <span className="inline-flex rounded-full bg-[#f0fdf4] px-3 py-1 text-xs font-medium text-[#16a34a]">
+        Eligible
+      </span>
+    );
+  }
+  if (v === false) {
+    return (
+      <span className="inline-flex rounded-full bg-[#fef2f2] px-3 py-1 text-xs font-medium text-[#dc2626]">
+        Not Eligible
+      </span>
+    );
+  }
+  return <span className="text-[#6e6e73]">—</span>;
+}
+
+function truncateWithTooltip(text: string | null | undefined, maxLen: number) {
+  const t = text?.trim() ?? "";
+  if (!t) return { display: "—" as string, title: undefined as string | undefined };
+  if (t.length <= maxLen) return { display: t, title: undefined };
+  return { display: `${t.slice(0, maxLen)}…`, title: t };
+}
+
+type Props = {
+  supabase: SupabaseClient;
+  onError: (msg: string | null) => void;
+  onPipelineChanged: () => void;
+  onScheduleProject: (c: ScheduleProjectCandidate) => void;
+  onPostProjectInterview: (i: ProjectInterviewWithProjectCandidate) => void;
+  onRescheduleProjectInterview: (
+    i: ProjectInterviewWithProjectCandidate,
+    mode: "from_scheduled" | "from_rescheduled",
+  ) => void;
+};
+
+const defaultFilters = (): Record<ProjectSubTab, TabFilters> => ({
+  pending: { search: "", page: 0 },
+  scheduled: { search: "", page: 0 },
+  rescheduled: { search: "", page: 0 },
+  completed: { search: "", page: 0 },
+});
+
+export function ProjectInterviewsPanel({
+  supabase,
+  onError,
+  onPipelineChanged,
+  onScheduleProject,
+  onPostProjectInterview,
+  onRescheduleProjectInterview,
+}: Props) {
+  const [candidates, setCandidates] = useState<ProjectCandidateRow[]>([]);
+  const [interviews, setInterviews] = useState<
+    ProjectInterviewWithProjectCandidate[]
+  >([]);
+  const [loading, setLoading] = useState(true);
+  const [subTab, setSubTab] = useState<ProjectSubTab>("pending");
+  const [filters, setFilters] = useState(defaultFilters);
+  const [pocSavingId, setPocSavingId] = useState<string | null>(null);
+  const [pocEditingId, setPocEditingId] = useState<string | null>(null);
+  const [detail, setDetail] = useState<ProjectCandidateRow | null>(null);
+  const [completedPopoverId, setCompletedPopoverId] = useState<string | null>(
+    null,
+  );
+  const [sheetSyncBusy, setSheetSyncBusy] = useState(false);
+
+  const loadProjectData = useCallback(async () => {
+    const [{ data: pc, error: e1 }, { data: pi, error: e2 }] =
+      await Promise.all([
+        supabase
+          .from("project_candidates")
+          .select(
+            "id, created_at, email, whatsapp_number, project_title, problem_statement, target_user, ai_usage, demo_link, status, poc_assigned, poc_assigned_at, interview_type",
+          )
+          .order("created_at", { ascending: true }),
+        supabase
+          .from("project_interviews")
+          .select(PROJECT_INTERVIEW_SELECT)
+          .order("scheduled_date", { ascending: true }),
+      ]);
+    if (e1 || e2) {
+      onError(e1?.message ?? e2?.message ?? "Failed to load project pipeline");
+      return;
+    }
+    onError(null);
+    setCandidates((pc ?? []) as ProjectCandidateRow[]);
+    setInterviews(
+      (pi ?? []).map((row) =>
+        normalizeProjectInterviewRow(row as Record<string, unknown>),
+      ),
+    );
+  }, [supabase, onError]);
+
+  useEffect(() => {
+    void (async () => {
+      setLoading(true);
+      await loadProjectData();
+      setLoading(false);
+    })();
+  }, [loadProjectData]);
+
+  useEffect(() => {
+    const ch = supabase
+      .channel("project-interviews-panel")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "project_candidates" },
+        () => {
+          void loadProjectData();
+          onPipelineChanged();
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "project_interviews" },
+        () => {
+          void loadProjectData();
+          onPipelineChanged();
+        },
+      )
+      .subscribe();
+    return () => {
+      void supabase.removeChannel(ch);
+    };
+  }, [supabase, loadProjectData, onPipelineChanged]);
+
+  useEffect(() => {
+    if (subTab !== "completed") setCompletedPopoverId(null);
+  }, [subTab]);
+
+  useEffect(() => {
+    if (!completedPopoverId) return;
+    const onDocClick = (e: MouseEvent) => {
+      const el = e.target as HTMLElement | null;
+      if (el?.closest("[data-project-completed-popover-root]")) return;
+      setCompletedPopoverId(null);
+    };
+    document.addEventListener("click", onDocClick);
+    return () => document.removeEventListener("click", onDocClick);
+  }, [completedPopoverId]);
+
+  const byStatus = useMemo(() => {
+    const m = {
+      scheduled: [] as ProjectInterviewWithProjectCandidate[],
+      rescheduled: [] as ProjectInterviewWithProjectCandidate[],
+      completed: [] as ProjectInterviewWithProjectCandidate[],
+    };
+    for (const i of interviews) {
+      switch (i.interview_status) {
+        case "scheduled":
+          m.scheduled.push(i);
+          break;
+        case "rescheduled":
+          m.rescheduled.push(i);
+          break;
+        case "completed":
+          m.completed.push(i);
+          break;
+        default:
+          break;
+      }
+    }
+    return m;
+  }, [interviews]);
+
+  const busyCandidateIds = useMemo(() => {
+    return new Set(
+      interviews
+        .filter(
+          (i) =>
+            i.interview_status === "scheduled" ||
+            i.interview_status === "rescheduled",
+        )
+        .map((i) => i.project_candidate_id),
+    );
+  }, [interviews]);
+
+  const pendingQueue = useMemo(
+    () =>
+      candidates.filter(
+        (c) =>
+          !busyCandidateIds.has(c.id) &&
+          matchesPendingSearch(c, filters.pending.search),
+      ),
+    [candidates, busyCandidateIds, filters.pending.search],
+  );
+
+  const scheduledFiltered = useMemo(
+    () =>
+      byStatus.scheduled.filter((i) =>
+        matchesInterviewSearch(i, filters.scheduled.search),
+      ),
+    [byStatus.scheduled, filters.scheduled.search],
+  );
+
+  const rescheduledFiltered = useMemo(
+    () =>
+      byStatus.rescheduled.filter((i) =>
+        matchesInterviewSearch(i, filters.rescheduled.search),
+      ),
+    [byStatus.rescheduled, filters.rescheduled.search],
+  );
+
+  const completedFiltered = useMemo(
+    () =>
+      byStatus.completed.filter((i) =>
+        matchesInterviewSearch(i, filters.completed.search),
+      ),
+    [byStatus.completed, filters.completed.search],
+  );
+
+  const paginate = <T,>(rows: T[], page: number) => {
+    const start = page * PAGE_SIZE;
+    return {
+      slice: rows.slice(start, start + PAGE_SIZE),
+      totalPages: Math.max(1, Math.ceil(rows.length / PAGE_SIZE)),
+      total: rows.length,
+    };
+  };
+
+  const pendingPage = useMemo(
+    () => paginate(pendingQueue, filters.pending.page),
+    [pendingQueue, filters.pending.page],
+  );
+  const scheduledPage = useMemo(
+    () => paginate(scheduledFiltered, filters.scheduled.page),
+    [scheduledFiltered, filters.scheduled.page],
+  );
+  const rescheduledPage = useMemo(
+    () => paginate(rescheduledFiltered, filters.rescheduled.page),
+    [rescheduledFiltered, filters.rescheduled.page],
+  );
+  const completedPage = useMemo(
+    () => paginate(completedFiltered, filters.completed.page),
+    [completedFiltered, filters.completed.page],
+  );
+
+  const patchFilter = (tab: ProjectSubTab, patch: Partial<TabFilters>) => {
+    setFilters((prev) => ({
+      ...prev,
+      [tab]: {
+        ...prev[tab],
+        ...patch,
+        ...(patch.search !== undefined ? { page: 0 } : {}),
+      },
+    }));
+  };
+
+  const setPage = (tab: ProjectSubTab, page: number) => {
+    setFilters((prev) => ({ ...prev, [tab]: { ...prev[tab], page } }));
+  };
+
+  const handlePocChange = async (pc: ProjectCandidateRow, value: string) => {
+    const name = value.trim() || null;
+    setPocSavingId(pc.id);
+    const { error: uErr } = await supabase
+      .from("project_candidates")
+      .update({
+        poc_assigned: name,
+        poc_assigned_at: name ? new Date().toISOString() : null,
+      })
+      .eq("id", pc.id);
+    setPocSavingId(null);
+    if (uErr) {
+      onError(uErr.message);
+      return;
+    }
+    if (name) {
+      const display =
+        pc.project_title?.trim() || pc.email || "Project candidate";
+      const { data: authPoc } = await supabase.auth.getUser();
+      if (authPoc.user) {
+        await logActivity({
+          supabase,
+          user: authPoc.user,
+          action_type: "interviews",
+          entity_type: "project_candidate",
+          entity_id: pc.id,
+          candidate_name: display,
+          description: `Assigned ${name} as POC for ${display} (project)`,
+        });
+      }
+    }
+    setPocEditingId((prev) => (prev === pc.id ? null : prev));
+    await loadProjectData();
+    onPipelineChanged();
+  };
+
+  const syncProjectSheet = async () => {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    if (!session?.access_token) {
+      onError("You must be signed in to sync.");
+      return;
+    }
+    setSheetSyncBusy(true);
+    onError(null);
+    try {
+      const res = await fetch("/api/sync-project-sheet", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      });
+      const j = (await res.json()) as {
+        error?: string;
+        total_rows?: number;
+        upserted?: number;
+        errors?: string[];
+      };
+      if (!res.ok) {
+        onError(j.error ?? "Project sheet sync failed.");
+        return;
+      }
+      const up = j.upserted ?? 0;
+      const total = j.total_rows ?? 0;
+      alert(`✅ Synced project sheet — ${up} upserted (${total} rows)`);
+      if (j.errors?.length) {
+        onError(j.errors.slice(0, 5).join(" · "));
+      }
+      await loadProjectData();
+      onPipelineChanged();
+    } catch {
+      onError("Project sheet sync request failed.");
+    } finally {
+      setSheetSyncBusy(false);
+    }
+  };
+
+  const tableWrap =
+    "overflow-hidden rounded-2xl border border-[#f0f0f0] bg-white shadow-sm";
+  const thBase =
+    "border-b border-gray-100 bg-[#fafafa] py-3 px-4 text-xs font-semibold tracking-wider text-gray-400";
+  const tdBase =
+    "border-b border-gray-100 py-4 px-4 text-sm align-middle text-[#1d1d1f]";
+  const thName = `${thBase} min-w-[160px] text-left`;
+  const tdName = `${tdBase} min-w-[160px] text-left`;
+  const thPhone = `${thBase} min-w-[130px] text-left`;
+  const tdPhone = `${tdBase} min-w-[130px] text-left text-[#6e6e73]`;
+  const thProjTitle = `${thBase} min-w-[180px] text-left`;
+  const tdProjTitle = `${tdBase} min-w-[180px] text-left text-[#6e6e73]`;
+  const thPoc = `${thBase} min-w-[160px] text-left`;
+  const tdPoc = `${tdBase} min-w-[160px] text-left`;
+  const thActions = `${thBase} min-w-[120px] text-right`;
+  const tdActions = `${tdBase} min-w-[120px] text-right`;
+  const thDateTime = `${thBase} min-w-[170px] text-left`;
+  const tdDateTime = `${tdBase} min-w-[170px] text-left`;
+  const thInterviewer = `${thBase} min-w-[120px] text-left`;
+  const tdInterviewer = `${tdBase} min-w-[120px] text-left`;
+  const thReason = `${thBase} min-w-[180px] text-left`;
+  const tdReason = `${tdBase} min-w-[180px] text-left text-[#6e6e73]`;
+  const thCompletedOn = `${thBase} min-w-[170px] text-left`;
+  const tdCompletedOn = `${tdBase} min-w-[170px] text-left`;
+  const thPostInterview = `${thBase} min-w-[160px] text-left`;
+  const tdPostInterview = `${tdBase} min-w-[160px] text-left`;
+  const thFunnelCol = `${thBase} min-w-[120px] text-left`;
+  const tdFunnelCol = `${tdBase} min-w-[120px] text-left text-[#6e6e73]`;
+  const thCommentsCol = `${thBase} min-w-[160px] text-left`;
+  const tdCommentsCol = `${tdBase} min-w-[160px] text-left text-[#6e6e73]`;
+  const filterInp =
+    "w-full rounded-xl border border-[#e5e5e5] bg-white px-3 py-2 text-sm text-[#1d1d1f] focus:border-[#3b82f6] focus:outline-none focus:ring-0";
+  const nameLinkBtn =
+    "max-w-full min-w-0 truncate text-left font-medium text-[#3b82f6] hover:underline focus:outline-none focus:ring-2 focus:ring-[#3b82f6]/25 rounded-sm";
+
+  const emptyState = (
+    <div className="py-16 text-center text-sm text-[#aeaeb2]">
+      No entries here yet
+    </div>
+  );
+
+  const renderPagination = (
+    tab: ProjectSubTab,
+    totalPages: number,
+    total: number,
+  ) => {
+    const page = filters[tab].page;
+    if (total === 0) return null;
+    return (
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#f0f0f0] bg-[#fafafa] px-4 py-3 text-xs text-[#6e6e73]">
+        <span>
+          Showing {page * PAGE_SIZE + 1}–
+          {Math.min((page + 1) * PAGE_SIZE, total)} of {total}
+        </span>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            disabled={page <= 0}
+            className="rounded-lg border border-[#e5e5e5] bg-white px-3 py-1.5 font-medium text-[#1d1d1f] transition-colors hover:bg-[#f5f5f7] disabled:cursor-not-allowed disabled:opacity-40"
+            onClick={() => setPage(tab, page - 1)}
+          >
+            Previous
+          </button>
+          <button
+            type="button"
+            disabled={page >= totalPages - 1}
+            className="rounded-lg border border-[#e5e5e5] bg-white px-3 py-1.5 font-medium text-[#1d1d1f] transition-colors hover:bg-[#f5f5f7] disabled:cursor-not-allowed disabled:opacity-40"
+            onClick={() => setPage(tab, page + 1)}
+          >
+            Next
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  if (loading) {
+    return (
+      <p className="text-sm text-[#6e6e73]">Loading project interviews…</p>
+    );
+  }
+
+  return (
+    <>
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-wrap gap-2 border-b border-[#e5e5e5] pb-1 sm:border-0 sm:pb-0">
+          {(
+            [
+              ["pending", "Pending", pendingQueue.length],
+              ["scheduled", "Scheduled", scheduledFiltered.length],
+              ["rescheduled", "Rescheduled", rescheduledFiltered.length],
+              ["completed", "Completed", completedFiltered.length],
+            ] as const
+          ).map(([id, label, n]) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setSubTab(id)}
+              className={
+                subTab === id
+                  ? "rounded-full bg-[#1d1d1f] px-4 py-2 text-sm font-medium text-white"
+                  : "rounded-full px-4 py-2 text-sm font-medium text-[#6e6e73] transition-colors hover:text-[#1d1d1f]"
+              }
+            >
+              {label}{" "}
+              <span className={subTab === id ? "text-white/80" : ""}>({n})</span>
+            </button>
+          ))}
+        </div>
+        <button
+          type="button"
+          disabled={sheetSyncBusy}
+          onClick={() => void syncProjectSheet()}
+          className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl border border-[#e5e5e5] bg-white px-4 py-2 text-sm font-medium text-[#1d1d1f] transition-all hover:bg-[#f5f5f7] disabled:opacity-50"
+        >
+          {sheetSyncBusy ? (
+            <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+          ) : (
+            <RefreshCw className="h-4 w-4" aria-hidden />
+          )}
+          Sync Project Sheet
+        </button>
+      </div>
+
+      {subTab === "pending" && (
+        <section className="space-y-4">
+          <label className="flex max-w-md flex-col gap-1">
+            <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+              Search
+            </span>
+            <input
+              type="search"
+              placeholder="Name, email, phone, or title"
+              className={filterInp}
+              value={filters.pending.search}
+              onChange={(e) => patchFilter("pending", { search: e.target.value })}
+            />
+          </label>
+          <div className={tableWrap}>
+            <div className="w-full overflow-x-auto">
+              <table className="w-full min-w-[900px] table-auto border-collapse">
+                <thead>
+                  <tr>
+                    <th className={thName}>Name</th>
+                    <th className={thPhone}>Phone</th>
+                    <th className={thProjTitle}>Project title</th>
+                    <th className={thPoc}>POC assigned</th>
+                    <th className={thActions}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pendingPage.slice.length === 0 ? (
+                    <tr>
+                      <td className={tdBase} colSpan={5}>
+                        {emptyState}
+                      </td>
+                    </tr>
+                  ) : (
+                    pendingPage.slice.map((c) => {
+                      const hasPoc = Boolean(c.poc_assigned?.trim());
+                      const showPocDropdown = !hasPoc || pocEditingId === c.id;
+                      return (
+                        <tr key={c.id}>
+                          <td className={tdName}>
+                            <button
+                              type="button"
+                              className={nameLinkBtn}
+                              onClick={() => setDetail(c)}
+                            >
+                              {projectDisplayName(c)}
+                            </button>
+                          </td>
+                          <td className={tdPhone}>
+                            {c.whatsapp_number?.trim() || "—"}
+                          </td>
+                          <td className={tdProjTitle}>
+                            {c.project_title?.trim() || "—"}
+                          </td>
+                          <td className={tdPoc}>
+                            {showPocDropdown ? (
+                              <div className="flex flex-wrap items-center gap-2">
+                                <select
+                                  disabled={pocSavingId === c.id}
+                                  className="max-w-[180px] rounded-lg border border-[#e5e5e5] bg-white px-2 py-1.5 text-xs text-[#1d1d1f] focus:border-[#3b82f6] focus:outline-none disabled:opacity-50"
+                                  value={c.poc_assigned ?? ""}
+                                  onChange={(e) =>
+                                    void handlePocChange(c, e.target.value)
+                                  }
+                                  aria-label={
+                                    hasPoc
+                                      ? "Change POC assignment"
+                                      : "Assign POC"
+                                  }
+                                >
+                                  <option value="">Assign POC...</option>
+                                  {pocOptionsFor(c).map((n) => (
+                                    <option key={n} value={n}>
+                                      {n}
+                                    </option>
+                                  ))}
+                                </select>
+                                {hasPoc ? (
+                                  <button
+                                    type="button"
+                                    className="text-xs font-medium text-[#6e6e73] underline decoration-[#d1d5db] underline-offset-2 hover:text-[#1d1d1f]"
+                                    onClick={() => setPocEditingId(null)}
+                                  >
+                                    Cancel
+                                  </button>
+                                ) : null}
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-2">
+                                <span className="inline-flex rounded-full bg-[#f5f5f7] px-2.5 py-1 text-xs font-medium text-[#6e6e73]">
+                                  {c.poc_assigned}
+                                </span>
+                                <button
+                                  type="button"
+                                  className="inline-flex items-center justify-center rounded-lg p-1 text-[#3b82f6] transition-colors hover:bg-[#eff6ff] hover:text-[#2563eb]"
+                                  onClick={() => setPocEditingId(c.id)}
+                                  aria-label="Change POC"
+                                >
+                                  <Pencil
+                                    className="h-3.5 w-3.5 shrink-0"
+                                    aria-hidden
+                                  />
+                                </button>
+                              </div>
+                            )}
+                          </td>
+                          <td className={tdActions}>
+                            <div className="flex justify-end">
+                              <button
+                                type="button"
+                                disabled={!hasPoc}
+                                title={
+                                  hasPoc ? undefined : "Assign a POC first"
+                                }
+                                className="rounded-lg bg-[#1d1d1f] px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-[#2d2d2f] disabled:cursor-not-allowed disabled:bg-[#d1d5db] disabled:text-[#6b7280]"
+                                onClick={() =>
+                                  onScheduleProject({
+                                    id: c.id,
+                                    email: c.email,
+                                    whatsapp_number: c.whatsapp_number,
+                                    project_title: c.project_title,
+                                    poc_assigned: c.poc_assigned,
+                                  })
+                                }
+                              >
+                                Schedule
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+            {renderPagination(
+              "pending",
+              pendingPage.totalPages,
+              pendingPage.total,
+            )}
+          </div>
+        </section>
+      )}
+
+      {subTab === "scheduled" && (
+        <section className="space-y-4">
+          <label className="flex max-w-md flex-col gap-1">
+            <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+              Search
+            </span>
+            <input
+              type="search"
+              placeholder="Name, email, phone, or title"
+              className={filterInp}
+              value={filters.scheduled.search}
+              onChange={(e) =>
+                patchFilter("scheduled", { search: e.target.value })
+              }
+            />
+          </label>
+          <div className={tableWrap}>
+            <div className="w-full overflow-x-auto">
+              <table className="w-full min-w-[1100px] table-auto border-collapse">
+                <thead>
+                  <tr>
+                    <th className={thName}>Name</th>
+                    <th className={thPhone}>Phone</th>
+                    <th className={thProjTitle}>Project title</th>
+                    <th className={thDateTime}>Date &amp; time</th>
+                    <th className={thInterviewer}>Interviewer</th>
+                    <th className={thPoc}>POC</th>
+                    <th className={thActions}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {scheduledPage.slice.length === 0 ? (
+                    <tr>
+                      <td className={tdBase} colSpan={7}>
+                        {emptyState}
+                      </td>
+                    </tr>
+                  ) : (
+                    scheduledPage.slice.map((i) => {
+                      const pc = i.project_candidates;
+                      if (!pc) return null;
+                      return (
+                        <tr key={i.id}>
+                          <td className={tdName}>
+                            <button
+                              type="button"
+                              className={nameLinkBtn}
+                              onClick={() => setDetail(pc)}
+                            >
+                              {projectDisplayName(pc)}
+                            </button>
+                          </td>
+                          <td className={tdPhone}>
+                            {pc.whatsapp_number?.trim() || "—"}
+                          </td>
+                          <td className={tdProjTitle}>
+                            {pc.project_title?.trim() || "—"}
+                          </td>
+                          <td className={tdDateTime}>
+                            {formatDateTime(i.scheduled_date)}
+                          </td>
+                          <td className={tdInterviewer}>{i.interviewer}</td>
+                          <td className={tdPoc}>
+                            {i.poc?.trim() ||
+                              pc.poc_assigned?.trim() ||
+                              "—"}
+                          </td>
+                          <td className={tdActions}>
+                            <div className="flex flex-wrap items-center justify-end gap-2">
+                              <button
+                                type="button"
+                                className="rounded-lg bg-[#ea580c] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#c2410c]"
+                                onClick={() =>
+                                  onRescheduleProjectInterview(
+                                    i,
+                                    "from_scheduled",
+                                  )
+                                }
+                              >
+                                Reschedule
+                              </button>
+                              <button
+                                type="button"
+                                className="rounded-lg bg-[#16a34a] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#15803d]"
+                                onClick={() => onPostProjectInterview(i)}
+                              >
+                                Mark completed
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+            {renderPagination(
+              "scheduled",
+              scheduledPage.totalPages,
+              scheduledPage.total,
+            )}
+          </div>
+        </section>
+      )}
+
+      {subTab === "rescheduled" && (
+        <section className="space-y-4">
+          <label className="flex max-w-md flex-col gap-1">
+            <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+              Search
+            </span>
+            <input
+              type="search"
+              placeholder="Name, email, phone, or title"
+              className={filterInp}
+              value={filters.rescheduled.search}
+              onChange={(e) =>
+                patchFilter("rescheduled", { search: e.target.value })
+              }
+            />
+          </label>
+          <div className={tableWrap}>
+            <div className="w-full overflow-x-auto">
+              <table className="w-full min-w-[1280px] table-auto border-collapse">
+                <thead>
+                  <tr>
+                    <th className={thName}>Name</th>
+                    <th className={thPhone}>Phone</th>
+                    <th className={thProjTitle}>Project title</th>
+                    <th className={thDateTime}>Original date</th>
+                    <th className={thReason}>Reason</th>
+                    <th className={thDateTime}>New date</th>
+                    <th className={thInterviewer}>Interviewer</th>
+                    <th className={thActions}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rescheduledPage.slice.length === 0 ? (
+                    <tr>
+                      <td className={tdBase} colSpan={8}>
+                        {emptyState}
+                      </td>
+                    </tr>
+                  ) : (
+                    rescheduledPage.slice.map((i) => {
+                      const pc = i.project_candidates;
+                      if (!pc) return null;
+                      return (
+                        <tr key={i.id}>
+                          <td className={tdName}>
+                            <button
+                              type="button"
+                              className={nameLinkBtn}
+                              onClick={() => setDetail(pc)}
+                            >
+                              {projectDisplayName(pc)}
+                            </button>
+                          </td>
+                          <td className={tdPhone}>
+                            {pc.whatsapp_number?.trim() || "—"}
+                          </td>
+                          <td className={tdProjTitle}>
+                            {pc.project_title?.trim() || "—"}
+                          </td>
+                          <td className={tdDateTime}>
+                            {formatDateTime(i.previous_scheduled_date)}
+                          </td>
+                          <td
+                            className={`${tdReason} max-w-[220px] truncate`}
+                            title={i.reschedule_reason ?? undefined}
+                          >
+                            {i.reschedule_reason?.trim() || "—"}
+                          </td>
+                          <td className={tdDateTime}>
+                            {formatDateTime(i.scheduled_date)}
+                          </td>
+                          <td className={tdInterviewer}>{i.interviewer}</td>
+                          <td className={tdActions}>
+                            <div className="flex flex-wrap items-center justify-end gap-2">
+                              <button
+                                type="button"
+                                className="rounded-lg bg-[#1d1d1f] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#2d2d2f]"
+                                onClick={() =>
+                                  onRescheduleProjectInterview(
+                                    i,
+                                    "from_rescheduled",
+                                  )
+                                }
+                              >
+                                Schedule again
+                              </button>
+                              <button
+                                type="button"
+                                className="rounded-lg bg-[#16a34a] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#15803d]"
+                                onClick={() => onPostProjectInterview(i)}
+                              >
+                                Mark completed
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+            {renderPagination(
+              "rescheduled",
+              rescheduledPage.totalPages,
+              rescheduledPage.total,
+            )}
+          </div>
+        </section>
+      )}
+
+      {subTab === "completed" && (
+        <section className="space-y-4">
+          <label className="flex max-w-md flex-col gap-1">
+            <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+              Search
+            </span>
+            <input
+              type="search"
+              placeholder="Name, email, phone, or title"
+              className={filterInp}
+              value={filters.completed.search}
+              onChange={(e) =>
+                patchFilter("completed", { search: e.target.value })
+              }
+            />
+          </label>
+          <div className={tableWrap}>
+            <div className="w-full overflow-x-auto">
+              <table className="w-full min-w-[1200px] table-auto border-collapse">
+                <thead>
+                  <tr>
+                    <th className={thName}>Name</th>
+                    <th className={thPhone}>Phone</th>
+                    <th className={thProjTitle}>Project title</th>
+                    <th className={thInterviewer}>Interviewer</th>
+                    <th className={thCompletedOn}>Completed on</th>
+                    <th className={thPostInterview}>
+                      Post-interview eligible
+                    </th>
+                    <th className={thFunnelCol}>Funnel</th>
+                    <th className={thCommentsCol}>Comments</th>
+                    <th className={thActions}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {completedPage.slice.length === 0 ? (
+                    <tr>
+                      <td className={tdBase} colSpan={9}>
+                        {emptyState}
+                      </td>
+                    </tr>
+                  ) : (
+                    completedPage.slice.map((i) => {
+                      const pc = i.project_candidates;
+                      if (!pc) return null;
+                      const commentsPreview = truncateWithTooltip(
+                        i.comments,
+                        40,
+                      );
+                      return (
+                        <tr key={i.id}>
+                          <td className={tdName}>
+                            <button
+                              type="button"
+                              className={nameLinkBtn}
+                              onClick={() => setDetail(pc)}
+                            >
+                              {projectDisplayName(pc)}
+                            </button>
+                          </td>
+                          <td className={tdPhone}>
+                            {pc.whatsapp_number?.trim() || "—"}
+                          </td>
+                          <td className={tdProjTitle}>
+                            {pc.project_title?.trim() || "—"}
+                          </td>
+                          <td className={tdInterviewer}>{i.interviewer}</td>
+                          <td className={tdCompletedOn}>
+                            {formatDateTime(i.completed_at)}
+                          </td>
+                          <td className={tdPostInterview}>
+                            {postInterviewEligibleBadge(
+                              i.post_interview_eligible,
+                              i.reward_item,
+                            )}
+                          </td>
+                          <td className={tdFunnelCol}>
+                            {i.funnel?.trim() || "—"}
+                          </td>
+                          <td
+                            className={tdCommentsCol}
+                            title={commentsPreview.title}
+                          >
+                            <span className="block max-w-[200px] truncate">
+                              {commentsPreview.display}
+                            </span>
+                          </td>
+                          <td className={`${tdActions} relative`}>
+                            <div
+                              className="relative flex justify-end"
+                              data-project-completed-popover-root
+                            >
+                              <button
+                                type="button"
+                                className="text-sm font-medium text-[#3b82f6] hover:text-[#2563eb]"
+                                onMouseDown={(e) => e.stopPropagation()}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setCompletedPopoverId((id) =>
+                                    id === i.id ? null : i.id,
+                                  );
+                                }}
+                              >
+                                View details
+                              </button>
+                              {completedPopoverId === i.id ? (
+                                <div
+                                  className="absolute right-0 top-full z-50 mt-2 w-80 rounded-xl border border-[#f0f0f0] bg-white p-4 text-left shadow-[0_8px_24px_rgba(0,0,0,0.12)]"
+                                  onMouseDown={(e) => e.stopPropagation()}
+                                  role="dialog"
+                                  aria-label="Post-interview details"
+                                >
+                                  <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">
+                                    Post-interview details
+                                  </p>
+                                  <dl className="mt-3 space-y-3 text-sm">
+                                    <div>
+                                      <dt className="text-xs text-[#aeaeb2]">
+                                        Post-interview eligible
+                                      </dt>
+                                      <dd className="mt-0.5 text-[#1d1d1f]">
+                                        {i.post_interview_eligible === true
+                                          ? i.reward_item?.trim() ===
+                                            REWARD_NO_DISPATCH
+                                            ? "Eligible — no physical dispatch"
+                                            : "Eligible"
+                                          : i.post_interview_eligible === false
+                                            ? "Not eligible"
+                                            : "—"}
+                                      </dd>
+                                    </div>
+                                    <div>
+                                      <dt className="text-xs text-[#aeaeb2]">
+                                        Reward item
+                                      </dt>
+                                      <dd className="mt-0.5 text-[#1d1d1f]">
+                                        {i.reward_item?.trim() || "—"}
+                                      </dd>
+                                    </div>
+                                    <div>
+                                      <dt className="text-xs text-[#aeaeb2]">
+                                        Funnel
+                                      </dt>
+                                      <dd className="mt-0.5 whitespace-pre-wrap break-words text-[#1d1d1f]">
+                                        {i.funnel?.trim() || "—"}
+                                      </dd>
+                                    </div>
+                                    <div>
+                                      <dt className="text-xs text-[#aeaeb2]">
+                                        Comments
+                                      </dt>
+                                      <dd className="mt-0.5 whitespace-pre-wrap break-words text-[#1d1d1f]">
+                                        {i.comments?.trim() || "—"}
+                                      </dd>
+                                    </div>
+                                    <div>
+                                      <dt className="text-xs text-[#aeaeb2]">
+                                        Completed on
+                                      </dt>
+                                      <dd className="mt-0.5 text-[#1d1d1f]">
+                                        {formatDateTime(i.completed_at)}
+                                      </dd>
+                                    </div>
+                                  </dl>
+                                  <button
+                                    type="button"
+                                    className="mt-4 text-xs font-medium text-[#3b82f6] hover:text-[#2563eb]"
+                                    onClick={() => setCompletedPopoverId(null)}
+                                  >
+                                    Close
+                                  </button>
+                                </div>
+                              ) : null}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+            {renderPagination(
+              "completed",
+              completedPage.totalPages,
+              completedPage.total,
+            )}
+          </div>
+        </section>
+      )}
+
+      <ProjectCandidateDetailModal
+        open={!!detail}
+        candidate={detail}
+        onClose={() => setDetail(null)}
+      />
+    </>
+  );
+}

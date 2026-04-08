@@ -1,8 +1,18 @@
 "use client";
 
 import { endOfWeek, format, parseISO, startOfWeek } from "date-fns";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { createPortal } from "react-dom";
 
+import { CandidateDetailModal } from "@/components/candidate-detail-modal";
+import { logActivity } from "@/lib/activity-logger";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 
 type DispatchStatus = "pending" | "dispatched" | "delivered";
@@ -17,6 +27,7 @@ export type DispatchRow = {
   actual_delivery_date: string | null;
   tracking_id: string | null;
   special_comments: string | null;
+  reward_item: string | null;
   candidates: {
     full_name: string | null;
     email: string;
@@ -24,7 +35,7 @@ export type DispatchRow = {
   } | null;
 };
 
-const SELECT = `id, candidate_id, shipping_address, dispatch_status, dispatch_date, expected_delivery_date, actual_delivery_date, tracking_id, special_comments, candidates ( full_name, email, whatsapp_number )`;
+const SELECT = `id, candidate_id, shipping_address, dispatch_status, dispatch_date, expected_delivery_date, actual_delivery_date, tracking_id, special_comments, reward_item, candidates ( full_name, email, whatsapp_number )`;
 
 function normalizeRow(
   row: Record<string, unknown> & {
@@ -42,6 +53,313 @@ function normalizeRow(
 
 const cardChrome =
   "rounded-2xl bg-white shadow-[0_4px_16px_rgba(0,0,0,0.08)] border border-[#f0f0f0]";
+
+const REWARD_AIRPODS = "AirPods";
+const REWARD_JBL = "JBL Clip 5";
+
+function rewardItemBadge(reward: string | null | undefined) {
+  const v = reward?.trim();
+  if (!v) {
+    return <span className="text-[#6e6e73]">—</span>;
+  }
+  if (v === REWARD_AIRPODS) {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-[#f3f4f6] px-2.5 py-1 text-xs font-medium text-[#374151]">
+        <span aria-hidden>🎧</span> AirPods
+      </span>
+    );
+  }
+  if (v === REWARD_JBL) {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-[#eff6ff] px-2.5 py-1 text-xs font-medium text-[#2563eb]">
+        <span aria-hidden>🔊</span> JBL Clip 5
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-[#fef9c3] px-2.5 py-1 text-xs font-medium text-[#854d0e]">
+      <span aria-hidden>✏️</span>
+      <span className="max-w-[140px] truncate" title={v}>
+        {v}
+      </span>
+    </span>
+  );
+}
+
+/** Read-only reward label for delivered rows (no pill, no edit affordances). */
+function rewardItemPlainText(reward: string | null | undefined) {
+  const v = reward?.trim();
+  if (!v) {
+    return <span className="text-[#6e6e73]">—</span>;
+  }
+  if (v === REWARD_AIRPODS) {
+    return (
+      <span className="text-xs text-[#374151]">
+        <span aria-hidden>🎧</span> AirPods
+      </span>
+    );
+  }
+  if (v === REWARD_JBL) {
+    return (
+      <span className="text-xs text-[#2563eb]">
+        <span aria-hidden>🔊</span> JBL Clip 5
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex max-w-[160px] items-center gap-1 truncate text-xs text-[#854d0e]" title={v}>
+      <span aria-hidden>✏️</span>
+      <span className="truncate">{v}</span>
+    </span>
+  );
+}
+
+function RewardItemCell({
+  row,
+  supabase,
+  onRewardSaved,
+  setError,
+}: {
+  row: DispatchRow;
+  supabase: NonNullable<ReturnType<typeof createBrowserSupabaseClient>>;
+  onRewardSaved: (id: string, reward_item: string | null) => void;
+  setError: (msg: string | null) => void;
+}) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [otherMode, setOtherMode] = useState(false);
+  const [otherText, setOtherText] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [savedFlash, setSavedFlash] = useState(false);
+  const [menuPos, setMenuPos] = useState<{
+    top: number;
+    left: number;
+  } | null>(null);
+  const [mounted, setMounted] = useState(false);
+
+  const anchorRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const flashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const hasReward = Boolean(row.reward_item?.trim());
+
+  const updateMenuPosition = useCallback(() => {
+    const el = anchorRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    setMenuPos({ top: r.bottom + 6, left: r.left });
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!menuOpen) {
+      setMenuPos(null);
+      return;
+    }
+    updateMenuPosition();
+    const onScrollOrResize = () => updateMenuPosition();
+    window.addEventListener("scroll", onScrollOrResize, true);
+    window.addEventListener("resize", onScrollOrResize);
+    return () => {
+      window.removeEventListener("scroll", onScrollOrResize, true);
+      window.removeEventListener("resize", onScrollOrResize);
+    };
+  }, [menuOpen, updateMenuPosition]);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onDown = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (anchorRef.current?.contains(t)) return;
+      if (menuRef.current?.contains(t)) return;
+      setMenuOpen(false);
+      setOtherMode(false);
+      setOtherText("");
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [menuOpen]);
+
+  useEffect(() => {
+    return () => {
+      if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
+    };
+  }, []);
+
+  const openMenu = () => {
+    setMenuOpen(true);
+    setOtherMode(false);
+    setOtherText(
+      row.reward_item &&
+        row.reward_item !== REWARD_AIRPODS &&
+        row.reward_item !== REWARD_JBL
+        ? row.reward_item
+        : "",
+    );
+  };
+
+  const triggerSavedFlash = () => {
+    setSavedFlash(true);
+    if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
+    flashTimerRef.current = setTimeout(() => setSavedFlash(false), 2000);
+  };
+
+  const saveReward = async (value: string | null) => {
+    const trimmed = value?.trim() ?? null;
+    setSaving(true);
+    setError(null);
+    const { error: uErr } = await supabase
+      .from("dispatch")
+      .update({ reward_item: trimmed })
+      .eq("id", row.id);
+    setSaving(false);
+    if (uErr) {
+      setError(uErr.message);
+      return;
+    }
+    const oldLabel = row.reward_item?.trim() || "—";
+    const newLabel = trimmed || "—";
+    if (oldLabel !== newLabel) {
+      const candDisplay =
+        row.candidates?.full_name?.trim() || "Candidate";
+      const { data: authRw } = await supabase.auth.getUser();
+      if (authRw.user) {
+        await logActivity({
+          supabase,
+          user: authRw.user,
+          action_type: "dispatch",
+          entity_type: "dispatch",
+          entity_id: row.id,
+          candidate_name: candDisplay,
+          description: `Changed reward item for ${candDisplay} from ${oldLabel} to ${newLabel}`,
+          metadata: { from: row.reward_item, to: trimmed },
+        });
+      }
+    }
+    onRewardSaved(row.id, trimmed);
+    setMenuOpen(false);
+    setOtherMode(false);
+    setOtherText("");
+    triggerSavedFlash();
+  };
+
+  const menuContent =
+    menuOpen && menuPos && mounted ? (
+      <div
+        ref={menuRef}
+        className="fixed z-[200] w-56 rounded-xl border border-[#e5e5e5] bg-white py-1 shadow-[0_8px_24px_rgba(0,0,0,0.12)]"
+        style={{ top: menuPos.top, left: menuPos.left }}
+        role="listbox"
+      >
+        <button
+          type="button"
+          disabled={saving}
+          className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-[#1d1d1f] hover:bg-[#f5f5f7] disabled:opacity-50"
+          onClick={() => void saveReward(REWARD_AIRPODS)}
+        >
+          <span aria-hidden>🎧</span> AirPods
+        </button>
+        <button
+          type="button"
+          disabled={saving}
+          className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-[#1d1d1f] hover:bg-[#f5f5f7] disabled:opacity-50"
+          onClick={() => void saveReward(REWARD_JBL)}
+        >
+          <span aria-hidden>🔊</span> JBL Clip 5
+        </button>
+        {!otherMode ? (
+          <button
+            type="button"
+            disabled={saving}
+            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-[#1d1d1f] hover:bg-[#f5f5f7] disabled:opacity-50"
+            onClick={() => setOtherMode(true)}
+          >
+            <span aria-hidden>✏️</span> Other
+          </button>
+        ) : (
+          <div className="border-t border-[#f0f0f0] px-3 py-2">
+            <input
+              type="text"
+              className="w-full rounded-lg border border-[#e5e5e5] px-2 py-1.5 text-sm text-[#1d1d1f] focus:border-[#3b82f6] focus:outline-none"
+              placeholder="Specify item..."
+              value={otherText}
+              onChange={(e) => setOtherText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && otherText.trim()) {
+                  e.preventDefault();
+                  void saveReward(otherText.trim());
+                }
+              }}
+            />
+            <button
+              type="button"
+              disabled={saving || !otherText.trim()}
+              className="mt-2 w-full rounded-lg bg-[#1d1d1f] py-1.5 text-xs font-medium text-white hover:bg-[#2d2d2f] disabled:cursor-not-allowed disabled:opacity-50"
+              onClick={() => void saveReward(otherText.trim())}
+            >
+              Save
+            </button>
+          </div>
+        )}
+      </div>
+    ) : null;
+
+  if (row.dispatch_status === "delivered") {
+    return (
+      <div className="flex min-h-[2rem] flex-col gap-1">
+        <div className="flex flex-wrap items-center gap-1.5">
+          {rewardItemPlainText(row.reward_item)}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div ref={anchorRef} className="flex min-h-[2rem] flex-col gap-1">
+      <div className="flex flex-wrap items-center gap-1.5">
+        {hasReward ? (
+          <div className="group flex items-center gap-0.5">
+            {rewardItemBadge(row.reward_item)}
+            <button
+              type="button"
+              className="shrink-0 rounded p-0.5 text-[#6e6e73] opacity-0 transition-opacity hover:bg-[#f0f0f0] hover:text-[#1d1d1f] group-hover:opacity-100 focus:opacity-100"
+              aria-label="Edit reward item"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (menuOpen) {
+                  setMenuOpen(false);
+                  setOtherMode(false);
+                } else {
+                  openMenu();
+                }
+              }}
+            >
+              <span className="text-sm leading-none" aria-hidden>
+                ✏️
+              </span>
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            className="text-xs font-medium text-[#3b82f6] hover:underline"
+            onClick={() => (menuOpen ? setMenuOpen(false) : openMenu())}
+          >
+            + Add item
+          </button>
+        )}
+        {savedFlash ? (
+          <span className="text-xs font-medium text-[#16a34a]">Saved ✓</span>
+        ) : null}
+      </div>
+      {mounted && menuContent
+        ? createPortal(menuContent, document.body)
+        : null}
+    </div>
+  );
+}
 
 function statusBadgeClass(s: DispatchStatus): string {
   switch (s) {
@@ -87,6 +405,7 @@ function buildCsv(rows: DispatchRow[]): string {
     "Email",
     "Phone",
     "Shipping Address",
+    "Reward item",
     "Dispatch Status",
     "Dispatch Date",
     "Tracking ID",
@@ -103,6 +422,7 @@ function buildCsv(rows: DispatchRow[]): string {
         csvEscape(c?.email ?? ""),
         csvEscape(c?.whatsapp_number ?? ""),
         csvEscape(r.shipping_address ?? ""),
+        csvEscape(r.reward_item ?? ""),
         csvEscape(r.dispatch_status),
         csvEscape(
           r.dispatch_date ? format(parseISO(r.dispatch_date), "yyyy-MM-dd") : "",
@@ -206,8 +526,27 @@ function UpdateDispatchModal({
         return;
       }
 
+      const candDisplay =
+        row.candidates?.full_name?.trim() || "Candidate";
+      const expectedStr = format(parseISO(expectedIso), "MMMM d, yyyy");
+      const { data: authDu } = await supabase.auth.getUser();
+      if (authDu.user) {
+        await logActivity({
+          supabase,
+          user: authDu.user,
+          action_type: "dispatch",
+          entity_type: "dispatch",
+          entity_id: row.id,
+          candidate_name: candDisplay,
+          description: `Updated dispatch for ${candDisplay} — Tracking: ${trackingId.trim()}, Expected: ${expectedStr}`,
+        });
+      }
+
       if (email && row.dispatch_status !== "delivered") {
-        const expectedLabel = format(parseISO(expectedIso), "MMMM d, yyyy");
+        const expectedLabel = expectedStr;
+        const dispatchLabel = dispatchIso
+          ? format(parseISO(dispatchIso), "MMMM d, yyyy")
+          : "—";
         const res = await fetch("/api/send-email", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -215,8 +554,10 @@ function UpdateDispatchModal({
             type: "dispatch_confirmation",
             to: email,
             name,
+            reward_item: row.reward_item,
             tracking_id: trackingId.trim(),
-            date: expectedLabel,
+            dispatch_date: dispatchLabel,
+            expected_delivery_date: expectedLabel,
           }),
         });
         if (!res.ok) {
@@ -356,6 +697,9 @@ export function DispatchDashboard() {
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [updateRow, setUpdateRow] = useState<DispatchRow | null>(null);
+  const [detailCandidateId, setDetailCandidateId] = useState<string | null>(
+    null,
+  );
   const [stats, setStats] = useState<{
     pending: number;
     dispatchedWeek: number;
@@ -485,8 +829,33 @@ export function DispatchDashboard() {
       })
       .eq("id", r.id);
     setBusyId(null);
-    if (uErr) setError(uErr.message);
+    if (uErr) {
+      setError(uErr.message);
+      return;
+    }
+    const candDisplay = r.candidates?.full_name?.trim() || "Candidate";
+    const { data: authMd } = await supabase.auth.getUser();
+    if (authMd.user) {
+      await logActivity({
+        supabase,
+        user: authMd.user,
+        action_type: "dispatch",
+        entity_type: "dispatch",
+        entity_id: r.id,
+        candidate_name: candDisplay,
+        description: `Marked ${candDisplay} as Delivered`,
+      });
+    }
   };
+
+  const patchRowReward = useCallback(
+    (id: string, reward_item: string | null) => {
+      setRows((prev) =>
+        prev.map((row) => (row.id === id ? { ...row, reward_item } : row)),
+      );
+    },
+    [],
+  );
 
   if (!supabase) {
     return (
@@ -605,6 +974,9 @@ export function DispatchDashboard() {
                     Shipping address
                   </th>
                   <th className="px-3 py-3 text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
+                    Reward item
+                  </th>
+                  <th className="px-3 py-3 text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
                     Status
                   </th>
                   <th className="px-3 py-3 text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
@@ -625,7 +997,7 @@ export function DispatchDashboard() {
                 {loading ? (
                   <tr>
                     <td
-                      colSpan={9}
+                      colSpan={10}
                       className="px-4 py-12 text-center text-sm text-[#6e6e73]"
                     >
                       Loading…
@@ -634,7 +1006,7 @@ export function DispatchDashboard() {
                 ) : filtered.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={9}
+                      colSpan={10}
                       className="px-4 py-12 text-center text-sm text-[#6e6e73]"
                     >
                       No dispatch records for this filter.
@@ -654,8 +1026,14 @@ export function DispatchDashboard() {
                         key={r.id}
                         className="border-b border-[#f5f5f5] last:border-b-0 hover:bg-[#fafafa]"
                       >
-                        <td className="max-w-[120px] truncate px-3 py-3 font-medium text-[#1d1d1f]">
-                          {c?.full_name ?? "—"}
+                        <td className="max-w-[140px] px-3 py-3">
+                          <button
+                            type="button"
+                            className="max-w-full truncate text-left font-medium text-[#3b82f6] hover:underline focus:outline-none focus:ring-2 focus:ring-[#3b82f6]/25 rounded-sm"
+                            onClick={() => setDetailCandidateId(r.candidate_id)}
+                          >
+                            {c?.full_name?.trim() || "—"}
+                          </button>
                         </td>
                         <td className="max-w-[160px] truncate px-3 py-3 text-[#6e6e73]">
                           {c?.email ?? "—"}
@@ -665,6 +1043,14 @@ export function DispatchDashboard() {
                         </td>
                         <td className="max-w-[200px] whitespace-pre-wrap break-words px-3 py-3 text-[#6e6e73]">
                           {r.shipping_address ?? "—"}
+                        </td>
+                        <td className="max-w-[160px] px-3 py-3">
+                          <RewardItemCell
+                            row={r}
+                            supabase={supabase}
+                            onRewardSaved={patchRowReward}
+                            setError={setError}
+                          />
                         </td>
                         <td className="px-3 py-3">
                           <span
@@ -725,6 +1111,13 @@ export function DispatchDashboard() {
           void loadRows();
           void loadStats();
         }}
+      />
+
+      <CandidateDetailModal
+        open={!!detailCandidateId}
+        candidateId={detailCandidateId}
+        supabase={supabase}
+        onClose={() => setDetailCandidateId(null)}
       />
     </>
   );

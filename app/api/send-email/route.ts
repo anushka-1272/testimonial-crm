@@ -44,8 +44,10 @@ const DispatchConfirmation = z.object({
   type: z.literal("dispatch_confirmation"),
   to: z.string().email(),
   name: z.string().nullable().optional(),
+  reward_item: z.string().nullable().optional(),
   tracking_id: z.string().min(1),
-  date: z.string().min(1),
+  dispatch_date: z.string().min(1),
+  expected_delivery_date: z.string().min(1),
 });
 
 const BodySchema = z.discriminatedUnion("type", [
@@ -109,8 +111,10 @@ export async function POST(request: Request) {
       result = await sendDispatchConfirmationEmail({
         to: body.to,
         name: body.name,
+        reward_item: body.reward_item,
         tracking_id: body.tracking_id,
-        date: body.date,
+        dispatch_date: body.dispatch_date,
+        expected_delivery_date: body.expected_delivery_date,
       });
       break;
   }

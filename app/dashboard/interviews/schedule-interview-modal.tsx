@@ -1,21 +1,51 @@
 "use client";
 
 import { format } from "date-fns";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+
+import { logActivity } from "@/lib/activity-logger";
+import {
+  interviewLanguageDisplayString,
+  interviewLanguageForSubmit,
+  type InterviewLangPreset,
+} from "@/lib/interview-language";
 
 export type ScheduleCandidate = {
   id: string;
   full_name: string | null;
   email: string;
+  interview_type?: "testimonial" | "project" | null;
+};
+
+export type ScheduleProjectCandidate = {
+  id: string;
+  email: string;
+  whatsapp_number: string | null;
+  project_title: string | null;
+  poc_assigned: string | null;
 };
 
 const INTERVIEWERS = ["Harika", "Gargi", "Mudit", "Anushka"] as const;
 
+const LANG_CARD_ORDER: { key: InterviewLangPreset | "other"; label: string }[] =
+  [
+    { key: "english", label: "English" },
+    { key: "hindi", label: "Hindi" },
+    { key: "kannada", label: "Kannada" },
+    { key: "telugu", label: "Telugu" },
+    { key: "marathi", label: "Marathi" },
+    { key: "bengali", label: "Bengali" },
+    { key: "other", label: "Other" },
+  ];
+
+type LangCardKey = (typeof LANG_CARD_ORDER)[number]["key"];
+
 type Props = {
   open: boolean;
   candidate: ScheduleCandidate | null;
+  projectCandidate: ScheduleProjectCandidate | null;
   supabase: SupabaseClient;
   onClose: () => void;
   onCreated: () => void;
@@ -24,6 +54,7 @@ type Props = {
 export function ScheduleInterviewModal({
   open,
   candidate,
+  projectCandidate,
   supabase,
   onClose,
   onCreated,
@@ -35,14 +66,41 @@ export function ScheduleInterviewModal({
   const [interviewType, setInterviewType] = useState<"testimonial" | "project">(
     "testimonial",
   );
-  const [language, setLanguage] = useState("English");
+  const [langPreset, setLangPreset] = useState<LangCardKey>("english");
+  const [otherLanguageText, setOtherLanguageText] = useState("");
   const [zoomLink, setZoomLink] = useState("");
   const [poc, setPoc] = useState("");
   const [remarks, setRemarks] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  if (!open || !candidate) return null;
+  useEffect(() => {
+    if (!open) return;
+    setLangPreset("english");
+    setOtherLanguageText("");
+    if (projectCandidate) {
+      setInterviewType("project");
+      setPoc(projectCandidate.poc_assigned?.trim() ?? "");
+      return;
+    }
+    if (!candidate) return;
+    const t = candidate.interview_type;
+    if (t === "testimonial" || t === "project") {
+      setInterviewType(t);
+    } else {
+      setInterviewType("testimonial");
+    }
+  }, [
+    open,
+    candidate?.id,
+    candidate?.interview_type,
+    projectCandidate?.id,
+    projectCandidate?.poc_assigned,
+  ]);
+
+  if (!open || (!candidate && !projectCandidate)) return null;
+
+  const isProject = !!projectCandidate;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -51,26 +109,52 @@ export function ScheduleInterviewModal({
       setError("Date and time are required.");
       return;
     }
+    const langSubmit = interviewLanguageForSubmit(langPreset, otherLanguageText);
+    if (!langSubmit.ok) {
+      setError(langSubmit.error);
+      return;
+    }
+    const languageDisplay = interviewLanguageDisplayString(
+      langPreset,
+      otherLanguageText,
+    );
     const localIso = new Date(`${date}T${time}`).toISOString();
     const dateLabel = format(new Date(`${date}T${time}`), "MMMM d, yyyy");
     const timeLabel = format(new Date(`${date}T${time}`), "h:mm a");
 
     setSubmitting(true);
     try {
+      const insertPayload = isProject
+        ? {
+            project_candidate_id: projectCandidate!.id,
+            scheduled_date: localIso,
+            interviewer,
+            zoom_link: zoomLink.trim() || null,
+            language: languageDisplay,
+            poc: poc.trim() || null,
+            remarks: remarks.trim() || null,
+            interview_type: "project" as const,
+            interview_status: "scheduled" as const,
+            invitation_sent: false,
+          }
+        : {
+            candidate_id: candidate!.id,
+            scheduled_date: localIso,
+            interviewer,
+            zoom_link: zoomLink.trim() || null,
+            language: languageDisplay,
+            interview_language: langSubmit.value,
+            poc: poc.trim() || null,
+            remarks: remarks.trim() || null,
+            interview_type: interviewType,
+            interview_status: "scheduled" as const,
+            invitation_sent: false,
+          };
+
+      const table = isProject ? "project_interviews" : "interviews";
       const { data: row, error: insErr } = await supabase
-        .from("interviews")
-        .insert({
-          candidate_id: candidate.id,
-          scheduled_date: localIso,
-          interviewer,
-          zoom_link: zoomLink.trim() || null,
-          language: language.trim() || null,
-          poc: poc.trim() || null,
-          remarks: remarks.trim() || null,
-          interview_type: interviewType,
-          interview_status: "scheduled",
-          invitation_sent: false,
-        })
+        .from(table)
+        .insert(insertPayload)
         .select("id")
         .single();
 
@@ -80,13 +164,39 @@ export function ScheduleInterviewModal({
         return;
       }
 
+      const candDisplay = isProject
+        ? projectCandidate!.project_title?.trim() ||
+          projectCandidate!.email ||
+          "Candidate"
+        : candidate!.full_name?.trim() || candidate!.email || "Candidate";
+      const typeWord =
+        interviewType === "testimonial" ? "Testimonial" : "Project";
+      const { data: authSch } = await supabase.auth.getUser();
+      if (authSch.user) {
+        await logActivity({
+          supabase,
+          user: authSch.user,
+          action_type: "interviews",
+          entity_type: "interview",
+          entity_id: row.id,
+          candidate_name: candDisplay,
+          description: `Scheduled ${typeWord} interview for ${candDisplay} with ${interviewer} on ${dateLabel}`,
+          metadata: { time: timeLabel, project: isProject },
+        });
+      }
+
+      const toEmail = isProject ? projectCandidate!.email : candidate!.email;
+      const toName = isProject
+        ? projectCandidate!.project_title
+        : candidate!.full_name;
+
       const emailRes = await fetch("/api/send-email", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           type: "interview_confirmation",
-          to: candidate.email,
-          name: candidate.full_name,
+          to: toEmail,
+          name: toName,
           date: dateLabel,
           time: timeLabel,
           zoom_link: zoomLink.trim() || "TBD",
@@ -99,13 +209,15 @@ export function ScheduleInterviewModal({
         };
         setError(j.error ?? "Interview saved but confirmation email failed.");
         setSubmitting(false);
+        setLangPreset("english");
+        setOtherLanguageText("");
         onCreated();
         onClose();
         return;
       }
 
       await supabase
-        .from("interviews")
+        .from(table)
         .update({ invitation_sent: true })
         .eq("id", row.id);
 
@@ -114,6 +226,8 @@ export function ScheduleInterviewModal({
       setZoomLink("");
       setPoc("");
       setRemarks("");
+      setLangPreset("english");
+      setOtherLanguageText("");
       onCreated();
       onClose();
     } catch {
@@ -141,7 +255,9 @@ export function ScheduleInterviewModal({
               Schedule interview
             </h2>
             <p className="text-sm text-[#6e6e73]">
-              {candidate.full_name ?? "Candidate"} · {candidate.email}
+              {isProject
+                ? `${projectCandidate!.project_title?.trim() || "Project"} · ${projectCandidate!.email}`
+                : `${candidate!.full_name ?? "Candidate"} · ${candidate!.email}`}
             </p>
           </div>
           <button
@@ -200,29 +316,59 @@ export function ScheduleInterviewModal({
             </select>
           </label>
 
-          <label className="block text-sm">
-            <span className={lab}>Interview type</span>
-            <select
-              className={inp}
-              value={interviewType}
-              onChange={(e) =>
-                setInterviewType(e.target.value as "testimonial" | "project")
-              }
-            >
-              <option value="testimonial">Testimonial</option>
-              <option value="project">Project</option>
-            </select>
-          </label>
+          {!isProject ? (
+            <label className="block text-sm">
+              <span className={lab}>Interview type</span>
+              <select
+                className={inp}
+                value={interviewType}
+                onChange={(e) =>
+                  setInterviewType(e.target.value as "testimonial" | "project")
+                }
+              >
+                <option value="testimonial">Testimonial</option>
+                <option value="project">Project</option>
+              </select>
+            </label>
+          ) : null}
 
-          <label className="block text-sm">
-            <span className={lab}>Language</span>
-            <input
-              type="text"
-              className={inp}
-              value={language}
-              onChange={(e) => setLanguage(e.target.value)}
-            />
-          </label>
+          <div className="block text-sm">
+            <span className={lab}>Interview language</span>
+            <div className="mt-2 grid grid-cols-3 gap-2">
+              {LANG_CARD_ORDER.map(({ key, label }) => {
+                const selected = langPreset === key;
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => {
+                      setLangPreset(key);
+                      if (key !== "other") setOtherLanguageText("");
+                    }}
+                    className={`flex flex-col items-center justify-center rounded-xl border p-3 text-center transition-colors ${
+                      selected
+                        ? "border-black bg-black text-white"
+                        : "border-gray-200 bg-white text-gray-700 hover:border-gray-300"
+                    }`}
+                  >
+                    <span className="text-[11px] font-medium leading-tight">
+                      {label}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+            {langPreset === "other" ? (
+              <input
+                type="text"
+                className={inp}
+                placeholder="Specify language..."
+                value={otherLanguageText}
+                onChange={(e) => setOtherLanguageText(e.target.value)}
+                autoComplete="off"
+              />
+            ) : null}
+          </div>
 
           <label className="block text-sm">
             <span className={lab}>Zoom link</span>

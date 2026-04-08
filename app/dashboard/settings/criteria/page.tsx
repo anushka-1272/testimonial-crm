@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
+import { logActivity } from "@/lib/activity-logger";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 
 const cardChrome =
@@ -55,12 +56,38 @@ export default function CriteriaPage() {
           is_active: formActive,
         })
         .eq("id", editingId);
+      const { data: authEd } = await supabase.auth.getUser();
+      if (authEd.user) {
+        await logActivity({
+          supabase,
+          user: authEd.user,
+          action_type: "settings",
+          entity_type: "eligibility_criteria",
+          entity_id: editingId,
+          description: `Updated eligibility criteria: ${formName}`,
+        });
+      }
     } else {
-      await supabase.from("eligibility_criteria").insert({
-        criteria_name: formName,
-        criteria_description: formDesc,
-        is_active: formActive,
-      });
+      const { data: ins } = await supabase
+        .from("eligibility_criteria")
+        .insert({
+          criteria_name: formName,
+          criteria_description: formDesc,
+          is_active: formActive,
+        })
+        .select("id")
+        .single();
+      const { data: authAdd } = await supabase.auth.getUser();
+      if (authAdd.user && ins?.id) {
+        await logActivity({
+          supabase,
+          user: authAdd.user,
+          action_type: "settings",
+          entity_type: "eligibility_criteria",
+          entity_id: ins.id,
+          description: `Added eligibility criteria: ${formName}`,
+        });
+      }
     }
     setShowForm(false);
     setEditingId(null);
@@ -72,15 +99,40 @@ export default function CriteriaPage() {
 
   async function deleteCriteria(id: string) {
     if (!confirm("Delete this criteria?")) return;
+    const c = criteriaList.find((x) => x.id === id);
     await supabase.from("eligibility_criteria").delete().eq("id", id);
+    const { data: authDel } = await supabase.auth.getUser();
+    if (authDel.user && c) {
+      await logActivity({
+        supabase,
+        user: authDel.user,
+        action_type: "settings",
+        entity_type: "eligibility_criteria",
+        entity_id: id,
+        description: `Deleted eligibility criteria: ${c.criteria_name}`,
+      });
+    }
     void fetchCriteria();
   }
 
   async function toggleActive(id: string, current: boolean) {
+    const c = criteriaList.find((x) => x.id === id);
     await supabase
       .from("eligibility_criteria")
       .update({ is_active: !current })
       .eq("id", id);
+    const { data: authTog } = await supabase.auth.getUser();
+    if (authTog.user && c) {
+      await logActivity({
+        supabase,
+        user: authTog.user,
+        action_type: "settings",
+        entity_type: "eligibility_criteria",
+        entity_id: id,
+        description: `Updated eligibility criteria: ${c.criteria_name}`,
+        metadata: { is_active: !current },
+      });
+    }
     void fetchCriteria();
   }
 
