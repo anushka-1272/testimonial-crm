@@ -34,15 +34,19 @@ export function eligibilityCandidateFromDbRow(row: {
   full_name?: string | null;
   achievement_type?: string | null;
   achievement_title?: string | null;
+  achievement_summary?: string | null;
   quantified_result?: string | null;
   primary_goal?: string | null;
   skills_modules_helped?: string | null;
   how_program_helped?: string | null;
   proof_document_url?: string | null;
   role_before_program?: string | null;
+  job_role?: string | null;
+  domain?: string | null;
   linkedin_url?: string | null;
 }): EligibilityAssessmentCandidate {
   const summaryLines = [
+    row.achievement_summary && `Summary: ${row.achievement_summary}`,
     row.achievement_type && `Achievement type: ${row.achievement_type}`,
     row.achievement_title && `Title: ${row.achievement_title}`,
     row.quantified_result && `Quantified result: ${row.quantified_result}`,
@@ -51,11 +55,14 @@ export function eligibilityCandidateFromDbRow(row: {
     row.how_program_helped && `How the program helped: ${row.how_program_helped}`,
   ].filter(Boolean) as string[];
 
+  const roleOrJob = row.job_role?.trim() || row.role_before_program?.trim() || null;
+  const domainOrRole = [row.domain?.trim(), roleOrJob].filter(Boolean).join(" — ");
+
   return {
     name: row.full_name ?? null,
     achievement_summary: summaryLines.length ? summaryLines.join("\n") : null,
     proof_link: row.proof_document_url ?? null,
-    industry: row.role_before_program ?? null,
+    industry: domainOrRole || null,
     linkedin_url: row.linkedin_url ?? null,
   };
 }

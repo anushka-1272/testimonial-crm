@@ -5,6 +5,8 @@ import { X } from "lucide-react";
 import type { ProjectCandidateRow } from "@/app/dashboard/interviews/types";
 
 function nameFromEmailPrefix(pc: ProjectCandidateRow): string {
+  const fn = pc.full_name?.trim();
+  if (fn) return fn;
   const e = pc.email?.trim();
   if (!e) return "—";
   const local = e.split("@")[0] ?? "";

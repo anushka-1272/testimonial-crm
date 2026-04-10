@@ -3,7 +3,9 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
+import { useAccessControl } from "@/components/access-control-context";
 import { logActivity } from "@/lib/activity-logger";
+import { getUserSafe } from "@/lib/supabase-auth";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 
 const cardChrome =
@@ -19,6 +21,7 @@ type Criteria = {
 
 export default function CriteriaPage() {
   const supabase = createBrowserSupabaseClient();
+  const { canEditCurrentPage, showViewOnlyBadge } = useAccessControl();
   const [criteriaList, setCriteriaList] = useState<Criteria[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -56,11 +59,11 @@ export default function CriteriaPage() {
           is_active: formActive,
         })
         .eq("id", editingId);
-      const { data: authEd } = await supabase.auth.getUser();
-      if (authEd.user) {
+      const authEd = await getUserSafe(supabase);
+      if (authEd) {
         await logActivity({
           supabase,
-          user: authEd.user,
+          user: authEd,
           action_type: "settings",
           entity_type: "eligibility_criteria",
           entity_id: editingId,
@@ -77,11 +80,11 @@ export default function CriteriaPage() {
         })
         .select("id")
         .single();
-      const { data: authAdd } = await supabase.auth.getUser();
-      if (authAdd.user && ins?.id) {
+      const authAdd = await getUserSafe(supabase);
+      if (authAdd && ins?.id) {
         await logActivity({
           supabase,
-          user: authAdd.user,
+          user: authAdd,
           action_type: "settings",
           entity_type: "eligibility_criteria",
           entity_id: ins.id,
@@ -101,11 +104,11 @@ export default function CriteriaPage() {
     if (!confirm("Delete this criteria?")) return;
     const c = criteriaList.find((x) => x.id === id);
     await supabase.from("eligibility_criteria").delete().eq("id", id);
-    const { data: authDel } = await supabase.auth.getUser();
-    if (authDel.user && c) {
+    const authDel = await getUserSafe(supabase);
+    if (authDel && c) {
       await logActivity({
         supabase,
-        user: authDel.user,
+        user: authDel,
         action_type: "settings",
         entity_type: "eligibility_criteria",
         entity_id: id,
@@ -121,11 +124,11 @@ export default function CriteriaPage() {
       .from("eligibility_criteria")
       .update({ is_active: !current })
       .eq("id", id);
-    const { data: authTog } = await supabase.auth.getUser();
-    if (authTog.user && c) {
+    const authTog = await getUserSafe(supabase);
+    if (authTog && c) {
       await logActivity({
         supabase,
-        user: authTog.user,
+        user: authTog,
         action_type: "settings",
         entity_type: "eligibility_criteria",
         entity_id: id,
@@ -190,24 +193,31 @@ export default function CriteriaPage() {
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <Link
-              href="/dashboard/eligibility"
+              href="/dashboard/settings/team"
               className="text-sm font-medium text-[#3b82f6] transition-all hover:text-[#2563eb]"
             >
-              ← Eligibility
+              Team
             </Link>
-            <button
-              type="button"
-              onClick={() => {
-                setShowForm(true);
-                setEditingId(null);
-                setFormName("");
-                setFormDesc("");
-                setFormActive(true);
-              }}
-              className="rounded-xl bg-[#1d1d1f] px-4 py-2 text-sm font-medium text-white transition-all hover:bg-[#2d2d2f]"
-            >
-              Add criteria
-            </button>
+            {showViewOnlyBadge ? (
+              <span className="rounded-full bg-[#f3f4f6] px-3 py-1 text-xs font-medium text-[#6b7280]">
+                View only
+              </span>
+            ) : null}
+            {canEditCurrentPage ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setShowForm(true);
+                  setEditingId(null);
+                  setFormName("");
+                  setFormDesc("");
+                  setFormActive(true);
+                }}
+                className="rounded-xl bg-[#1d1d1f] px-4 py-2 text-sm font-medium text-white transition-all hover:bg-[#2d2d2f]"
+              >
+                Add criteria
+              </button>
+            ) : null}
           </div>
         </div>
       </header>
@@ -245,39 +255,45 @@ export default function CriteriaPage() {
                           <span className="text-xs text-[#6e6e73]">
                             {c.is_active ? "Active" : "Inactive"}
                           </span>
-                          <button
-                            type="button"
-                            role="switch"
-                            aria-checked={c.is_active}
-                            onClick={() => toggleActive(c.id, c.is_active)}
-                            className={`relative h-7 w-11 shrink-0 rounded-full transition-colors ${
-                              c.is_active ? "bg-[#1d1d1f]" : "bg-[#e5e5e5]"
-                            }`}
-                          >
-                            <span
-                              className={`pointer-events-none absolute top-0.5 h-6 w-6 rounded-full bg-white shadow-sm transition-all duration-200 ${
-                                c.is_active
-                                  ? "left-[calc(100%-1.625rem)]"
-                                  : "left-0.5"
+                          {canEditCurrentPage ? (
+                            <button
+                              type="button"
+                              role="switch"
+                              aria-checked={c.is_active}
+                              onClick={() => toggleActive(c.id, c.is_active)}
+                              className={`relative h-7 w-11 shrink-0 rounded-full transition-colors ${
+                                c.is_active ? "bg-[#1d1d1f]" : "bg-[#e5e5e5]"
                               }`}
-                            />
-                          </button>
+                            >
+                              <span
+                                className={`pointer-events-none absolute top-0.5 h-6 w-6 rounded-full bg-white shadow-sm transition-all duration-200 ${
+                                  c.is_active
+                                    ? "left-[calc(100%-1.625rem)]"
+                                    : "left-0.5"
+                                }`}
+                              />
+                            </button>
+                          ) : null}
                         </div>
                         <div className="flex gap-4">
-                          <button
-                            type="button"
-                            onClick={() => startEdit(c)}
-                            className="text-xs font-medium text-[#3b82f6] transition-all hover:text-[#2563eb]"
-                          >
-                            Edit
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => void deleteCriteria(c.id)}
-                            className="text-xs font-medium text-[#ef4444] transition-all hover:text-[#dc2626]"
-                          >
-                            Delete
-                          </button>
+                          {canEditCurrentPage ? (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => startEdit(c)}
+                                className="text-xs font-medium text-[#3b82f6] transition-all hover:text-[#2563eb]"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => void deleteCriteria(c.id)}
+                                className="text-xs font-medium text-[#ef4444] transition-all hover:text-[#dc2626]"
+                              >
+                                Delete
+                              </button>
+                            </>
+                          ) : null}
                         </div>
                       </div>
                     </div>
@@ -313,14 +329,16 @@ export default function CriteriaPage() {
                 placeholder="e.g. I got a job at Google as a software engineer…"
                 className={`mt-4 h-28 resize-none ${inputClass}`}
               />
-              <button
-                type="button"
-                onClick={() => void testCriteria()}
-                disabled={testLoading}
-                className="mt-3 w-full rounded-xl bg-[#1d1d1f] px-4 py-2.5 text-sm font-medium text-white transition-all hover:bg-[#2d2d2f] disabled:opacity-50"
-              >
-                {testLoading ? "Testing…" : "Run test"}
-              </button>
+              {canEditCurrentPage ? (
+                <button
+                  type="button"
+                  onClick={() => void testCriteria()}
+                  disabled={testLoading}
+                  className="mt-3 w-full rounded-xl bg-[#1d1d1f] px-4 py-2.5 text-sm font-medium text-white transition-all hover:bg-[#2d2d2f] disabled:opacity-50"
+                >
+                  {testLoading ? "Testing…" : "Run test"}
+                </button>
+              ) : null}
               {testResult && !testResult.error && (
                 <div className="mt-4 rounded-xl border border-[#f0f0f0] bg-[#f5f5f7] p-4">
                   <div className="mb-2 flex items-center justify-between">
@@ -353,7 +371,7 @@ export default function CriteriaPage() {
           </div>
         </div>
 
-        {showForm && (
+        {showForm && canEditCurrentPage && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#1d1d1f]/25 p-4 backdrop-blur-[1px]">
             <div className="w-full max-w-lg rounded-2xl border border-[#f0f0f0] bg-white p-6 shadow-[0_4px_16px_rgba(0,0,0,0.08)]">
               <h2 className="text-lg font-semibold text-[#1d1d1f]">

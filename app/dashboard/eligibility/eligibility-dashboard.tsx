@@ -4,11 +4,13 @@ import { endOfDay, parseISO, startOfDay, startOfWeek } from "date-fns";
 import { Check, Loader2, RefreshCw, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { useAccessControl } from "@/components/access-control-context";
 import {
   formatAchievementSummary,
   truncateText,
 } from "@/lib/candidate-summary";
 import { logActivity } from "@/lib/activity-logger";
+import { getUserSafe } from "@/lib/supabase-auth";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 
 type EligibilityStatus = "pending_review" | "eligible" | "not_eligible";
@@ -133,6 +135,7 @@ function DetailField({
 }
 
 export function EligibilityDashboard() {
+  const { canEditCurrentPage, showViewOnlyBadge } = useAccessControl();
   const [rows, setRows] = useState<CandidateRow[]>([]);
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -292,6 +295,7 @@ export function EligibilityDashboard() {
   };
 
   const markEligible = async (r: CandidateRow, interviewType: InterviewTrack) => {
+    if (!canEditCurrentPage) return;
     if (!supabase) return;
     setBusyId(r.id);
     const { error: uErr } = await supabase
@@ -307,8 +311,7 @@ export function EligibilityDashboard() {
       setError(uErr.message);
       return;
     }
-    const { data: auth } = await supabase.auth.getUser();
-    const actor = auth.user;
+    const actor = await getUserSafe(supabase);
     if (actor) {
       const display = r.full_name?.trim() || r.email || "Candidate";
       const trackLabel =
@@ -348,6 +351,7 @@ export function EligibilityDashboard() {
   };
 
   const markNotEligible = async (r: CandidateRow) => {
+    if (!canEditCurrentPage) return;
     if (!supabase) return;
     setBusyId(r.id);
     const { error: uErr } = await supabase
@@ -376,8 +380,7 @@ export function EligibilityDashboard() {
     } catch {
       setError("Network error sending rejection email");
     }
-    const { data: authNe } = await supabase.auth.getUser();
-    const actorNe = authNe.user;
+    const actorNe = await getUserSafe(supabase);
     if (actorNe) {
       const display = r.full_name?.trim() || r.email || "Candidate";
       await logActivity({
@@ -400,6 +403,7 @@ export function EligibilityDashboard() {
   };
 
   const bulkMarkEligible = async () => {
+    if (!canEditCurrentPage) return;
     if (!supabase || selected.size === 0) return;
     setBulkBusy(true);
     const ids = Array.from(selected);
@@ -414,8 +418,7 @@ export function EligibilityDashboard() {
     setBulkBusy(false);
     if (uErr) setError(uErr.message);
     else {
-      const { data: authBulk } = await supabase.auth.getUser();
-      const actorBulk = authBulk.user;
+      const actorBulk = await getUserSafe(supabase);
       if (actorBulk) {
         for (const id of ids) {
           const row = rows.find((x) => x.id === id);
@@ -438,6 +441,7 @@ export function EligibilityDashboard() {
   };
 
   const bulkMarkNotEligible = async () => {
+    if (!canEditCurrentPage) return;
     if (!supabase || selected.size === 0) return;
     setBulkBusy(true);
     const ids = Array.from(selected);
@@ -467,8 +471,7 @@ export function EligibilityDashboard() {
       }
       await new Promise((res) => setTimeout(res, 400));
     }
-    const { data: authBn } = await supabase.auth.getUser();
-    const actorBn = authBn.user;
+    const actorBn = await getUserSafe(supabase);
     if (actorBn) {
       for (const id of ids) {
         const row = rows.find((x) => x.id === id);
@@ -511,7 +514,8 @@ export function EligibilityDashboard() {
         error?: string;
         total_rows?: number;
         new_inserted?: number;
-        skipped_duplicates?: number;
+        updated_rows?: number;
+        skipped_empty_email?: number;
         errors?: string[];
       };
       if (!res.ok) {
@@ -519,9 +523,10 @@ export function EligibilityDashboard() {
         return;
       }
       const inserted = j.new_inserted ?? 0;
-      const skipped = j.skipped_duplicates ?? 0;
+      const updated = j.updated_rows ?? 0;
+      const skippedEmail = j.skipped_empty_email ?? 0;
       alert(
-        `✅ Synced ${inserted} new candidates, ${skipped} skipped duplicates`,
+        `Synced ${inserted} new, ${updated} updated, ${skippedEmail} rows without email (from ${j.total_rows ?? 0} sheet rows).`,
       );
       if (j.errors?.length) {
         setError(j.errors.slice(0, 5).join(" · "));
@@ -584,10 +589,15 @@ export function EligibilityDashboard() {
             <p className="mt-1 text-sm text-[#6e6e73]">
               Review and update candidate eligibility
             </p>
+            {showViewOnlyBadge ? (
+              <span className="mt-2 inline-flex rounded-full bg-[#f3f4f6] px-3 py-1 text-xs font-medium text-[#6b7280]">
+                View only
+              </span>
+            ) : null}
           </div>
           <button
             type="button"
-            disabled={sheetSyncBusy || !supabase}
+            disabled={!canEditCurrentPage || sheetSyncBusy || !supabase}
             onClick={() => void syncSheet()}
             className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl border border-[#e5e5e5] bg-white px-4 py-2 text-sm font-medium text-[#1d1d1f] transition-all hover:bg-[#f5f5f7] disabled:opacity-50"
           >

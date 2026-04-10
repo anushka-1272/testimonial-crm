@@ -1,7 +1,12 @@
 import { format, parseISO } from "date-fns";
 
 export type EligibilityStatus = "pending_review" | "eligible" | "not_eligible";
-export type InterviewStatus = "scheduled" | "rescheduled" | "completed" | "cancelled";
+export type InterviewStatus =
+  | "draft"
+  | "scheduled"
+  | "rescheduled"
+  | "completed"
+  | "cancelled";
 export type DispatchStatus = "pending" | "dispatched" | "delivered";
 export type InterviewType = "testimonial" | "project";
 
@@ -41,6 +46,7 @@ export type SupportStatusKind =
   | "under_review"
   | "not_eligible"
   | "eligible_unscheduled"
+  | "interview_draft"
   | "scheduled"
   | "rescheduled"
   | "completed"
@@ -120,6 +126,21 @@ export function resolveSupportStatus(
       badgeClass:
         "bg-zinc-100 text-zinc-700 ring-1 ring-zinc-200/80",
       lines: [],
+    };
+  }
+
+  if (st === "draft") {
+    const slot = formatSlot(interview.scheduled_date);
+    const lines: string[] = [];
+    if (slot) lines.push(slot);
+    lines.push(`Interviewer: ${interview.interviewer}`);
+    lines.push("Awaiting Zoom details");
+    return {
+      kind: "interview_draft",
+      title: "Interview draft — awaiting Zoom",
+      badgeClass:
+        "bg-amber-50 text-amber-900 ring-1 ring-amber-200/80",
+      lines,
     };
   }
 

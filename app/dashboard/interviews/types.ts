@@ -1,4 +1,5 @@
 export type InterviewColumnStatus =
+  | "draft"
   | "scheduled"
   | "rescheduled"
   | "completed"
@@ -13,6 +14,7 @@ export type InterviewWithCandidate = {
   completed_at: string | null;
   interviewer: string;
   zoom_link: string | null;
+  zoom_account: string | null;
   language: string | null;
   interview_language: string | null;
   invitation_sent: boolean | null;
@@ -28,6 +30,7 @@ export type InterviewWithCandidate = {
   interview_type: "testimonial" | "project";
   candidates: {
     id: string;
+    created_at?: string;
     full_name: string | null;
     email: string;
     whatsapp_number?: string | null;
@@ -45,6 +48,7 @@ export type LinkedInTrackStatus =
 
 export type EligibleCandidate = {
   id: string;
+  created_at?: string;
   full_name: string | null;
   email: string;
   interview_type: "testimonial" | "project" | null;
@@ -58,6 +62,7 @@ export type ProjectCandidateRow = {
   id: string;
   created_at?: string;
   email: string;
+  full_name: string | null;
   whatsapp_number: string | null;
   project_title: string | null;
   problem_statement: string | null;
@@ -73,6 +78,7 @@ export type ProjectCandidateRow = {
 /** Project pipeline interview row (joined with project_candidates). */
 export type ProjectInterviewWithProjectCandidate = {
   id: string;
+  created_at?: string;
   project_candidate_id: string;
   scheduled_date: string | null;
   previous_scheduled_date: string | null;

@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { InterviewsBoard } from "./interviews-board";
 
 export const metadata: Metadata = {
-  title: "Interviews | Testimonial CRM",
+  title: "Testimonial Interviews | Testimonial CRM",
   description: "Schedule and track testimonial interviews.",
 };
 

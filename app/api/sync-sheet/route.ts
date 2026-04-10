@@ -1,14 +1,21 @@
-import { format, isValid, parseISO } from "date-fns";
+import { isValid, parseISO } from "date-fns";
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 
 import { runAssessEligibilityAndPersist } from "@/lib/candidate-assessment";
+import { getUserSafe } from "@/lib/supabase-auth";
 import { createSupabaseAdmin } from "@/lib/supabase";
 
 export const runtime = "nodejs";
 
-const SHEET_GVIZ_URL =
-  "https://docs.google.com/spreadsheets/d/1tUKfTRAR6Jh48t272EM-etC-yq71-y9yPpC3Aizx5hU/gviz/tq?tqx=out:json&sheet=Form_Responses";
+/** Testimonial candidates — Google Sheet (not project pipeline). */
+const SHEET_ID = "1tw4h3C1wYi1Nyt2CjXaf_eRSHV1-pV9g8i8-r2J5_F0";
+const TAB_NAME = "Responses 8-4";
+const RANGE_FIRST_ROW = 1956;
+/** gviz range: testimonial responses from this row through column Z. */
+const SHEET_RANGE = `${TAB_NAME}!A${RANGE_FIRST_ROW}:Z`;
+
+const SHEET_GVIZ_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&range=${encodeURIComponent(SHEET_RANGE)}`;
 
 type GvizCell = { v?: unknown; f?: string | null } | null | undefined;
 type GvizRow = { c?: GvizCell[] };
@@ -99,25 +106,15 @@ function cellToString(cell: GvizCell): string {
 function cellToIsoTimestamp(cell: GvizCell): string | null {
   const raw = cellToString(cell);
   if (!raw) return null;
-  const d = parseISO(raw.includes("T") ? raw : `${raw.replace(/\//g, "-")}T12:00:00.000Z`);
+  const d = parseISO(
+    raw.includes("T") ? raw : `${raw.replace(/\//g, "-")}T12:00:00.000Z`,
+  );
   if (!isValid(d)) {
     const try2 = parseISO(raw);
     if (!isValid(try2)) return null;
     return try2.toISOString();
   }
   return d.toISOString();
-}
-
-function cellToDateOnly(cell: GvizCell): string | null {
-  const raw = cellToString(cell);
-  if (!raw) return null;
-  const normalized = raw.includes("T") ? raw : `${raw}T12:00:00.000Z`;
-  let d = parseISO(normalized);
-  if (!isValid(d)) {
-    d = parseISO(raw);
-  }
-  if (!isValid(d)) return null;
-  return format(d, "yyyy-MM-dd");
 }
 
 function declarationFromCell(cell: GvizCell): boolean {
@@ -138,6 +135,38 @@ function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+/**
+ * Column order from sheet "Responses 8-4" (0-based):
+ * 0 Timestamp, 1 Email, 2 Full Name, 3 WhatsApp, 4 Domain, 5 Job Role,
+ * 6 Achievement Type, 7 Title, 8 Summary, 9 Quantified Result, 10 Proof,
+ * 11 LinkedIn, 12 Instagram, 13 Declaration
+ */
+function rowFromSheetCells(c: GvizCell[], emailNormalized: string) {
+  const ts = cellToIsoTimestamp(c[0] ?? null);
+  const jobRole = cellToString(c[5] ?? null) || null;
+  const declaration = declarationFromCell(c[13] ?? null);
+
+  return {
+    email: emailNormalized,
+    created_at: ts ?? undefined,
+    form_filled_date: ts ?? new Date().toISOString(),
+    full_name: cellToString(c[2] ?? null) || null,
+    whatsapp_number: cellToString(c[3] ?? null) || null,
+    domain: cellToString(c[4] ?? null) || null,
+    job_role: jobRole,
+    role_before_program: jobRole,
+    achievement_type: cellToString(c[6] ?? null) || null,
+    achievement_title: cellToString(c[7] ?? null) || null,
+    achievement_summary: cellToString(c[8] ?? null) || null,
+    quantified_result: cellToString(c[9] ?? null) || null,
+    proof_document_url: cellToString(c[10] ?? null) || null,
+    linkedin_url: cellToString(c[11] ?? null) || null,
+    instagram_url: cellToString(c[12] ?? null) || null,
+    declaration,
+    declaration_accepted: declaration,
+  };
+}
+
 async function verifyRequestUser(request: Request) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -153,11 +182,8 @@ async function verifyRequestUser(request: Request) {
     auth: { persistSession: false, autoRefreshToken: false },
     global: { headers: { Authorization: `Bearer ${token}` } },
   });
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser();
-  if (error || !user) return null;
+  const user = await getUserSafe(supabase);
+  if (!user) return null;
   return user;
 }
 
@@ -165,13 +191,16 @@ export async function POST(request: Request) {
   const errors: string[] = [];
   let totalRows = 0;
   let newInserted = 0;
-  let skippedDuplicates = 0;
+  let updatedRows = 0;
+  let skippedEmptyEmail = 0;
 
   try {
     const user = await verifyRequestUser(request);
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    console.log("Syncing TESTIMONIAL sheet:", SHEET_ID, "Tab:", TAB_NAME);
 
     const res = await fetch(SHEET_GVIZ_URL, { next: { revalidate: 0 } });
     if (!res.ok) {
@@ -180,7 +209,8 @@ export async function POST(request: Request) {
           error: `Failed to fetch sheet (${res.status})`,
           total_rows: 0,
           new_inserted: 0,
-          skipped_duplicates: 0,
+          updated_rows: 0,
+          skipped_empty_email: 0,
           errors: [],
         },
         { status: 502 },
@@ -198,7 +228,8 @@ export async function POST(request: Request) {
           error: msg,
           total_rows: 0,
           new_inserted: 0,
-          skipped_duplicates: 0,
+          updated_rows: 0,
+          skipped_empty_email: 0,
           errors: [msg],
         },
         { status: 422 },
@@ -213,7 +244,8 @@ export async function POST(request: Request) {
           error: msg,
           total_rows: 0,
           new_inserted: 0,
-          skipped_duplicates: 0,
+          updated_rows: 0,
+          skipped_empty_email: 0,
           errors: [msg],
         },
         { status: 422 },
@@ -225,61 +257,58 @@ export async function POST(request: Request) {
       return NextResponse.json({
         total_rows: 0,
         new_inserted: 0,
-        skipped_duplicates: 0,
+        updated_rows: 0,
+        skipped_empty_email: 0,
         errors: [],
       });
     }
 
-    const dataRows = rows.slice(1);
+    /** Range `A1956:Z` returns rows starting at sheet row 1956 (no separate header skip). */
+    const dataRows = rows;
     totalRows = dataRows.length;
 
     const supabase = createSupabaseAdmin();
-    const insertedIds: string[] = [];
+    const newIdsForAssessment: string[] = [];
 
     for (let idx = 0; idx < dataRows.length; idx++) {
       const row = dataRows[idx];
-      const sheetRowNum = idx + 2;
+      const sheetRowNum = RANGE_FIRST_ROW + idx;
       const c = row.c ?? [];
 
       const emailRaw = cellToString(c[1] ?? null).trim();
       if (!emailRaw) {
+        skippedEmptyEmail++;
         continue;
       }
+
+      const emailNormalized = emailRaw.toLowerCase();
+      const payload = rowFromSheetCells(c, emailNormalized);
 
       const { data: existing } = await supabase
         .from("candidates")
         .select("id")
-        .ilike("email", escapeILikeExact(emailRaw))
+        .ilike("email", escapeILikeExact(emailRaw.trim()))
         .maybeSingle();
 
       if (existing?.id) {
-        skippedDuplicates++;
+        const { created_at: _omitCreated, ...updateFields } = payload;
+        const { error: upErr } = await supabase
+          .from("candidates")
+          .update(updateFields)
+          .eq("id", existing.id);
+
+        if (upErr) {
+          errors.push(`Row ${sheetRowNum}: ${upErr.message}`);
+          continue;
+        }
+        updatedRows++;
         continue;
       }
 
-      const form_filled_date = cellToIsoTimestamp(c[0] ?? null);
+      const { created_at, ...restPayload } = payload;
       const insertRow = {
-        form_filled_date: form_filled_date ?? new Date().toISOString(),
-        email: emailRaw,
-        full_name: cellToString(c[2] ?? null) || null,
-        whatsapp_number: cellToString(c[3] ?? null) || null,
-        role_before_program: cellToString(c[4] ?? null) || null,
-        salary_before_program: cellToString(c[5] ?? null) || null,
-        primary_goal: cellToString(c[6] ?? null) || null,
-        achievement_type: cellToString(c[7] ?? null) || null,
-        achievement_title: cellToString(c[8] ?? null) || null,
-        achieved_on_date: cellToDateOnly(c[9] ?? null),
-        program_joined_date: cellToDateOnly(c[10] ?? null),
-        quantified_result: cellToString(c[11] ?? null) || null,
-        skills_modules_helped: cellToString(c[12] ?? null) || null,
-        how_program_helped: cellToString(c[13] ?? null) || null,
-        proof_document_url: cellToString(c[14] ?? null) || null,
-        proof_description: cellToString(c[15] ?? null) || null,
-        linkedin_url: cellToString(c[16] ?? null) || null,
-        instagram_url: cellToString(c[17] ?? null) || null,
-        declaration_accepted: declarationFromCell(c[18] ?? null),
-        poc: cellToString(c[19] ?? null) || null,
-        remarks: cellToString(c[20] ?? null) || null,
+        ...restPayload,
+        ...(created_at ? { created_at } : {}),
         eligibility_status: "pending_review" as const,
         congratulation_call_pending: false,
       };
@@ -296,26 +325,28 @@ export async function POST(request: Request) {
       }
 
       if (inserted?.id) {
-        insertedIds.push(inserted.id);
+        newIdsForAssessment.push(inserted.id);
         newInserted++;
       }
     }
 
-    for (let i = 0; i < insertedIds.length; i++) {
-      const id = insertedIds[i];
+    for (let i = 0; i < newIdsForAssessment.length; i++) {
+      const id = newIdsForAssessment[i];
       const result = await runAssessEligibilityAndPersist(supabase, id);
       if (!result.ok) {
         errors.push(`Assessment ${id}: ${result.error}`);
       }
-      if (i < insertedIds.length - 1) {
+      if (i < newIdsForAssessment.length - 1) {
         await sleep(500);
       }
     }
 
+    // UI lists testimonial candidates by created_at DESC so the newest sheet rows appear first after sync.
     return NextResponse.json({
       total_rows: totalRows,
       new_inserted: newInserted,
-      skipped_duplicates: skippedDuplicates,
+      updated_rows: updatedRows,
+      skipped_empty_email: skippedEmptyEmail,
       errors,
     });
   } catch (e) {
@@ -326,7 +357,8 @@ export async function POST(request: Request) {
         error: msg,
         total_rows: totalRows,
         new_inserted: newInserted,
-        skipped_duplicates: skippedDuplicates,
+        updated_rows: updatedRows,
+        skipped_empty_email: skippedEmptyEmail,
         errors,
       },
       { status: 500 },

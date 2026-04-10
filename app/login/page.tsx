@@ -1,7 +1,7 @@
 "use client";
 
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
-import { Loader2, X } from "lucide-react";
+import { Eye, EyeOff, Loader2, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import {
   type FormEvent,
@@ -145,9 +145,17 @@ function mapAuthError(message: string): string {
 }
 
 export default function LoginPage() {
+  const [authView, setAuthView] = useState<"sign_in" | "forgot_password">(
+    "sign_in",
+  );
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
+  const [resetEmail, setResetEmail] = useState("");
+  const [resetError, setResetError] = useState("");
+  const [resetSuccess, setResetSuccess] = useState("");
+  const [resetLoading, setResetLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [cooldownRemaining, setCooldownRemaining] = useState(0);
   const [rightVisible, setRightVisible] = useState(false);
@@ -223,6 +231,30 @@ export default function LoginPage() {
     }
     router.push("/dashboard");
     router.refresh();
+  }
+
+  async function handleResetPassword(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setResetError("");
+    setResetSuccess("");
+    const targetEmail = resetEmail.trim();
+    if (!targetEmail) {
+      setResetError("Please enter your email.");
+      return;
+    }
+    setResetLoading(true);
+    const { error: resetErr } = await supabase.auth.resetPasswordForEmail(
+      targetEmail,
+      {
+        redirectTo: `${window.location.origin}/login`,
+      },
+    );
+    setResetLoading(false);
+    if (resetErr) {
+      setResetError(mapAuthError(resetErr.message));
+      return;
+    }
+    setResetSuccess("Check your email for a reset link");
   }
 
   const runSupportLookup = useCallback(async () => {
@@ -369,96 +401,203 @@ export default function LoginPage() {
             <div className="flex justify-center">
               <LogoOnLight className="h-10 w-10" />
             </div>
-            <h2 className="mt-4 text-center text-2xl font-semibold text-[#1d1d1f]">
-              Welcome back
-            </h2>
-            <p className="mt-1 text-center text-sm text-[#6e6e73]">
-              Sign in to your account
-            </p>
-
-            <form onSubmit={handleSubmit} className="mt-8">
-              <div>
-                <label
-                  htmlFor="login-email"
-                  className="mb-1.5 block text-xs font-medium text-[#1d1d1f]"
-                >
-                  Email address
-                </label>
-                <input
-                  id="login-email"
-                  name="email"
-                  type="email"
-                  autoComplete="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@company.com"
-                  className={inputClass}
-                />
-              </div>
-
-              <div className="mt-5">
-                <label
-                  htmlFor="login-password"
-                  className="mb-1.5 block text-xs font-medium text-[#1d1d1f]"
-                >
-                  Password
-                </label>
-                <input
-                  id="login-password"
-                  name="password"
-                  type="password"
-                  autoComplete="current-password"
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className={inputClass}
-                />
-              </div>
-
-              {error ? (
-                <p
-                  className="mt-3 rounded-lg bg-[#fef2f2] px-3 py-2 text-xs text-[#ef4444]"
-                  role="alert"
-                >
-                  {error}
+            {authView === "sign_in" ? (
+              <>
+                <h2 className="mt-4 text-center text-2xl font-semibold text-[#1d1d1f]">
+                  Welcome back
+                </h2>
+                <p className="mt-1 text-center text-sm text-[#6e6e73]">
+                  Sign in to your account
                 </p>
-              ) : null}
 
-              <button
-                type="submit"
-                disabled={submitDisabled}
-                className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-[#1d1d1f] py-3 text-sm font-medium text-white transition-all duration-200 hover:bg-[#2d2d2f] disabled:cursor-not-allowed disabled:opacity-70"
-              >
-                {loading ? (
-                  <>
-                    <Loader2
-                      className="h-4 w-4 shrink-0 animate-spin"
-                      aria-hidden
+                <form onSubmit={handleSubmit} className="mt-8">
+                  <div>
+                    <label
+                      htmlFor="login-email"
+                      className="mb-1.5 block text-xs font-medium text-[#1d1d1f]"
+                    >
+                      Email address
+                    </label>
+                    <input
+                      id="login-email"
+                      name="email"
+                      type="email"
+                      autoComplete="email"
+                      required
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="you@company.com"
+                      className={inputClass}
                     />
-                    Signing in...
-                  </>
-                ) : cooldownRemaining > 0 ? (
-                  `Try again in ${cooldownRemaining}s...`
-                ) : (
-                  "Sign in"
-                )}
-              </button>
-            </form>
+                  </div>
 
-            <button
-              type="button"
-              onClick={() => {
-                setLookupModalOpen(true);
-                setLookupPayload(null);
-                setLookupNotFound(false);
-                setLookupMultiPhone(false);
-              }}
-              className="mt-3 flex w-full items-center justify-center rounded-xl border-2 border-[#1d1d1f] bg-white py-3 text-sm font-medium text-[#1d1d1f] transition-colors hover:bg-[#fafafa]"
-            >
-              🔍 Candidate Lookup
-            </button>
+                  <div className="mt-5">
+                    <label
+                      htmlFor="login-password"
+                      className="mb-1.5 block text-xs font-medium text-[#1d1d1f]"
+                    >
+                      Password
+                    </label>
+                    <div className="relative">
+                      <input
+                        id="login-password"
+                        name="password"
+                        type={showPassword ? "text" : "password"}
+                        autoComplete="current-password"
+                        required
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        placeholder="••••••••"
+                        className={`${inputClass} pr-11`}
+                      />
+                      <button
+                        type="button"
+                        aria-label={
+                          showPassword ? "Hide password" : "Show password"
+                        }
+                        onClick={() => setShowPassword((v) => !v)}
+                        className="absolute inset-y-0 right-0 flex w-11 items-center justify-center text-[#6e6e73] hover:text-[#1d1d1f]"
+                      >
+                        {showPassword ? (
+                          <EyeOff className="h-4 w-4" aria-hidden />
+                        ) : (
+                          <Eye className="h-4 w-4" aria-hidden />
+                        )}
+                      </button>
+                    </div>
+                    <div className="mt-2 flex justify-end">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAuthView("forgot_password");
+                          setResetEmail(email.trim());
+                          setResetError("");
+                          setResetSuccess("");
+                        }}
+                        className="text-xs text-[#8e8e93] hover:text-[#6e6e73]"
+                      >
+                        Forgot password?
+                      </button>
+                    </div>
+                  </div>
+
+                  {error ? (
+                    <p
+                      className="mt-3 rounded-lg bg-[#fef2f2] px-3 py-2 text-xs text-[#ef4444]"
+                      role="alert"
+                    >
+                      {error}
+                    </p>
+                  ) : null}
+
+                  <button
+                    type="submit"
+                    disabled={submitDisabled}
+                    className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-[#1d1d1f] py-3 text-sm font-medium text-white transition-all duration-200 hover:bg-[#2d2d2f] disabled:cursor-not-allowed disabled:opacity-70"
+                  >
+                    {loading ? (
+                      <>
+                        <Loader2
+                          className="h-4 w-4 shrink-0 animate-spin"
+                          aria-hidden
+                        />
+                        Signing in...
+                      </>
+                    ) : cooldownRemaining > 0 ? (
+                      `Try again in ${cooldownRemaining}s...`
+                    ) : (
+                      "Sign in"
+                    )}
+                  </button>
+                </form>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLookupModalOpen(true);
+                    setLookupPayload(null);
+                    setLookupNotFound(false);
+                    setLookupMultiPhone(false);
+                  }}
+                  className="mt-3 flex w-full items-center justify-center rounded-xl border-2 border-[#1d1d1f] bg-white py-3 text-sm font-medium text-[#1d1d1f] transition-colors hover:bg-[#fafafa]"
+                >
+                  🔍 Candidate Lookup
+                </button>
+              </>
+            ) : (
+              <>
+                <h2 className="mt-4 text-center text-2xl font-semibold text-[#1d1d1f]">
+                  Reset your password
+                </h2>
+                <p className="mt-1 text-center text-sm text-[#6e6e73]">
+                  Enter your email and we&apos;ll send you a reset link
+                </p>
+
+                <form onSubmit={handleResetPassword} className="mt-8">
+                  <label
+                    htmlFor="reset-email"
+                    className="mb-1.5 block text-xs font-medium text-[#1d1d1f]"
+                  >
+                    Email address
+                  </label>
+                  <input
+                    id="reset-email"
+                    name="reset-email"
+                    type="email"
+                    autoComplete="email"
+                    required
+                    value={resetEmail}
+                    onChange={(e) => setResetEmail(e.target.value)}
+                    placeholder="you@company.com"
+                    className={inputClass}
+                  />
+
+                  {resetError ? (
+                    <p
+                      className="mt-3 rounded-lg bg-[#fef2f2] px-3 py-2 text-xs text-[#ef4444]"
+                      role="alert"
+                    >
+                      {resetError}
+                    </p>
+                  ) : null}
+                  {resetSuccess ? (
+                    <p className="mt-3 rounded-lg bg-[#f0fdf4] px-3 py-2 text-xs text-[#15803d]">
+                      {resetSuccess}
+                    </p>
+                  ) : null}
+
+                  <button
+                    type="submit"
+                    disabled={resetLoading}
+                    className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-[#1d1d1f] py-3 text-sm font-medium text-white transition-all duration-200 hover:bg-[#2d2d2f] disabled:cursor-not-allowed disabled:opacity-70"
+                  >
+                    {resetLoading ? (
+                      <>
+                        <Loader2
+                          className="h-4 w-4 shrink-0 animate-spin"
+                          aria-hidden
+                        />
+                        Sending...
+                      </>
+                    ) : (
+                      "Send reset link"
+                    )}
+                  </button>
+                </form>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAuthView("sign_in");
+                    setResetError("");
+                    setResetSuccess("");
+                  }}
+                  className="mt-4 text-sm text-[#6e6e73] hover:text-[#1d1d1f]"
+                >
+                  ← Back to sign in
+                </button>
+              </>
+            )}
 
             <p className="mt-8 text-center text-xs text-[#aeaeb2]">
               © 2026 House of Ed-Tech. All rights reserved.

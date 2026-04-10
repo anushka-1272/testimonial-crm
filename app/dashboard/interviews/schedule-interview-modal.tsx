@@ -11,12 +11,14 @@ import {
   interviewLanguageForSubmit,
   type InterviewLangPreset,
 } from "@/lib/interview-language";
+import { getUserSafe } from "@/lib/supabase-auth";
 
 export type ScheduleCandidate = {
   id: string;
   full_name: string | null;
   email: string;
   interview_type?: "testimonial" | "project" | null;
+  poc_assigned?: string | null;
 };
 
 export type ScheduleProjectCandidate = {
@@ -84,6 +86,7 @@ export function ScheduleInterviewModal({
       return;
     }
     if (!candidate) return;
+    setPoc(candidate.poc_assigned?.trim() ?? "");
     const t = candidate.interview_type;
     if (t === "testimonial" || t === "project") {
       setInterviewType(t);
@@ -94,6 +97,7 @@ export function ScheduleInterviewModal({
     open,
     candidate?.id,
     candidate?.interview_type,
+    candidate?.poc_assigned,
     projectCandidate?.id,
     projectCandidate?.poc_assigned,
   ]);
@@ -141,13 +145,13 @@ export function ScheduleInterviewModal({
             candidate_id: candidate!.id,
             scheduled_date: localIso,
             interviewer,
-            zoom_link: zoomLink.trim() || null,
+            zoom_link: null,
             language: languageDisplay,
             interview_language: langSubmit.value,
             poc: poc.trim() || null,
             remarks: remarks.trim() || null,
             interview_type: interviewType,
-            interview_status: "scheduled" as const,
+            interview_status: "draft" as const,
             invitation_sent: false,
           };
 
@@ -171,24 +175,55 @@ export function ScheduleInterviewModal({
         : candidate!.full_name?.trim() || candidate!.email || "Candidate";
       const typeWord =
         interviewType === "testimonial" ? "Testimonial" : "Project";
-      const { data: authSch } = await supabase.auth.getUser();
-      if (authSch.user) {
-        await logActivity({
-          supabase,
-          user: authSch.user,
-          action_type: "interviews",
-          entity_type: "interview",
-          entity_id: row.id,
-          candidate_name: candDisplay,
-          description: `Scheduled ${typeWord} interview for ${candDisplay} with ${interviewer} on ${dateLabel}`,
-          metadata: { time: timeLabel, project: isProject },
-        });
+      const authUser = await getUserSafe(supabase);
+      const actorName =
+        authUser?.user_metadata &&
+        typeof authUser.user_metadata.name === "string" &&
+        authUser.user_metadata.name.trim()
+          ? authUser.user_metadata.name.trim()
+          : (authUser?.email ?? "POC");
+
+      if (authUser) {
+        if (isProject) {
+          await logActivity({
+            supabase,
+            user: authUser,
+            action_type: "interviews",
+            entity_type: "interview",
+            entity_id: row.id,
+            candidate_name: candDisplay,
+            description: `Scheduled ${typeWord} interview for ${candDisplay} with ${interviewer} on ${dateLabel}`,
+            metadata: { time: timeLabel, project: true },
+          });
+        } else {
+          await logActivity({
+            supabase,
+            user: authUser,
+            action_type: "interviews",
+            entity_type: "interview",
+            entity_id: row.id,
+            candidate_name: candDisplay,
+            description: `POC ${actorName} drafted interview for ${candDisplay} on ${dateLabel}`,
+            metadata: { time: timeLabel, project: false },
+          });
+        }
       }
 
-      const toEmail = isProject ? projectCandidate!.email : candidate!.email;
-      const toName = isProject
-        ? projectCandidate!.project_title
-        : candidate!.full_name;
+      if (!isProject) {
+        setDate("");
+        setTime("");
+        setPoc("");
+        setRemarks("");
+        setLangPreset("english");
+        setOtherLanguageText("");
+        onCreated();
+        onClose();
+        setSubmitting(false);
+        return;
+      }
+
+      const toEmail = projectCandidate!.email;
+      const toName = projectCandidate!.project_title;
 
       const emailRes = await fetch("/api/send-email", {
         method: "POST",
@@ -370,25 +405,24 @@ export function ScheduleInterviewModal({
             ) : null}
           </div>
 
-          <label className="block text-sm">
-            <span className={lab}>Zoom link</span>
-            <input
-              type="url"
-              className={inp}
-              placeholder="https://..."
-              value={zoomLink}
-              onChange={(e) => setZoomLink(e.target.value)}
-            />
-          </label>
+          {isProject ? (
+            <label className="block text-sm">
+              <span className={lab}>Zoom link</span>
+              <input
+                type="url"
+                className={inp}
+                placeholder="https://..."
+                value={zoomLink}
+                onChange={(e) => setZoomLink(e.target.value)}
+              />
+            </label>
+          ) : null}
 
           <label className="block text-sm">
-            <span className={lab}>POC</span>
-            <input
-              type="text"
-              className={inp}
-              value={poc}
-              onChange={(e) => setPoc(e.target.value)}
-            />
+            <span className={lab}>POC (assigned)</span>
+            <div className="mt-1 rounded-xl border border-[#e5e5e5] bg-[#f5f5f7] px-3 py-2.5 text-sm text-[#6e6e73]">
+              {poc || "—"}
+            </div>
           </label>
 
           <label className="block text-sm">
@@ -414,7 +448,11 @@ export function ScheduleInterviewModal({
               disabled={submitting}
               className="rounded-xl bg-[#1d1d1f] px-4 py-2 text-sm font-medium text-white transition-all hover:bg-[#2d2d2f] disabled:opacity-50"
             >
-              {submitting ? "Saving…" : "Create & send confirmation"}
+              {submitting
+                ? "Saving…"
+                : isProject
+                  ? "Create & send confirmation"
+                  : "Save as Draft"}
             </button>
           </div>
         </form>

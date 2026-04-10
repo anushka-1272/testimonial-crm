@@ -5,6 +5,7 @@ import {
   BarChart2,
   Calendar,
   Film,
+  FolderKanban,
   History,
   LayoutDashboard,
   Package,
@@ -15,7 +16,10 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
+import { AccessControlProvider } from "@/components/access-control-context";
 import { LogoOnDark } from "@/components/brand-logo";
+import { canEditScope, type AccessScope, type TeamRole } from "@/lib/access-control";
+import { getUserSafe } from "@/lib/supabase-auth";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 
 const NAV = [
@@ -39,9 +43,17 @@ const NAV = [
   },
   {
     href: "/dashboard/interviews",
-    label: "Interviews",
+    label: "Testimonial Interviews",
     icon: Calendar,
-    isActive: (p: string) => p.startsWith("/dashboard/interviews"),
+    isActive: (p: string) =>
+      p.startsWith("/dashboard/interviews") &&
+      !p.startsWith("/dashboard/project-interviews"),
+  },
+  {
+    href: "/dashboard/project-interviews",
+    label: "Project Interviews",
+    icon: FolderKanban,
+    isActive: (p: string) => p.startsWith("/dashboard/project-interviews"),
   },
   {
     href: "/dashboard/dispatch",
@@ -62,7 +74,7 @@ const NAV = [
     isActive: (p: string) => p.startsWith("/dashboard/post-production"),
   },
   {
-    href: "/dashboard/settings/criteria",
+    href: "/dashboard/settings",
     label: "Settings",
     icon: Settings,
     isActive: (p: string) => p.startsWith("/dashboard/settings"),
@@ -101,25 +113,73 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
 
   const [userLabel, setUserLabel] = useState("");
   const [userEmail, setUserEmail] = useState<string | undefined>();
+  const [role, setRole] = useState<TeamRole>("admin");
+
+  function scopeFromPath(path: string): AccessScope {
+    if (path.startsWith("/dashboard/analytics")) return "analytics";
+    if (path.startsWith("/dashboard/eligibility")) return "eligibility";
+    if (path.startsWith("/dashboard/project-interviews")) return "interviews";
+    if (path.startsWith("/dashboard/interviews")) return "interviews";
+    if (path.startsWith("/dashboard/dispatch")) return "dispatch";
+    if (path.startsWith("/dashboard/activity")) return "activity";
+    if (path.startsWith("/dashboard/post-production")) return "post_production";
+    if (path.startsWith("/dashboard/settings")) return "settings";
+    return "dashboard";
+  }
 
   useEffect(() => {
     if (!supabase) return;
-    void supabase.auth.getUser().then(({ data: { user } }) => {
-      if (!user) return;
+    const ctrl = new AbortController();
+    void (async () => {
+      const user = await getUserSafe(supabase);
+      if (ctrl.signal.aborted || !user) return;
+      await supabase
+        .from("team_members")
+        .update({ user_id: user.id, status: "active" })
+        .eq("email", (user.email ?? "").toLowerCase())
+        .neq("status", "removed");
       setUserEmail(user.email ?? undefined);
       setUserLabel(sidebarNameFromEmail(user.email ?? undefined));
-    });
+      const { data: tm } = await supabase
+        .from("team_members")
+        .select("role, status")
+        .eq("user_id", user.id)
+        .neq("status", "removed")
+        .maybeSingle();
+      if (!ctrl.signal.aborted && tm?.role) {
+        setRole(tm.role as TeamRole);
+      }
+    })();
     const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
+      if (ctrl.signal.aborted) return;
       const u = session?.user;
       if (!u) {
         setUserLabel("");
         setUserEmail(undefined);
+        setRole("admin");
         return;
       }
       setUserEmail(u.email ?? undefined);
       setUserLabel(sidebarNameFromEmail(u.email ?? undefined));
+      void (async () => {
+        await supabase
+          .from("team_members")
+          .update({ user_id: u.id, status: "active" })
+          .eq("email", (u.email ?? "").toLowerCase())
+          .neq("status", "removed");
+        const { data: tm } = await supabase
+          .from("team_members")
+          .select("role, status")
+          .eq("user_id", u.id)
+          .neq("status", "removed")
+          .maybeSingle();
+        if (!ctrl.signal.aborted && tm?.role) {
+          setRole(tm.role as TeamRole);
+        }
+      })();
     });
     return () => {
+      ctrl.abort();
       sub.subscription.unsubscribe();
     };
   }, [supabase]);
@@ -132,9 +192,16 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   }
 
   const initials = userInitials(userLabel, userEmail);
+  const currentScope = scopeFromPath(pathname);
+  const canEditCurrentPage = canEditScope(role, currentScope);
+  const canManageTeam = role === "admin";
+  const showViewOnlyBadge = !canEditCurrentPage;
 
   return (
-    <div className="flex min-h-screen bg-[#f5f5f7] font-sans">
+    <AccessControlProvider
+      value={{ role, canManageTeam, canEditCurrentPage, showViewOnlyBadge }}
+    >
+      <div className="flex min-h-screen bg-[#f5f5f7] font-sans">
       <aside className="fixed left-0 top-0 z-40 flex h-screen w-64 flex-col bg-[#0a0a0f]">
         <div className="px-4 py-5">
           <div className="flex items-center gap-2.5">
@@ -196,6 +263,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
       <div className="ml-64 flex min-h-screen flex-1 flex-col bg-[#f5f5f7]">
         {children}
       </div>
-    </div>
+      </div>
+    </AccessControlProvider>
   );
 }

@@ -1,10 +1,11 @@
 "use client";
 
 import { format, formatDistanceToNow, parseISO } from "date-fns";
-import { Bell, ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 
+import { getUserSafe } from "@/lib/supabase-auth";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 
 type Period = "total" | "monthly" | "weekly";
@@ -94,14 +95,21 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    void supabase.auth.getUser().then(({ data: { user } }) => {
-      if (user) setGreetName(greetNameFromEmail(user.email ?? undefined));
-    });
+    const ctrl = new AbortController();
+    void (async () => {
+      const user = await getUserSafe(supabase);
+      if (ctrl.signal.aborted || !user) return;
+      setGreetName(greetNameFromEmail(user.email ?? undefined));
+    })();
     const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
+      if (ctrl.signal.aborted) return;
       const u = session?.user;
       if (u) setGreetName(greetNameFromEmail(u.email ?? undefined));
     });
-    return () => sub.subscription.unsubscribe();
+    return () => {
+      ctrl.abort();
+      sub.subscription.unsubscribe();
+    };
   }, [supabase]);
 
   const fetchStats = useCallback(async () => {
@@ -276,13 +284,6 @@ export default function DashboardPage() {
               Here&apos;s what&apos;s happening today
             </p>
           </div>
-          <button
-            type="button"
-            className="mt-1 flex h-10 w-10 items-center justify-center rounded-full bg-white text-[#6e6e73] shadow-[0_2px_8px_rgba(0,0,0,0.06)] transition-all duration-200 ease-in-out hover:scale-[1.02]"
-            aria-label="Notifications"
-          >
-            <Bell className="h-[18px] w-[18px]" strokeWidth={1.5} />
-          </button>
         </div>
       </header>
 

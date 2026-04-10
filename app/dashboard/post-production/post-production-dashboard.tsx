@@ -4,7 +4,10 @@ import { format, parseISO } from "date-fns";
 import { Loader2, Pencil, Plus } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { useAccessControl } from "@/components/access-control-context";
 import { CandidateDetailModal } from "@/components/candidate-detail-modal";
+import { ProjectCandidateDetailModal } from "@/components/project-candidate-detail-modal";
+import type { ProjectCandidateRow } from "@/app/dashboard/interviews/types";
 import { logActivity } from "@/lib/activity-logger";
 import {
   effectiveInterviewLanguage,
@@ -13,17 +16,81 @@ import {
   matchesInterviewLanguageFilter,
   type InterviewLanguageFilter,
 } from "@/lib/interview-language";
+import { getUserSafe } from "@/lib/supabase-auth";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 
 const TEAM = ["Harika", "Anushka", "Gargi", "Mudit"] as const;
 
 type YoutubeStatus = "private" | "unlisted" | "live";
 type ReviewState = "done" | "not_done";
+type SourceType = "testimonial" | "project";
+
+const DOMAIN_FILTER_OPTIONS = [
+  "Software Engineering",
+  "Data (Analyst / Scientist / BA)",
+  "Educators / Teaching",
+  "Finance",
+  "Marketing",
+  "Sales",
+  "Consulting",
+  "Other",
+] as const;
+
+type DomainFilterValue = (typeof DOMAIN_FILTER_OPTIONS)[number] | "all";
+
+function testimonialDomainBucket(
+  raw: string | null | undefined,
+): DomainFilterValue {
+  const t = (raw ?? "").trim();
+  if (!t) return "Other";
+  const d = t.toLowerCase();
+  const exact = DOMAIN_FILTER_OPTIONS.find((o) => o.toLowerCase() === d);
+  if (exact) return exact;
+  if (d === "educators" || d === "teaching") {
+    return "Educators / Teaching";
+  }
+  if (
+    d.includes("software") ||
+    d.includes("engineering") ||
+    d.includes("developer") ||
+    d.includes("sde")
+  ) {
+    return "Software Engineering";
+  }
+  if (
+    d.includes("data") ||
+    d.includes("analyst") ||
+    d.includes("scientist") ||
+    /\bba\b/.test(d)
+  ) {
+    return "Data (Analyst / Scientist / BA)";
+  }
+  if (
+    d.includes("educator") ||
+    d.includes("professor") ||
+    d.includes("faculty") ||
+    d.includes("teach") ||
+    d.includes("tutor") ||
+    d.includes("instructor") ||
+    d.includes("education")
+  ) {
+    return "Educators / Teaching";
+  }
+  if (d.includes("finance") || d.includes("banking") || d.includes("accounting")) {
+    return "Finance";
+  }
+  if (d.includes("market")) return "Marketing";
+  if (d.includes("sales")) return "Sales";
+  if (d.includes("consult")) return "Consulting";
+  return "Other";
+}
 
 export type PostProductionRow = {
   id: string;
   created_at: string;
   candidate_id: string | null;
+  project_candidate_id: string | null;
+  source_type: SourceType;
   candidate_name: string | null;
   raw_video_link: string | null;
   edited_video_link: string | null;
@@ -39,12 +106,64 @@ export type PostProductionRow = {
   cx_mail_sent_at: string | null;
   updated_at: string;
   interview_language: string | null;
+  candidates?: {
+    domain: string | null;
+    job_role: string | null;
+  } | null;
+  project_candidates?: ProjectCandidateRow | ProjectCandidateRow[] | null;
 };
 
 type LinkField = "raw_video_link" | "edited_video_link" | "youtube_link";
 
 const PP_SELECT =
-  "id, created_at, candidate_id, candidate_name, raw_video_link, edited_video_link, pre_edit_review, pre_edit_review_by, post_edit_review, post_edit_review_by, edited_by, youtube_link, youtube_status, summary, cx_mail_sent, cx_mail_sent_at, updated_at, interview_language";
+  "id, created_at, candidate_id, project_candidate_id, source_type, candidate_name, raw_video_link, edited_video_link, pre_edit_review, pre_edit_review_by, post_edit_review, post_edit_review_by, edited_by, youtube_link, youtube_status, summary, cx_mail_sent, cx_mail_sent_at, updated_at, interview_language, candidates ( domain, job_role ), project_candidates ( id, email, full_name, whatsapp_number, project_title, problem_statement, target_user, ai_usage, demo_link, status, poc_assigned, poc_assigned_at, interview_type )";
+
+function normalizePostProductionRow(
+  r: Record<string, unknown>,
+): PostProductionRow {
+  const st = r.source_type;
+  const source_type: SourceType =
+    st === "project" ? "project" : "testimonial";
+  return {
+    ...r,
+    source_type,
+    project_candidate_id:
+      (r.project_candidate_id as string | null | undefined) ?? null,
+  } as PostProductionRow;
+}
+
+function formatInterviewDateLabel(iso: string | null): string {
+  if (!iso?.trim()) return "—";
+  try {
+    return format(parseISO(iso.trim()), "MMM d, yyyy");
+  } catch {
+    return "—";
+  }
+}
+
+function sourceBadge(sourceType: SourceType) {
+  const label = sourceType === "project" ? "Project" : "Testimonial";
+  if (sourceType === "project") {
+    return (
+      <span className="inline-flex rounded-full bg-[#eff6ff] px-2.5 py-1 text-xs font-medium text-[#2563eb]">
+        {label}
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex rounded-full bg-[#f0fdf4] px-2.5 py-1 text-xs font-medium text-[#16a34a]">
+      {label}
+    </span>
+  );
+}
+
+function projectCandidateFromRow(
+  row: PostProductionRow,
+): ProjectCandidateRow | null {
+  const p = row.project_candidates;
+  const one = Array.isArray(p) ? p[0] : p;
+  return one ?? null;
+}
 
 const cardChrome =
   "rounded-2xl bg-white shadow-[0_4px_16px_rgba(0,0,0,0.08)] border border-[#f0f0f0]";
@@ -71,13 +190,36 @@ function youtubeStatusBadge(status: YoutubeStatus) {
   );
 }
 
-type CompletedPick = {
+type TestimonialPick = {
   candidate_id: string;
   full_name: string | null;
   email: string;
+  interview_date: string | null;
+  interviewer: string;
 };
 
+type ProjectPick = {
+  project_candidate_id: string;
+  display_name: string;
+  email: string;
+  project_title: string | null;
+  interview_date: string | null;
+};
+
+type AddSelection =
+  | { kind: "testimonial"; pick: TestimonialPick }
+  | { kind: "project"; pick: ProjectPick };
+
+function escapeCsvCell(v: unknown): string {
+  const s = String(v ?? "");
+  if (s.includes("\"") || s.includes(",") || s.includes("\n")) {
+    return `"${s.replace(/"/g, "\"\"")}"`;
+  }
+  return s;
+}
+
 export function PostProductionDashboard() {
+  const { canEditCurrentPage, showViewOnlyBadge } = useAccessControl();
   const supabase = useMemo(() => {
     try {
       return createBrowserSupabaseClient();
@@ -95,17 +237,28 @@ export function PostProductionDashboard() {
   const [ytFilter, setYtFilter] = useState<YoutubeStatus | "all">("all");
   const [preFilter, setPreFilter] = useState<ReviewState | "all">("all");
   const [postFilter, setPostFilter] = useState<ReviewState | "all">("all");
+  const [sourceFilter, setSourceFilter] = useState<SourceType | "all">("all");
+  const [domainFilter, setDomainFilter] = useState<DomainFilterValue>("all");
+  const [jobRoleFilter, setJobRoleFilter] = useState<string>("all");
 
   const [detailCandidateId, setDetailCandidateId] = useState<string | null>(
     null,
   );
+  const [projectDetailCandidate, setProjectDetailCandidate] =
+    useState<ProjectCandidateRow | null>(null);
   const [summaryModalText, setSummaryModalText] = useState<string | null>(null);
 
   const [addOpen, setAddOpen] = useState(false);
+  const [addTab, setAddTab] = useState<"testimonial" | "project">(
+    "testimonial",
+  );
   const [addSearch, setAddSearch] = useState("");
-  const [completedPicks, setCompletedPicks] = useState<CompletedPick[]>([]);
+  const [testimonialPicks, setTestimonialPicks] = useState<TestimonialPick[]>(
+    [],
+  );
+  const [projectPicks, setProjectPicks] = useState<ProjectPick[]>([]);
   const [addLoading, setAddLoading] = useState(false);
-  const [selectedAdd, setSelectedAdd] = useState<CompletedPick | null>(null);
+  const [selectedAdd, setSelectedAdd] = useState<AddSelection | null>(null);
   const [addSubmitting, setAddSubmitting] = useState(false);
 
   const [linkEdit, setLinkEdit] = useState<{
@@ -131,7 +284,11 @@ export function PostProductionDashboard() {
       setError(e.message);
       return;
     }
-    setRows((data ?? []) as PostProductionRow[]);
+    setRows(
+      (data ?? []).map((row) =>
+        normalizePostProductionRow(row as Record<string, unknown>),
+      ),
+    );
     setError(null);
   }, [supabase]);
 
@@ -185,109 +342,359 @@ export function PostProductionDashboard() {
     return { total, prePending, postPending, live };
   }, [rows]);
 
+  const distinctJobRoles = useMemo(() => {
+    const set = new Set<string>();
+    for (const r of rows) {
+      if (r.source_type !== "testimonial") continue;
+      const c = r.candidates;
+      const one = Array.isArray(c) ? c[0] : c;
+      const jr = one?.job_role?.trim();
+      if (jr) set.add(jr);
+    }
+    return [...set].sort((a, b) => a.localeCompare(b));
+  }, [rows]);
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return rows.filter((r) => {
       const name = (r.candidate_name ?? "").toLowerCase();
       if (q && !name.includes(q)) return false;
+      if (sourceFilter !== "all" && r.source_type !== sourceFilter)
+        return false;
+      if (domainFilter !== "all") {
+        if (r.source_type === "testimonial") {
+          const c = r.candidates;
+          const one = Array.isArray(c) ? c[0] : c;
+          if (testimonialDomainBucket(one?.domain) !== domainFilter)
+            return false;
+        }
+      }
+      if (jobRoleFilter !== "all") {
+        if (r.source_type === "testimonial") {
+          const c = r.candidates;
+          const one = Array.isArray(c) ? c[0] : c;
+          const jr = one?.job_role?.trim() ?? "";
+          if (jr !== jobRoleFilter) return false;
+        }
+      }
       if (ytFilter !== "all" && r.youtube_status !== ytFilter) return false;
       if (preFilter !== "all" && r.pre_edit_review !== preFilter) return false;
       if (postFilter !== "all" && r.post_edit_review !== postFilter)
         return false;
       return true;
     });
-  }, [rows, search, ytFilter, preFilter, postFilter]);
+  }, [
+    rows,
+    search,
+    sourceFilter,
+    domainFilter,
+    jobRoleFilter,
+    ytFilter,
+    preFilter,
+    postFilter,
+  ]);
+
+  const exportCsv = useCallback(() => {
+    if (filtered.length === 0) return;
+    const headers = [
+      "Candidate Name",
+      "Source",
+      "Raw Video Link",
+      "Edited Video Link",
+      "Pre-Edit Review",
+      "Pre-Edit Review By",
+      "Post-Edit Review",
+      "Post-Edit Review By",
+      "Edited By",
+      "YouTube Link",
+      "YouTube Status",
+      "Language",
+      "Summary",
+      "CX Mail Sent",
+      "CX Mail Sent At",
+    ];
+    const body = filtered.map((r) =>
+      [
+        r.candidate_name ?? "",
+        r.source_type === "project" ? "Project" : "Testimonial",
+        r.raw_video_link ?? "",
+        r.edited_video_link ?? "",
+        r.pre_edit_review,
+        r.pre_edit_review_by ?? "",
+        r.post_edit_review,
+        r.post_edit_review_by ?? "",
+        r.edited_by ?? "",
+        r.youtube_link ?? "",
+        r.youtube_status,
+        r.interview_language ?? "",
+        r.summary ?? "",
+        r.cx_mail_sent ? "Yes" : "No",
+        r.cx_mail_sent_at ? format(parseISO(r.cx_mail_sent_at), "MMM d, yyyy h:mm a") : "",
+      ]
+        .map(escapeCsvCell)
+        .join(","),
+    );
+    const csv = [headers.map(escapeCsvCell).join(","), ...body].join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `post-production-${format(new Date(), "yyyy-MM-dd")}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [filtered]);
 
   const openAddModal = async () => {
     if (!supabase) return;
     setAddOpen(true);
+    setAddTab("testimonial");
     setAddSearch("");
     setSelectedAdd(null);
     setAddLoading(true);
-    const [{ data: inv }, { data: existing }] = await Promise.all([
-      supabase
-        .from("interviews")
-        .select("candidate_id, candidates ( id, full_name, email )")
-        .eq("interview_status", "completed"),
-      supabase.from("post_production").select("candidate_id"),
-    ]);
+    const [{ data: invT }, { data: invP }, { data: existing }] =
+      await Promise.all([
+        supabase
+          .from("interviews")
+          .select(
+            "candidate_id, completed_at, scheduled_date, interviewer, candidates ( id, full_name, email )",
+          )
+          .eq("interview_status", "completed"),
+        supabase
+          .from("project_interviews")
+          .select(
+            "project_candidate_id, completed_at, scheduled_date, project_candidates ( id, email, full_name, project_title )",
+          )
+          .eq("interview_status", "completed"),
+        supabase.from("post_production").select("candidate_id, project_candidate_id"),
+      ]);
     setAddLoading(false);
-    const inPost = new Set(
+
+    const inPostCand = new Set(
       (existing ?? [])
         .map((r) => r.candidate_id as string | null)
         .filter(Boolean) as string[],
     );
-    const map = new Map<string, CompletedPick>();
-    for (const row of inv ?? []) {
+    const inPostProj = new Set(
+      (existing ?? [])
+        .map((r) => r.project_candidate_id as string | null)
+        .filter(Boolean) as string[],
+    );
+
+    const tMap = new Map<string, TestimonialPick>();
+    for (const row of invT ?? []) {
       const r = row as {
         candidate_id: string;
+        completed_at: string | null;
+        scheduled_date: string | null;
+        interviewer: string | null;
         candidates:
           | { id: string; full_name: string | null; email: string }
           | { id: string; full_name: string | null; email: string }[]
           | null;
       };
       const cid = r.candidate_id;
-      if (!cid || inPost.has(cid)) continue;
+      if (!cid || inPostCand.has(cid)) continue;
       const c = r.candidates;
       const cand = Array.isArray(c) ? c[0] : c;
       if (!cand) continue;
-      map.set(cid, {
-        candidate_id: cid,
-        full_name: cand.full_name,
-        email: cand.email,
-      });
+      const dateIso =
+        r.completed_at?.trim() || r.scheduled_date?.trim() || null;
+      const interviewer = String(r.interviewer ?? "").trim() || "—";
+      const prev = tMap.get(cid);
+      if (
+        !prev ||
+        (dateIso &&
+          (!prev.interview_date || dateIso > prev.interview_date))
+      ) {
+        tMap.set(cid, {
+          candidate_id: cid,
+          full_name: cand.full_name,
+          email: cand.email,
+          interview_date: dateIso,
+          interviewer,
+        });
+      }
     }
-    setCompletedPicks([...map.values()]);
+    setTestimonialPicks([...tMap.values()]);
+
+    const pMap = new Map<string, ProjectPick>();
+    for (const row of invP ?? []) {
+      const r = row as {
+        project_candidate_id: string;
+        completed_at: string | null;
+        scheduled_date: string | null;
+        project_candidates:
+          | {
+              id: string;
+              email: string;
+              full_name: string | null;
+              project_title: string | null;
+            }
+          | {
+              id: string;
+              email: string;
+              full_name: string | null;
+              project_title: string | null;
+            }[]
+          | null;
+      };
+      const pcid = r.project_candidate_id;
+      if (!pcid || inPostProj.has(pcid)) continue;
+      const c = r.project_candidates;
+      const cand = Array.isArray(c) ? c[0] : c;
+      if (!cand) continue;
+      const email = cand.email ?? "";
+      const local = email.split("@")[0] ?? "";
+      const display_name =
+        cand.full_name?.trim() ||
+        (local.length > 0
+          ? local.charAt(0).toUpperCase() + local.slice(1)
+          : "—");
+      const dateIso =
+        r.completed_at?.trim() || r.scheduled_date?.trim() || null;
+      const prev = pMap.get(pcid);
+      if (
+        !prev ||
+        (dateIso &&
+          (!prev.interview_date || dateIso > prev.interview_date))
+      ) {
+        pMap.set(pcid, {
+          project_candidate_id: pcid,
+          display_name,
+          email,
+          project_title: cand.project_title,
+          interview_date: dateIso,
+        });
+      }
+    }
+    setProjectPicks([...pMap.values()]);
   };
 
-  const addFiltered = useMemo(() => {
+  const addFilteredTestimonial = useMemo(() => {
     const q = addSearch.trim().toLowerCase();
-    if (!q) return completedPicks;
-    return completedPicks.filter(
+    if (!q) return testimonialPicks;
+    return testimonialPicks.filter(
       (p) =>
         (p.full_name ?? "").toLowerCase().includes(q) ||
-        p.email.toLowerCase().includes(q),
+        p.email.toLowerCase().includes(q) ||
+        p.interviewer.toLowerCase().includes(q),
     );
-  }, [completedPicks, addSearch]);
+  }, [testimonialPicks, addSearch]);
+
+  const addFilteredProject = useMemo(() => {
+    const q = addSearch.trim().toLowerCase();
+    if (!q) return projectPicks;
+    return projectPicks.filter(
+      (p) =>
+        p.display_name.toLowerCase().includes(q) ||
+        p.email.toLowerCase().includes(q) ||
+        (p.project_title ?? "").toLowerCase().includes(q),
+    );
+  }, [projectPicks, addSearch]);
 
   const confirmAdd = async () => {
+    if (!canEditCurrentPage) return;
     if (!supabase || !selectedAdd) return;
     setAddSubmitting(true);
-    const name =
-      selectedAdd.full_name?.trim() ||
-      selectedAdd.email.split("@")[0] ||
-      "Candidate";
-    const { data: ins, error: e } = await supabase
-      .from("post_production")
-      .insert({
-        candidate_id: selectedAdd.candidate_id,
-        candidate_name: name,
-      })
-      .select("id")
-      .single();
-    setAddSubmitting(false);
-    if (e) {
-      setError(
-        e.code === "23505"
-          ? "This candidate is already in post production."
-          : e.message,
-      );
-      return;
+
+    if (selectedAdd.kind === "testimonial") {
+      const p = selectedAdd.pick;
+      const name =
+        p.full_name?.trim() || p.email.split("@")[0] || "Candidate";
+      const { data: ins, error: e } = await supabase
+        .from("post_production")
+        .insert({
+          candidate_id: p.candidate_id,
+          project_candidate_id: null,
+          source_type: "testimonial",
+          candidate_name: name,
+        })
+        .select("id")
+        .single();
+      setAddSubmitting(false);
+      if (e) {
+        setError(
+          e.code === "23505"
+            ? "This candidate is already in post production."
+            : e.message,
+        );
+        return;
+      }
+      const auth = await getUserSafe(supabase);
+      if (auth) {
+        await logActivity({
+          supabase,
+          user: auth,
+          action_type: "post_production",
+          entity_type: "post_production",
+          entity_id: ins?.id ?? null,
+          candidate_name: name,
+          description: `Added ${name} (Testimonial) to post production`,
+        });
+      }
+    } else {
+      const p = selectedAdd.pick;
+      const name =
+        p.project_title?.trim() ||
+        p.display_name ||
+        p.email.split("@")[0] ||
+        "Candidate";
+      const { data: ins, error: e } = await supabase
+        .from("post_production")
+        .insert({
+          candidate_id: null,
+          project_candidate_id: p.project_candidate_id,
+          source_type: "project",
+          candidate_name: name,
+        })
+        .select("id")
+        .single();
+      setAddSubmitting(false);
+      if (e) {
+        setError(
+          e.code === "23505"
+            ? "This project candidate is already in post production."
+            : e.message,
+        );
+        return;
+      }
+      const auth = await getUserSafe(supabase);
+      if (auth) {
+        await logActivity({
+          supabase,
+          user: auth,
+          action_type: "post_production",
+          entity_type: "post_production",
+          entity_id: ins?.id ?? null,
+          candidate_name: name,
+          description: `Added ${name} (Project) to post production`,
+        });
+      }
     }
-    const { data: auth } = await supabase.auth.getUser();
-    if (auth.user) {
-      await logActivity({
-        supabase,
-        user: auth.user,
-        action_type: "post_production",
-        entity_type: "post_production",
-        entity_id: ins?.id ?? null,
-        candidate_name: name,
-        description: `Added ${name} to post production`,
-      });
-    }
+
     setAddOpen(false);
     void loadRows();
+  };
+
+  const openNameDetail = async (row: PostProductionRow) => {
+    if (row.source_type === "project" && row.project_candidate_id) {
+      const nested = projectCandidateFromRow(row);
+      if (nested) {
+        setProjectDetailCandidate(nested);
+        return;
+      }
+      if (!supabase) return;
+      const { data } = await supabase
+        .from("project_candidates")
+        .select(
+          "id, email, full_name, whatsapp_number, project_title, problem_statement, target_user, ai_usage, demo_link, status, poc_assigned, poc_assigned_at, interview_type",
+        )
+        .eq("id", row.project_candidate_id)
+        .maybeSingle();
+      if (data) setProjectDetailCandidate(data as ProjectCandidateRow);
+      return;
+    }
+    if (row.candidate_id) setDetailCandidateId(row.candidate_id);
   };
 
   const patchRow = async (
@@ -295,6 +702,7 @@ export function PostProductionDashboard() {
     patch: Record<string, unknown>,
     log?: { description: string; candidateName: string },
   ) => {
+    if (!canEditCurrentPage) return;
     if (!supabase) return;
     setSavingId(id);
     const { error: e } = await supabase
@@ -307,11 +715,11 @@ export function PostProductionDashboard() {
       return;
     }
     if (log) {
-      const { data: auth } = await supabase.auth.getUser();
-      if (auth.user) {
+      const auth = await getUserSafe(supabase);
+      if (auth) {
         await logActivity({
           supabase,
-          user: auth.user,
+          user: auth,
           action_type: "post_production",
           entity_type: "post_production",
           entity_id: id,
@@ -637,15 +1045,41 @@ export function PostProductionDashboard() {
             <p className="mt-1 text-sm text-[#6e6e73]">
               Manage interview video editing and publishing pipeline
             </p>
+            {showViewOnlyBadge ? (
+              <span className="mt-2 inline-flex rounded-full bg-[#f3f4f6] px-3 py-1 text-xs font-medium text-[#6b7280]">
+                View only
+              </span>
+            ) : null}
           </div>
-          <button
-            type="button"
-            onClick={() => void openAddModal()}
-            className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-[#1d1d1f] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#2d2d2f]"
-          >
-            <Plus className="h-4 w-4" />
-            Add to Post Production
-          </button>
+          {canEditCurrentPage ? (
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={exportCsv}
+                disabled={filtered.length === 0}
+                className="text-sm font-medium text-[#3b82f6] transition-all hover:text-[#2563eb] disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Export CSV ({filtered.length} rows)
+              </button>
+              <button
+                type="button"
+                onClick={() => void openAddModal()}
+                className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-[#1d1d1f] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#2d2d2f]"
+              >
+                <Plus className="h-4 w-4" />
+                Add to Post Production
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={exportCsv}
+              disabled={filtered.length === 0}
+              className="text-sm font-medium text-[#3b82f6] transition-all hover:text-[#2563eb] disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Export CSV ({filtered.length} rows)
+            </button>
+          )}
         </div>
       </header>
 
@@ -687,88 +1121,153 @@ export function PostProductionDashboard() {
               ))}
             </section>
 
-            <div className="mb-4 flex flex-col gap-3 rounded-2xl border border-[#f0f0f0] bg-white p-4 shadow-sm lg:flex-row lg:flex-wrap lg:items-end">
-              <label className="flex min-w-[160px] flex-1 flex-col gap-1">
-                <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
-                  Search
-                </span>
-                <input
-                  type="search"
-                  placeholder="Candidate name"
-                  className="rounded-xl border border-[#e5e5e5] px-3 py-2 text-sm"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                />
-              </label>
-              <label className="flex w-full flex-col gap-1 sm:w-40">
-                <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
-                  YouTube status
-                </span>
-                <select
-                  className="rounded-xl border border-[#e5e5e5] px-3 py-2 text-sm"
-                  value={ytFilter}
-                  onChange={(e) =>
-                    setYtFilter(e.target.value as YoutubeStatus | "all")
-                  }
+            <div className="mb-4 flex flex-col gap-3 rounded-2xl border border-[#f0f0f0] bg-white p-4 shadow-sm">
+              <div className="flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-end">
+                <label className="flex min-w-[160px] flex-1 flex-col gap-1">
+                  <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+                    Search
+                  </span>
+                  <input
+                    type="search"
+                    placeholder="Candidate name"
+                    className="rounded-xl border border-[#e5e5e5] px-3 py-2 text-sm"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                  />
+                </label>
+                <label className="flex w-full flex-col gap-1 sm:w-40">
+                  <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+                    YouTube status
+                  </span>
+                  <select
+                    className="rounded-xl border border-[#e5e5e5] px-3 py-2 text-sm"
+                    value={ytFilter}
+                    onChange={(e) =>
+                      setYtFilter(e.target.value as YoutubeStatus | "all")
+                    }
+                  >
+                    <option value="all">All</option>
+                    <option value="private">Private</option>
+                    <option value="unlisted">Unlisted</option>
+                    <option value="live">Live</option>
+                  </select>
+                </label>
+                <label className="flex w-full flex-col gap-1 sm:w-44">
+                  <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+                    Pre-edit review
+                  </span>
+                  <select
+                    className="rounded-xl border border-[#e5e5e5] px-3 py-2 text-sm"
+                    value={preFilter}
+                    onChange={(e) =>
+                      setPreFilter(e.target.value as ReviewState | "all")
+                    }
+                  >
+                    <option value="all">All</option>
+                    <option value="done">Done</option>
+                    <option value="not_done">Not Done</option>
+                  </select>
+                </label>
+                <label className="flex w-full flex-col gap-1 sm:w-44">
+                  <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+                    Post-edit review
+                  </span>
+                  <select
+                    className="rounded-xl border border-[#e5e5e5] px-3 py-2 text-sm"
+                    value={postFilter}
+                    onChange={(e) =>
+                      setPostFilter(e.target.value as ReviewState | "all")
+                    }
+                  >
+                    <option value="all">All</option>
+                    <option value="done">Done</option>
+                    <option value="not_done">Not Done</option>
+                  </select>
+                </label>
+                <button
+                  type="button"
+                  className="rounded-xl border border-[#e5e5e5] bg-white px-4 py-2 text-sm font-medium text-[#1d1d1f] hover:bg-[#fafafa] lg:mb-0.5"
+                  onClick={() => {
+                    setSearch("");
+                    setSourceFilter("all");
+                    setDomainFilter("all");
+                    setJobRoleFilter("all");
+                    setYtFilter("all");
+                    setPreFilter("all");
+                    setPostFilter("all");
+                  }}
                 >
-                  <option value="all">All</option>
-                  <option value="private">Private</option>
-                  <option value="unlisted">Unlisted</option>
-                  <option value="live">Live</option>
-                </select>
-              </label>
-              <label className="flex w-full flex-col gap-1 sm:w-44">
-                <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
-                  Pre-edit review
-                </span>
-                <select
-                  className="rounded-xl border border-[#e5e5e5] px-3 py-2 text-sm"
-                  value={preFilter}
-                  onChange={(e) =>
-                    setPreFilter(e.target.value as ReviewState | "all")
-                  }
-                >
-                  <option value="all">All</option>
-                  <option value="done">Done</option>
-                  <option value="not_done">Not Done</option>
-                </select>
-              </label>
-              <label className="flex w-full flex-col gap-1 sm:w-44">
-                <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
-                  Post-edit review
-                </span>
-                <select
-                  className="rounded-xl border border-[#e5e5e5] px-3 py-2 text-sm"
-                  value={postFilter}
-                  onChange={(e) =>
-                    setPostFilter(e.target.value as ReviewState | "all")
-                  }
-                >
-                  <option value="all">All</option>
-                  <option value="done">Done</option>
-                  <option value="not_done">Not Done</option>
-                </select>
-              </label>
-              <button
-                type="button"
-                className="rounded-xl border border-[#e5e5e5] bg-white px-4 py-2 text-sm font-medium text-[#1d1d1f] hover:bg-[#fafafa] lg:mb-0.5"
-                onClick={() => {
-                  setSearch("");
-                  setYtFilter("all");
-                  setPreFilter("all");
-                  setPostFilter("all");
-                }}
-              >
-                Clear filters
-              </button>
+                  Clear filters
+                </button>
+              </div>
+              <div className="border-t border-[#f0f0f0] pt-3">
+                <p className="mb-2 text-[11px] text-[#aeaeb2]">
+                  Domain and job role apply to testimonial rows only.
+                </p>
+                <div className="flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-end">
+                  <label className="flex w-full flex-col gap-1 sm:w-36">
+                    <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+                      Source
+                    </span>
+                    <select
+                      className="rounded-xl border border-[#e5e5e5] px-3 py-2 text-sm"
+                      value={sourceFilter}
+                      onChange={(e) =>
+                        setSourceFilter(e.target.value as SourceType | "all")
+                      }
+                    >
+                      <option value="all">All</option>
+                      <option value="testimonial">Testimonial</option>
+                      <option value="project">Project</option>
+                    </select>
+                  </label>
+                  <label className="flex w-full min-w-[220px] flex-col gap-1 sm:min-w-[260px] sm:flex-1">
+                    <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+                      Domain
+                    </span>
+                    <select
+                      className="rounded-xl border border-[#e5e5e5] px-3 py-2 text-sm"
+                      value={domainFilter}
+                      onChange={(e) =>
+                        setDomainFilter(e.target.value as DomainFilterValue)
+                      }
+                    >
+                      <option value="all">All</option>
+                      {DOMAIN_FILTER_OPTIONS.map((d) => (
+                        <option key={d} value={d}>
+                          {d}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="flex w-full min-w-[160px] flex-col gap-1 sm:w-52">
+                    <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+                      Job role
+                    </span>
+                    <select
+                      className="rounded-xl border border-[#e5e5e5] px-3 py-2 text-sm"
+                      value={jobRoleFilter}
+                      onChange={(e) => setJobRoleFilter(e.target.value)}
+                    >
+                      <option value="all">All</option>
+                      {distinctJobRoles.map((jr) => (
+                        <option key={jr} value={jr}>
+                          {jr}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+              </div>
             </div>
 
             <div className="overflow-hidden rounded-2xl border border-[#f0f0f0] bg-white shadow-sm">
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[1400px] table-auto border-collapse text-sm">
+                <table className="w-full min-w-[1520px] table-auto border-collapse text-sm">
                   <thead>
                     <tr>
                       <th className={th}>Name</th>
+                      <th className={th}>SOURCE</th>
                       <th className={th}>Raw video</th>
                       <th className={th}>Edited video</th>
                       <th className={th}>Pre-edit review</th>
@@ -785,7 +1284,7 @@ export function PostProductionDashboard() {
                       <tr>
                         <td
                           className={`${td} py-16 text-center text-[#aeaeb2]`}
-                          colSpan={10}
+                          colSpan={11}
                         >
                           {rows.length === 0
                             ? "No entries yet. Add completed interviews to start the post production pipeline."
@@ -795,21 +1294,28 @@ export function PostProductionDashboard() {
                     ) : (
                       filtered.map((row) => {
                         const cid = row.candidate_id;
+                        const pcid = row.project_candidate_id;
                         const busy = savingId === row.id;
+                        const nameClickable =
+                          (row.source_type === "testimonial" && !!cid) ||
+                          (row.source_type === "project" && !!pcid);
                         return (
                           <tr key={row.id}>
                             <td className={td}>
-                              {cid ? (
+                              {nameClickable ? (
                                 <button
                                   type="button"
                                   className="text-left font-medium text-[#3b82f6] hover:underline"
-                                  onClick={() => setDetailCandidateId(cid)}
+                                  onClick={() => void openNameDetail(row)}
                                 >
                                   {row.candidate_name?.trim() || "—"}
                                 </button>
                               ) : (
                                 <span>{row.candidate_name?.trim() || "—"}</span>
                               )}
+                            </td>
+                            <td className={td}>
+                              {sourceBadge(row.source_type)}
                             </td>
                             <td className={td}>
                               {renderLinkCell(row, "raw_video_link")}
@@ -982,6 +1488,12 @@ export function PostProductionDashboard() {
         onClose={() => setDetailCandidateId(null)}
       />
 
+      <ProjectCandidateDetailModal
+        open={!!projectDetailCandidate}
+        candidate={projectDetailCandidate}
+        onClose={() => setProjectDetailCandidate(null)}
+      />
+
       {summaryModalText ? (
         <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
           <button
@@ -1014,13 +1526,43 @@ export function PostProductionDashboard() {
             aria-label="Close"
             onClick={() => setAddOpen(false)}
           />
-          <div className="relative w-full max-w-md rounded-2xl border border-[#f0f0f0] bg-white p-6 shadow-xl">
+          <div className="relative w-full max-w-lg rounded-2xl border border-[#f0f0f0] bg-white p-6 shadow-xl">
             <h2 className="text-lg font-semibold text-[#1d1d1f]">
               Add to Post Production
             </h2>
             <p className="mt-1 text-sm text-[#6e6e73]">
-              Only candidates with a completed interview are listed.
+              Completed interviews only. Already-added candidates are hidden.
             </p>
+            <div className="mt-4 flex gap-1 rounded-xl bg-[#f5f5f7] p-1">
+              <button
+                type="button"
+                className={`flex-1 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                  addTab === "testimonial"
+                    ? "bg-white text-[#1d1d1f] shadow-sm"
+                    : "text-[#6e6e73] hover:text-[#1d1d1f]"
+                }`}
+                onClick={() => {
+                  setAddTab("testimonial");
+                  setSelectedAdd(null);
+                }}
+              >
+                Testimonial
+              </button>
+              <button
+                type="button"
+                className={`flex-1 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                  addTab === "project"
+                    ? "bg-white text-[#1d1d1f] shadow-sm"
+                    : "text-[#6e6e73] hover:text-[#1d1d1f]"
+                }`}
+                onClick={() => {
+                  setAddTab("project");
+                  setSelectedAdd(null);
+                }}
+              >
+                Project
+              </button>
+            </div>
             {addLoading ? (
               <p className="mt-4 flex items-center gap-2 text-sm text-[#6e6e73]">
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -1031,38 +1573,83 @@ export function PostProductionDashboard() {
                 <input
                   type="search"
                   className="mt-4 w-full rounded-xl border border-[#e5e5e5] px-3 py-2 text-sm"
-                  placeholder="Search by name or email"
+                  placeholder={
+                    addTab === "testimonial"
+                      ? "Search name, email, or interviewer"
+                      : "Search name, email, or project"
+                  }
                   value={addSearch}
                   onChange={(e) => setAddSearch(e.target.value)}
                 />
-                <ul className="mt-3 max-h-56 overflow-y-auto rounded-xl border border-[#f0f0f0]">
-                  {addFiltered.length === 0 ? (
-                    <li className="px-3 py-8 text-center text-sm text-[#aeaeb2]">
-                      No candidates found
-                    </li>
-                  ) : (
-                    addFiltered.map((p) => (
-                      <li key={p.candidate_id}>
-                        <button
-                          type="button"
-                          className={`w-full px-3 py-2.5 text-left text-sm ${
-                            selectedAdd?.candidate_id === p.candidate_id
-                              ? "bg-[#eff6ff]"
-                              : "hover:bg-[#fafafa]"
-                          }`}
-                          onClick={() => setSelectedAdd(p)}
-                        >
-                          <span className="font-medium text-[#1d1d1f]">
-                            {p.full_name?.trim() || p.email}
-                          </span>
-                          <span className="block text-xs text-[#6e6e73]">
-                            {p.email}
-                          </span>
-                        </button>
+                {addTab === "testimonial" ? (
+                  <ul className="mt-3 max-h-64 overflow-y-auto rounded-xl border border-[#f0f0f0]">
+                    {addFilteredTestimonial.length === 0 ? (
+                      <li className="px-3 py-8 text-center text-sm text-[#aeaeb2]">
+                        No completed testimonial interviews to add
                       </li>
-                    ))
-                  )}
-                </ul>
+                    ) : (
+                      addFilteredTestimonial.map((p) => (
+                        <li key={p.candidate_id}>
+                          <button
+                            type="button"
+                            className={`w-full px-3 py-2.5 text-left text-sm ${
+                              selectedAdd?.kind === "testimonial" &&
+                              selectedAdd.pick.candidate_id === p.candidate_id
+                                ? "bg-[#eff6ff]"
+                                : "hover:bg-[#fafafa]"
+                            }`}
+                            onClick={() =>
+                              setSelectedAdd({ kind: "testimonial", pick: p })
+                            }
+                          >
+                            <span className="font-medium text-[#1d1d1f]">
+                              {p.full_name?.trim() || p.email}
+                            </span>
+                            <span className="mt-0.5 block text-xs text-[#6e6e73]">
+                              {formatInterviewDateLabel(p.interview_date)} ·{" "}
+                              {p.interviewer}
+                            </span>
+                          </button>
+                        </li>
+                      ))
+                    )}
+                  </ul>
+                ) : (
+                  <ul className="mt-3 max-h-64 overflow-y-auto rounded-xl border border-[#f0f0f0]">
+                    {addFilteredProject.length === 0 ? (
+                      <li className="px-3 py-8 text-center text-sm text-[#aeaeb2]">
+                        No completed project interviews to add
+                      </li>
+                    ) : (
+                      addFilteredProject.map((p) => (
+                        <li key={p.project_candidate_id}>
+                          <button
+                            type="button"
+                            className={`w-full px-3 py-2.5 text-left text-sm ${
+                              selectedAdd?.kind === "project" &&
+                              selectedAdd.pick.project_candidate_id ===
+                                p.project_candidate_id
+                                ? "bg-[#eff6ff]"
+                                : "hover:bg-[#fafafa]"
+                            }`}
+                            onClick={() =>
+                              setSelectedAdd({ kind: "project", pick: p })
+                            }
+                          >
+                            <span className="block font-medium text-[#1d1d1f]">
+                              {(p.project_title ?? "").trim() ||
+                                "Untitled project"}
+                            </span>
+                            <span className="mt-0.5 block text-xs text-[#6e6e73]">
+                              {p.display_name} · Interview{" "}
+                              {formatInterviewDateLabel(p.interview_date)}
+                            </span>
+                          </button>
+                        </li>
+                      ))
+                    )}
+                  </ul>
+                )}
                 <div className="mt-4 flex justify-end gap-2">
                   <button
                     type="button"
@@ -1073,7 +1660,11 @@ export function PostProductionDashboard() {
                   </button>
                   <button
                     type="button"
-                    disabled={!selectedAdd || addSubmitting}
+                    disabled={
+                      addSubmitting ||
+                      !selectedAdd ||
+                      selectedAdd.kind !== addTab
+                    }
                     className="rounded-xl bg-[#1d1d1f] px-4 py-2 text-sm text-white disabled:opacity-50"
                     onClick={() => void confirmAdd()}
                   >

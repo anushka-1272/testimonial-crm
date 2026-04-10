@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { logActivity } from "@/lib/activity-logger";
+import { getUserSafe } from "@/lib/supabase-auth";
 
 import type {
   InterviewWithCandidate,
@@ -104,11 +105,11 @@ export function RescheduleInterviewModal({
             interview.candidates?.email ||
             "Candidate";
         const reasonText = reason.trim();
-        const { data: authRe } = await supabase.auth.getUser();
-        if (authRe.user) {
+        const authRe = await getUserSafe(supabase);
+        if (authRe) {
           await logActivity({
             supabase,
-            user: authRe.user,
+            user: authRe,
             action_type: "interviews",
             entity_type: "interview",
             entity_id: interview.id,
@@ -140,11 +141,11 @@ export function RescheduleInterviewModal({
             "Candidate";
         const reasonText =
           reason.trim() || interview.reschedule_reason?.trim() || "—";
-        const { data: authRe2 } = await supabase.auth.getUser();
-        if (authRe2.user) {
+        const authRe2 = await getUserSafe(supabase);
+        if (authRe2) {
           await logActivity({
             supabase,
-            user: authRe2.user,
+            user: authRe2,
             action_type: "interviews",
             entity_type: "interview",
             entity_id: interview.id,

@@ -1,5 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 
+import { getUserSafe } from "@/lib/supabase-auth";
+
 export type GvizCell = { v?: unknown; f?: string | null } | null | undefined;
 export type GvizRow = { c?: GvizCell[] };
 
@@ -100,10 +102,7 @@ export async function verifyRequestUser(request: Request) {
     auth: { persistSession: false, autoRefreshToken: false },
     global: { headers: { Authorization: `Bearer ${token}` } },
   });
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser();
-  if (error || !user) return null;
+  const user = await getUserSafe(supabase);
+  if (!user) return null;
   return user;
 }

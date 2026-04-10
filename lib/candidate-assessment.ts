@@ -51,7 +51,7 @@ export async function runAssessEligibilityAndPersist(
   const { data: row, error: fetchError } = await supabase
     .from("candidates")
     .select(
-      "id, full_name, achievement_type, achievement_title, quantified_result, primary_goal, skills_modules_helped, how_program_helped, proof_document_url, role_before_program, linkedin_url",
+      "id, full_name, achievement_type, achievement_title, achievement_summary, quantified_result, primary_goal, skills_modules_helped, how_program_helped, proof_document_url, role_before_program, job_role, domain, linkedin_url",
     )
     .eq("id", candidateId)
     .maybeSingle();

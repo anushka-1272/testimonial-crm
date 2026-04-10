@@ -68,6 +68,8 @@ type CandidateRow = {
   created_at: string;
   email: string;
   eligibility_status: string;
+  domain: string | null;
+  job_role: string | null;
   role_before_program: string | null;
   primary_goal: string | null;
 };
@@ -152,7 +154,14 @@ function mapToDomainIndustryBucket(raw: string | null | undefined): DomainIndust
 }
 
 function domainIndustrySource(c: CandidateRow): string {
-  return [c.role_before_program, c.primary_goal].filter(Boolean).join(" ");
+  return [
+    c.domain,
+    c.job_role,
+    c.role_before_program,
+    c.primary_goal,
+  ]
+    .filter(Boolean)
+    .join(" ");
 }
 
 function categoryLines(raw: string | null | undefined): string[] {
@@ -275,7 +284,7 @@ export function AnalyticsDashboard() {
     const candQ = supabase
       .from("candidates")
       .select(
-        "id, created_at, email, eligibility_status, role_before_program, primary_goal",
+        "id, created_at, email, eligibility_status, domain, job_role, role_before_program, primary_goal",
       );
 
     const intQ = supabase

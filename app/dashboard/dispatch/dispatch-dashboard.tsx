@@ -11,8 +11,10 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 
+import { useAccessControl } from "@/components/access-control-context";
 import { CandidateDetailModal } from "@/components/candidate-detail-modal";
 import { logActivity } from "@/lib/activity-logger";
+import { getUserSafe } from "@/lib/supabase-auth";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 
 type DispatchStatus = "pending" | "dispatched" | "delivered";
@@ -224,11 +226,11 @@ function RewardItemCell({
     if (oldLabel !== newLabel) {
       const candDisplay =
         row.candidates?.full_name?.trim() || "Candidate";
-      const { data: authRw } = await supabase.auth.getUser();
-      if (authRw.user) {
+      const authRw = await getUserSafe(supabase);
+      if (authRw) {
         await logActivity({
           supabase,
-          user: authRw.user,
+          user: authRw,
           action_type: "dispatch",
           entity_type: "dispatch",
           entity_id: row.id,
@@ -529,11 +531,11 @@ function UpdateDispatchModal({
       const candDisplay =
         row.candidates?.full_name?.trim() || "Candidate";
       const expectedStr = format(parseISO(expectedIso), "MMMM d, yyyy");
-      const { data: authDu } = await supabase.auth.getUser();
-      if (authDu.user) {
+      const authDu = await getUserSafe(supabase);
+      if (authDu) {
         await logActivity({
           supabase,
-          user: authDu.user,
+          user: authDu,
           action_type: "dispatch",
           entity_type: "dispatch",
           entity_id: row.id,
@@ -691,6 +693,7 @@ function UpdateDispatchModal({
 }
 
 export function DispatchDashboard() {
+  const { canEditCurrentPage, showViewOnlyBadge } = useAccessControl();
   const [rows, setRows] = useState<DispatchRow[]>([]);
   const [filter, setFilter] = useState<DispatchStatus | "all">("all");
   const [loading, setLoading] = useState(true);
@@ -819,6 +822,7 @@ export function DispatchDashboard() {
   };
 
   const markDelivered = async (r: DispatchRow) => {
+    if (!canEditCurrentPage) return;
     if (!supabase) return;
     setBusyId(r.id);
     const { error: uErr } = await supabase
@@ -834,11 +838,11 @@ export function DispatchDashboard() {
       return;
     }
     const candDisplay = r.candidates?.full_name?.trim() || "Candidate";
-    const { data: authMd } = await supabase.auth.getUser();
-    if (authMd.user) {
+    const authMd = await getUserSafe(supabase);
+    if (authMd) {
       await logActivity({
         supabase,
-        user: authMd.user,
+        user: authMd,
         action_type: "dispatch",
         entity_type: "dispatch",
         entity_id: r.id,
@@ -881,6 +885,11 @@ export function DispatchDashboard() {
         <p className="mt-1 text-sm text-[#6e6e73]">
           Track shipments and delivery status
         </p>
+        {showViewOnlyBadge ? (
+          <span className="mt-2 inline-flex rounded-full bg-[#f3f4f6] px-3 py-1 text-xs font-medium text-[#6b7280]">
+            View only
+          </span>
+        ) : null}
       </header>
 
       <main className="mx-auto max-w-7xl px-8 pb-12 pt-2 text-sm text-[#1d1d1f]">
@@ -1070,7 +1079,7 @@ export function DispatchDashboard() {
                         </td>
                         <td className="px-3 py-3">
                           <div className="flex flex-col items-start gap-2">
-                            {canUpdate && (
+                            {canEditCurrentPage && canUpdate && (
                               <button
                                 type="button"
                                 className="whitespace-nowrap text-sm font-medium text-[#3b82f6] transition-all hover:text-[#2563eb]"
@@ -1079,7 +1088,7 @@ export function DispatchDashboard() {
                                 Update dispatch
                               </button>
                             )}
-                            {canDeliver && (
+                            {canEditCurrentPage && canDeliver && (
                               <button
                                 type="button"
                                 disabled={busyId === r.id}

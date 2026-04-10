@@ -10,6 +10,7 @@ import {
 import { Pencil } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { useAccessControl } from "@/components/access-control-context";
 import { CandidateDetailModal } from "@/components/candidate-detail-modal";
 import { logActivity } from "@/lib/activity-logger";
 import {
@@ -19,11 +20,12 @@ import {
   matchesInterviewLanguageFilter,
   type InterviewLanguageFilter,
 } from "@/lib/interview-language";
+import { getUserSafe } from "@/lib/supabase-auth";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 
 import { PostInterviewDrawer } from "./post-interview-drawer";
 import { RescheduleInterviewModal } from "./reschedule-interview-modal";
-import { ProjectInterviewsPanel } from "./project-interviews-panel";
+import { AddZoomDetailsModal } from "./add-zoom-details-modal";
 import {
   ScheduleInterviewModal,
   type ScheduleCandidate,
@@ -40,7 +42,7 @@ const PAGE_SIZE = 20;
 
 const TEAM_POC_MEMBERS = ["Harika", "Anushka", "Gargi", "Mudit"] as const;
 
-const INTERVIEW_SELECT = `id, candidate_id, scheduled_date, previous_scheduled_date, reschedule_reason, completed_at, interviewer, zoom_link, language, interview_language, invitation_sent, poc, remarks, reminder_count, interview_status, post_interview_eligible, reward_item, category, funnel, comments, interview_type, candidates ( id, full_name, email, whatsapp_number, poc_assigned )`;
+const INTERVIEW_SELECT = `id, candidate_id, scheduled_date, previous_scheduled_date, reschedule_reason, completed_at, interviewer, zoom_link, zoom_account, language, interview_language, invitation_sent, poc, remarks, reminder_count, interview_status, post_interview_eligible, reward_item, category, funnel, comments, interview_type, candidates ( id, created_at, full_name, email, whatsapp_number, poc_assigned )`;
 
 const cardChrome =
   "rounded-2xl bg-white shadow-[0_4px_16px_rgba(0,0,0,0.08)] border border-[#f0f0f0]";
@@ -49,10 +51,11 @@ type BoardTab =
   | "eligible"
   | "scheduled"
   | "rescheduled"
-  | "completed"
-  | "project_interviews";
+  | "completed";
 
 type InterviewTypeFilter = "all" | "testimonial" | "project";
+
+type ZoomStatusFilter = "all" | "awaiting_zoom" | "zoom_added";
 
 const LANGUAGE_FILTER_OPTIONS: {
   value: InterviewLanguageFilter;
@@ -68,10 +71,18 @@ const LANGUAGE_FILTER_OPTIONS: {
   { value: "other", label: "Other" },
 ];
 
+const ZOOM_STATUS_FILTER_OPTIONS: { value: ZoomStatusFilter; label: string }[] =
+  [
+    { value: "all", label: "All" },
+    { value: "awaiting_zoom", label: "Awaiting Zoom" },
+    { value: "zoom_added", label: "Zoom Added" },
+  ];
+
 type TableFilters = {
   search: string;
   interviewType: InterviewTypeFilter;
   language: InterviewLanguageFilter;
+  zoomStatus: ZoomStatusFilter;
   page: number;
 };
 
@@ -85,12 +96,13 @@ type CompletedTabFilters = TableFilters & {
   category: string;
 };
 
-type SimpleTab = Exclude<BoardTab, "completed" | "project_interviews">;
+type SimpleTab = Exclude<BoardTab, "completed">;
 
 const emptyFilters = (): TableFilters => ({
   search: "",
   interviewType: "all",
   language: "all",
+  zoomStatus: "all",
   page: 0,
 });
 
@@ -315,6 +327,44 @@ function interviewLanguageBadge(i: InterviewWithCandidate) {
   );
 }
 
+function zoomStatusColumn(i: InterviewWithCandidate) {
+  const isDraft = i.interview_status === "draft";
+  const isScheduled = i.interview_status === "scheduled";
+  const link = i.zoom_link?.trim();
+  const acct = i.zoom_account?.trim();
+  return (
+    <div className="flex flex-col items-start gap-2">
+      {isDraft ? (
+        <span className="inline-flex rounded-full bg-[#fff7ed] px-2.5 py-1 text-xs font-medium text-[#c2410c]">
+          Awaiting Zoom
+        </span>
+      ) : isScheduled ? (
+        <span className="inline-flex rounded-full bg-[#f0fdf4] px-2.5 py-1 text-xs font-medium text-[#15803d]">
+          Zoom Added
+        </span>
+      ) : (
+        <span className="text-[#6e6e73]">—</span>
+      )}
+      {isScheduled && acct ? (
+        <p className="text-xs text-[#6e6e73]">Account: {acct}</p>
+      ) : null}
+      {isScheduled && link ? (
+        <a
+          href={link}
+          target="_blank"
+          rel="noopener noreferrer"
+          title={
+            acct ? `Account: ${acct}` : "Join Zoom meeting"
+          }
+          className="inline-flex rounded-lg border border-[#e5e5e5] bg-white px-2.5 py-1 text-xs font-medium text-[#1d1d1f] transition-colors hover:bg-[#f5f5f7]"
+        >
+          Join
+        </a>
+      ) : null}
+    </div>
+  );
+}
+
 function formatDateTime(iso: string | null | undefined) {
   if (!iso) return "—";
   try {
@@ -333,12 +383,32 @@ function formatDateOnly(iso: string | null | undefined) {
   }
 }
 
+function escapeCsvCell(v: unknown): string {
+  const s = String(v ?? "");
+  if (s.includes("\"") || s.includes(",") || s.includes("\n")) {
+    return `"${s.replace(/"/g, "\"\"")}"`;
+  }
+  return s;
+}
+
 function pocOptionsFor(candidate: EligibleCandidate): string[] {
   const current = candidate.poc_assigned?.trim();
   const roster = new Set<string>(TEAM_POC_MEMBERS);
   if (current && !roster.has(current))
     return [...TEAM_POC_MEMBERS, current];
   return [...TEAM_POC_MEMBERS];
+}
+
+function compareInterviewByCandidateCreatedDesc(
+  a: InterviewWithCandidate,
+  b: InterviewWithCandidate,
+): number {
+  const ta = a.candidates?.created_at ?? "";
+  const tb = b.candidates?.created_at ?? "";
+  if (ta !== tb) return tb.localeCompare(ta);
+  const sa = a.scheduled_date ?? "";
+  const sb = b.scheduled_date ?? "";
+  return sb.localeCompare(sa);
 }
 
 function normalizeInterviewRow(
@@ -372,12 +442,22 @@ function normalizeInterviewRow(
     reschedule_reason: (r.reschedule_reason as string | null) ?? null,
     completed_at: (r.completed_at as string | null) ?? null,
     reward_item: (r.reward_item as string | null) ?? null,
+    zoom_account: (r.zoom_account as string | null | undefined) ?? null,
     interview_language: (r.interview_language as string | null | undefined) ?? null,
     candidates: candidate,
   } as InterviewWithCandidate;
 }
 
 export function InterviewsBoard() {
+  const { role, canEditCurrentPage, showViewOnlyBadge } = useAccessControl();
+  const canEditEligibleTab =
+    canEditCurrentPage &&
+    (role === "admin" || role === "interviewer" || role === "poc");
+  const canEditScheduledTab =
+    canEditCurrentPage &&
+    (role === "admin" || role === "interviewer" || role === "operations");
+  const canEditRescheduledTab =
+    canEditCurrentPage && (role === "admin" || role === "interviewer");
   const [eligibleQueue, setEligibleQueue] = useState<EligibleCandidate[]>([]);
   const [interviews, setInterviews] = useState<InterviewWithCandidate[]>([]);
   const [loading, setLoading] = useState(true);
@@ -395,7 +475,10 @@ export function InterviewsBoard() {
     interview: InterviewWithCandidate | ProjectInterviewWithProjectCandidate;
     mode: "from_scheduled" | "from_rescheduled";
   } | null>(null);
-  const [projectPendingCount, setProjectPendingCount] = useState(0);
+  const [addZoomFor, setAddZoomFor] = useState<InterviewWithCandidate | null>(
+    null,
+  );
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const [pocSavingId, setPocSavingId] = useState<string | null>(null);
   /** Eligible row id showing POC dropdown while a POC is already assigned (badge hidden). */
@@ -428,61 +511,33 @@ export function InterviewsBoard() {
 
   const loadData = useCallback(async () => {
     if (!supabase) return;
-    const [
-      { data: elig, error: e1 },
-      { data: inv, error: e2 },
-      { data: pcIds, error: e3 },
-      { data: piBusy, error: e4 },
-    ] = await Promise.all([
-      supabase
-        .from("candidates")
-        .select(
-          "id, full_name, email, interview_type, poc_assigned, poc_assigned_at, linkedin_track, linkedin_track_status",
-        )
-        .eq("eligibility_status", "eligible"),
-      supabase
-        .from("interviews")
-        .select(INTERVIEW_SELECT)
-        .order("scheduled_date", { ascending: true }),
-      supabase.from("project_candidates").select("id"),
-      supabase
-        .from("project_interviews")
-        .select("project_candidate_id, interview_status"),
-    ]);
+    const [{ data: elig, error: e1 }, { data: inv, error: e2 }] =
+      await Promise.all([
+        supabase
+          .from("candidates")
+          .select(
+            "id, created_at, full_name, email, interview_type, poc_assigned, poc_assigned_at, linkedin_track, linkedin_track_status",
+          )
+          .eq("eligibility_status", "eligible")
+          .order("created_at", { ascending: false }),
+        supabase.from("interviews").select(INTERVIEW_SELECT),
+      ]);
 
-    if (e1 || e2 || e3 || e4) {
-      setError(
-        e1?.message ??
-          e2?.message ??
-          e3?.message ??
-          e4?.message ??
-          "Failed to load",
-      );
+    if (e1 || e2) {
+      setError(e1?.message ?? e2?.message ?? "Failed to load");
       return;
     }
 
-    const busyProj = new Set(
-      (piBusy ?? [])
-        .filter(
-          (r) =>
-            r.interview_status === "scheduled" ||
-            r.interview_status === "rescheduled",
-        )
-        .map((r) => r.project_candidate_id),
-    );
-    setProjectPendingCount(
-      (pcIds ?? []).filter((r) => !busyProj.has(r.id)).length,
-    );
-
-    const list = (inv ?? []).map((row) =>
-      normalizeInterviewRow(row as Record<string, unknown>),
-    );
+    const list = (inv ?? [])
+      .map((row) => normalizeInterviewRow(row as Record<string, unknown>))
+      .sort(compareInterviewByCandidateCreatedDesc);
     const busy = new Set(
       list
         .filter(
           (i) =>
             i.interview_status === "scheduled" ||
-            i.interview_status === "rescheduled",
+            i.interview_status === "rescheduled" ||
+            i.interview_status === "draft",
         )
         .map((i) => i.candidate_id),
     );
@@ -494,6 +549,7 @@ export function InterviewsBoard() {
         const onTrack = Boolean(r.linkedin_track);
         return {
           id: r.id as string,
+          created_at: r.created_at as string | undefined,
           full_name: r.full_name as string | null,
           email: r.email as string,
           interview_type: r.interview_type as EligibleCandidate["interview_type"],
@@ -535,20 +591,6 @@ export function InterviewsBoard() {
           void loadData();
         },
       )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "project_candidates" },
-        () => {
-          void loadData();
-        },
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "project_interviews" },
-        () => {
-          void loadData();
-        },
-      )
       .subscribe();
 
     void (async () => {
@@ -581,6 +623,12 @@ export function InterviewsBoard() {
     return () => document.removeEventListener("click", onDocClick);
   }, [completedPopoverId]);
 
+  useEffect(() => {
+    if (!toastMessage) return;
+    const t = window.setTimeout(() => setToastMessage(null), 4000);
+    return () => window.clearTimeout(t);
+  }, [toastMessage]);
+
   const byStatus = useMemo(() => {
     const m = {
       scheduled: [] as InterviewWithCandidate[],
@@ -589,6 +637,7 @@ export function InterviewsBoard() {
     };
     for (const i of interviews) {
       switch (i.interview_status) {
+        case "draft":
         case "scheduled":
           m.scheduled.push(i);
           break;
@@ -625,7 +674,8 @@ export function InterviewsBoard() {
           page:
             "search" in patch ||
             "interviewType" in patch ||
-            "language" in patch
+            "language" in patch ||
+            "zoomStatus" in patch
               ? 0
               : prev[tab].page,
         },
@@ -659,7 +709,7 @@ export function InterviewsBoard() {
   }, []);
 
   const setPage = useCallback(
-    (tab: Exclude<BoardTab, "project_interviews">, page: number) => {
+    (tab: BoardTab, page: number) => {
       if (tab === "completed") {
         patchCompletedFilters({ page });
         return;
@@ -696,6 +746,16 @@ export function InterviewsBoard() {
             effectiveInterviewLanguage(i),
             f.language,
           )
+        )
+          return false;
+        if (
+          f.zoomStatus === "awaiting_zoom" &&
+          i.interview_status !== "draft"
+        )
+          return false;
+        if (
+          f.zoomStatus === "zoom_added" &&
+          i.interview_status !== "scheduled"
         )
           return false;
         const name = i.candidates?.full_name;
@@ -790,6 +850,58 @@ export function InterviewsBoard() {
     [completedFiltered, completedFilters.page],
   );
 
+  const exportCompletedCsv = useCallback(() => {
+    if (completedFiltered.length === 0) return;
+    const headers = [
+      "Name",
+      "Phone",
+      "Email",
+      "Interview Type",
+      "Language",
+      "Interviewer",
+      "POC",
+      "Completed On",
+      "Post-Interview Eligible",
+      "Category",
+      "Funnel",
+      "Reward Item",
+      "Comments",
+    ];
+    const body = completedFiltered.map((i) => {
+      const postEligible =
+        i.post_interview_eligible === true
+          ? "Eligible"
+          : i.post_interview_eligible === false
+            ? "Not eligible"
+            : "—";
+      return [
+        i.candidates?.full_name?.trim() || "",
+        i.candidates?.whatsapp_number?.trim() || "",
+        i.candidates?.email || "",
+        i.interview_type || "",
+        formatInterviewLanguageLabel(effectiveInterviewLanguage(i)),
+        i.interviewer || "",
+        i.poc?.trim() || i.candidates?.poc_assigned?.trim() || "",
+        formatDateTime(i.completed_at),
+        postEligible,
+        interviewCategoryLines(i.category).join(" | "),
+        i.funnel?.trim() || "",
+        i.reward_item?.trim() || "",
+        i.comments?.trim() || "",
+      ]
+        .map(escapeCsvCell)
+        .join(",");
+    });
+    const csv = [headers.map(escapeCsvCell).join(","), ...body].join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `completed-interviews-${format(new Date(), "yyyy-MM-dd")}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [completedFiltered]);
+
   const handlePocChange = async (candidate: EligibleCandidate, value: string) => {
     if (!supabase) return;
     const name = value.trim() || null;
@@ -809,11 +921,11 @@ export function InterviewsBoard() {
     if (name) {
       const candDisplay =
         candidate.full_name?.trim() || candidate.email || "Candidate";
-      const { data: authPoc } = await supabase.auth.getUser();
-      if (authPoc.user) {
+      const authPoc = await getUserSafe(supabase);
+      if (authPoc) {
         await logActivity({
           supabase,
-          user: authPoc.user,
+          user: authPoc,
           action_type: "interviews",
           entity_type: "candidate",
           entity_id: candidate.id,
@@ -846,11 +958,11 @@ export function InterviewsBoard() {
       return;
     }
     const display = c.full_name?.trim() || c.email || "Candidate";
-    const { data: authLi } = await supabase.auth.getUser();
-    if (authLi.user) {
+    const authLi = await getUserSafe(supabase);
+    if (authLi) {
       await logActivity({
         supabase,
-        user: authLi.user,
+        user: authLi,
         action_type: "interviews",
         entity_type: "candidate",
         entity_id: c.id,
@@ -878,11 +990,11 @@ export function InterviewsBoard() {
       return;
     }
     const display = c.full_name?.trim() || c.email || "Candidate";
-    const { data: authS } = await supabase.auth.getUser();
-    if (authS.user) {
+    const authS = await getUserSafe(supabase);
+    if (authS) {
       await logActivity({
         supabase,
-        user: authS.user,
+        user: authS,
         action_type: "interviews",
         entity_type: "candidate",
         entity_id: c.id,
@@ -926,11 +1038,11 @@ export function InterviewsBoard() {
       return;
     }
     const display = c.full_name?.trim() || c.email || "Candidate";
-    const { data: authE } = await supabase.auth.getUser();
-    if (authE.user) {
+    const authE = await getUserSafe(supabase);
+    if (authE) {
       await logActivity({
         supabase,
-        user: authE.user,
+        user: authE,
         action_type: "interviews",
         entity_type: "candidate",
         entity_id: c.id,
@@ -971,6 +1083,8 @@ export function InterviewsBoard() {
   const tdDateTime = `${tdBase} min-w-[170px] text-left`;
   const thInterviewer = `${thBase} min-w-[120px] text-left`;
   const tdInterviewer = `${tdBase} min-w-[120px] text-left`;
+  const thZoomStatus = `${thBase} min-w-[150px] text-left`;
+  const tdZoomStatus = `${tdBase} min-w-[150px] text-left align-top`;
   const thPocInterview = `${thBase} min-w-[120px] text-left`;
   const tdPocInterview = `${tdBase} min-w-[120px] text-left text-[#6e6e73]`;
 
@@ -998,7 +1112,7 @@ export function InterviewsBoard() {
     "max-w-full min-w-0 truncate text-left font-medium text-[#3b82f6] hover:underline focus:outline-none focus:ring-2 focus:ring-[#3b82f6]/25 rounded-sm";
 
   const renderPagination = (
-    tab: Exclude<BoardTab, "project_interviews">,
+    tab: BoardTab,
     totalPages: number,
     total: number,
   ) => {
@@ -1051,13 +1165,27 @@ export function InterviewsBoard() {
 
   return (
     <>
+      {toastMessage ? (
+        <div
+          className="fixed bottom-6 left-1/2 z-[70] max-w-md -translate-x-1/2 rounded-xl border border-[#e5e5e5] bg-[#1d1d1f] px-4 py-3 text-center text-sm font-medium text-white shadow-lg"
+          role="status"
+        >
+          {toastMessage}
+        </div>
+      ) : null}
+
       <header className="sticky top-0 z-30 bg-[#f5f5f7]/90 px-8 py-6 backdrop-blur-md">
         <h1 className="text-2xl font-semibold tracking-tight text-[#1d1d1f]">
-          Interview scheduling
+          Testimonial Interviews
         </h1>
         <p className="mt-1 text-sm text-[#6e6e73]">
-          Tabbed tables · real-time updates
+          Eligible and scheduled testimonial interviews · real-time updates
         </p>
+        {showViewOnlyBadge ? (
+          <span className="mt-2 inline-flex rounded-full bg-[#f3f4f6] px-3 py-1 text-xs font-medium text-[#6b7280]">
+            View only
+          </span>
+        ) : null}
       </header>
 
       <main className="mx-auto max-w-[1600px] px-8 pb-12 pt-2 text-sm text-[#1d1d1f]">
@@ -1126,11 +1254,6 @@ export function InterviewsBoard() {
                   ["scheduled", "Scheduled", counts.scheduled],
                   ["rescheduled", "Rescheduled", counts.rescheduled],
                   ["completed", "Completed", counts.completed],
-                  [
-                    "project_interviews",
-                    "Project Interviews",
-                    projectPendingCount,
-                  ],
                 ] as const
               ).map(([id, label, n]) => (
                 <button
@@ -1150,22 +1273,6 @@ export function InterviewsBoard() {
                 </button>
               ))}
             </div>
-
-            {activeTab === "project_interviews" && (
-              <ProjectInterviewsPanel
-                supabase={supabase}
-                onError={setError}
-                onPipelineChanged={() => void loadData()}
-                onScheduleProject={(c) => {
-                  setScheduleFor(null);
-                  setScheduleProjectFor(c);
-                }}
-                onPostProjectInterview={(i) => setPostFor(i)}
-                onRescheduleProjectInterview={(i, mode) =>
-                  setRescheduleCtx({ interview: i, mode })
-                }
-              />
-            )}
 
             {activeTab === "eligible" && (
               <section className="space-y-4">
@@ -1323,9 +1430,13 @@ export function InterviewsBoard() {
                                   <div className="flex justify-end">
                                     <button
                                       type="button"
-                                      disabled={!hasPoc}
+                                      disabled={!canEditEligibleTab || !hasPoc}
                                       title={
-                                        hasPoc ? undefined : "Assign a POC first"
+                                        !canEditEligibleTab
+                                          ? "View only"
+                                          : hasPoc
+                                            ? undefined
+                                            : "Assign a POC first"
                                       }
                                       className="rounded-lg bg-[#1d1d1f] px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-[#2d2d2f] disabled:cursor-not-allowed disabled:bg-[#d1d5db] disabled:text-[#6b7280]"
                                       onClick={() => {
@@ -1335,6 +1446,7 @@ export function InterviewsBoard() {
                                           full_name: c.full_name,
                                           email: c.email,
                                           interview_type: c.interview_type,
+                                          poc_assigned: c.poc_assigned,
                                         });
                                       }}
                                     >
@@ -1595,12 +1707,32 @@ export function InterviewsBoard() {
                         ))}
                       </select>
                     </label>
+                    <label className="flex w-full flex-col gap-1 sm:w-48">
+                      <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+                        Zoom status
+                      </span>
+                      <select
+                        className={filterInp}
+                        value={filters.scheduled.zoomStatus}
+                        onChange={(e) =>
+                          updateFilter("scheduled", {
+                            zoomStatus: e.target.value as ZoomStatusFilter,
+                          })
+                        }
+                      >
+                        {ZOOM_STATUS_FILTER_OPTIONS.map(({ value, label }) => (
+                          <option key={value} value={value}>
+                            {label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
                   </div>
                 </div>
 
                 <div className={tableWrap}>
                   <div className="w-full overflow-x-auto">
-                    <table className="w-full min-w-[1220px] table-auto border-collapse">
+                    <table className="w-full min-w-[1380px] table-auto border-collapse">
                       <thead>
                         <tr>
                           <th className={thName}>Name</th>
@@ -1609,6 +1741,7 @@ export function InterviewsBoard() {
                           <th className={thLanguage}>Language</th>
                           <th className={thDateTime}>Date &amp; time</th>
                           <th className={thInterviewer}>Interviewer</th>
+                          <th className={thZoomStatus}>Zoom status</th>
                           <th className={thPocInterview}>POC</th>
                           <th className={thActions}>Actions</th>
                         </tr>
@@ -1616,73 +1749,110 @@ export function InterviewsBoard() {
                       <tbody>
                         {scheduledPage.slice.length === 0 ? (
                           <tr>
-                            <td className={tdBase} colSpan={8}>
+                            <td className={tdBase} colSpan={9}>
                               {emptyState}
                             </td>
                           </tr>
                         ) : (
-                          scheduledPage.slice.map((i) => (
-                            <tr key={i.id}>
-                              <td className={tdName}>
-                                <button
-                                  type="button"
-                                  className={nameLinkBtn}
-                                  onClick={() =>
-                                    setDetailCandidateId(i.candidate_id)
-                                  }
-                                >
-                                  {i.candidates?.full_name?.trim() || "—"}
-                                </button>
-                              </td>
-                              <td className={tdEmail}>
-                                {i.candidates?.email}
-                              </td>
-                              <td className={tdInterviewType}>
-                                <div className="flex items-center justify-center">
-                                  {interviewTypeBadge(i.interview_type)}
-                                </div>
-                              </td>
-                              <td className={tdLanguage}>
-                                <div className="flex items-center justify-center">
-                                  {interviewLanguageBadge(i)}
-                                </div>
-                              </td>
-                              <td className={tdDateTime}>
-                                {formatDateTime(i.scheduled_date)}
-                              </td>
-                              <td className={tdInterviewer}>
-                                {i.interviewer}
-                              </td>
-                              <td className={tdPocInterview}>
-                                {i.poc?.trim() ||
-                                  i.candidates?.poc_assigned?.trim() ||
-                                  "—"}
-                              </td>
-                              <td className={tdActions}>
-                                <div className="flex flex-wrap items-center justify-end gap-2">
+                          scheduledPage.slice.map((i) => {
+                            const awaitingZoom =
+                              i.interview_status === "draft";
+                            return (
+                              <tr key={i.id}>
+                                <td className={tdName}>
                                   <button
                                     type="button"
-                                    className="rounded-lg bg-[#ea580c] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#c2410c]"
+                                    className={nameLinkBtn}
                                     onClick={() =>
-                                      setRescheduleCtx({
-                                        interview: i,
-                                        mode: "from_scheduled",
-                                      })
+                                      setDetailCandidateId(i.candidate_id)
                                     }
                                   >
-                                    Reschedule
+                                    {i.candidates?.full_name?.trim() || "—"}
                                   </button>
-                                  <button
-                                    type="button"
-                                    className="rounded-lg bg-[#16a34a] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#15803d]"
-                                    onClick={() => setPostFor(i)}
-                                  >
-                                    Mark completed
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                          ))
+                                </td>
+                                <td className={tdEmail}>
+                                  {i.candidates?.email}
+                                </td>
+                                <td className={tdInterviewType}>
+                                  <div className="flex items-center justify-center">
+                                    {interviewTypeBadge(i.interview_type)}
+                                  </div>
+                                </td>
+                                <td className={tdLanguage}>
+                                  <div className="flex items-center justify-center">
+                                    {interviewLanguageBadge(i)}
+                                  </div>
+                                </td>
+                                <td className={tdDateTime}>
+                                  {formatDateTime(i.scheduled_date)}
+                                </td>
+                                <td className={tdInterviewer}>
+                                  {i.interviewer}
+                                </td>
+                                <td className={tdZoomStatus}>
+                                  {zoomStatusColumn(i)}
+                                </td>
+                                <td className={tdPocInterview}>
+                                  {i.poc?.trim() ||
+                                    i.candidates?.poc_assigned?.trim() ||
+                                    "—"}
+                                </td>
+                                <td className={tdActions}>
+                                  <div className="flex flex-wrap items-center justify-end gap-2">
+                                    {awaitingZoom ? (
+                                      <button
+                                        type="button"
+                                        disabled={!canEditScheduledTab}
+                                        className="rounded-lg border border-[#1d1d1f] bg-white px-3 py-1.5 text-xs font-medium text-[#1d1d1f] hover:bg-[#fafafa]"
+                                        onClick={() =>
+                                          canEditScheduledTab
+                                            ? setAddZoomFor(i)
+                                            : undefined
+                                        }
+                                      >
+                                        Add Zoom Details
+                                      </button>
+                                    ) : null}
+                                    <button
+                                      type="button"
+                                      disabled={!canEditScheduledTab || awaitingZoom}
+                                      title={
+                                        !canEditScheduledTab
+                                          ? "View only"
+                                          : awaitingZoom
+                                          ? "Add Zoom details first"
+                                          : undefined
+                                      }
+                                      className="rounded-lg bg-[#ea580c] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#c2410c] disabled:cursor-not-allowed disabled:bg-[#d1d5db] disabled:text-[#6b7280]"
+                                      onClick={() =>
+                                        setRescheduleCtx({
+                                          interview: i,
+                                          mode: "from_scheduled",
+                                        })
+                                      }
+                                    >
+                                      Reschedule
+                                    </button>
+                                    <button
+                                      type="button"
+                                      disabled={!canEditScheduledTab || awaitingZoom}
+                                      title={
+                                        !canEditScheduledTab
+                                          ? "View only"
+                                          : awaitingZoom
+                                          ? "Add Zoom details first"
+                                          : undefined
+                                      }
+                                      className="rounded-lg bg-[#16a34a] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#15803d] disabled:cursor-not-allowed disabled:bg-[#d1d5db] disabled:text-[#6b7280]"
+                                      onClick={() => setPostFor(i)}
+                                    >
+                                      Mark completed
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })
                         )}
                       </tbody>
                     </table>
@@ -1797,20 +1967,28 @@ export function InterviewsBoard() {
                                 <div className="flex flex-wrap items-center justify-end gap-2">
                                   <button
                                     type="button"
+                                    disabled={!canEditRescheduledTab}
                                     className="rounded-lg bg-[#1d1d1f] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#2d2d2f]"
                                     onClick={() =>
-                                      setRescheduleCtx({
-                                        interview: i,
-                                        mode: "from_rescheduled",
-                                      })
+                                      canEditRescheduledTab
+                                        ? setRescheduleCtx({
+                                            interview: i,
+                                            mode: "from_rescheduled",
+                                          })
+                                        : undefined
                                     }
                                   >
                                     Schedule again
                                   </button>
                                   <button
                                     type="button"
+                                    disabled={!canEditRescheduledTab}
                                     className="rounded-lg bg-[#16a34a] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#15803d]"
-                                    onClick={() => setPostFor(i)}
+                                    onClick={() =>
+                                      canEditRescheduledTab
+                                        ? setPostFor(i)
+                                        : undefined
+                                    }
                                   >
                                     Mark completed
                                   </button>
@@ -1889,6 +2067,14 @@ export function InterviewsBoard() {
                         ))}
                       </select>
                     </label>
+                    <button
+                      type="button"
+                      onClick={exportCompletedCsv}
+                      disabled={completedFiltered.length === 0}
+                      className="rounded-xl border border-[#e5e5e5] bg-white px-4 py-2 text-sm font-medium text-[#1d1d1f] transition-colors hover:bg-[#f5f5f7] disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      Export CSV
+                    </button>
                   </div>
                 </div>
 
@@ -2220,6 +2406,16 @@ export function InterviewsBoard() {
           setScheduleProjectFor(null);
         }}
         onCreated={() => void loadData()}
+      />
+
+      <AddZoomDetailsModal
+        key={addZoomFor?.id ?? "add-zoom-closed"}
+        open={!!addZoomFor}
+        interview={addZoomFor}
+        supabase={supabase}
+        onClose={() => setAddZoomFor(null)}
+        onSaved={() => void loadData()}
+        onToast={(msg) => setToastMessage(msg)}
       />
 
       <CandidateDetailModal

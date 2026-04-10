@@ -8,6 +8,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { ProjectCandidateDetailModal } from "@/components/project-candidate-detail-modal";
 import { logActivity } from "@/lib/activity-logger";
+import { getUserSafe } from "@/lib/supabase-auth";
 
 import type { ScheduleProjectCandidate } from "./schedule-interview-modal";
 import type {
@@ -18,7 +19,8 @@ import type {
 const PAGE_SIZE = 20;
 const TEAM_POC_MEMBERS = ["Harika", "Anushka", "Gargi", "Mudit"] as const;
 
-const PROJECT_INTERVIEW_SELECT = `id, project_candidate_id, scheduled_date, previous_scheduled_date, reschedule_reason, completed_at, interviewer, zoom_link, language, invitation_sent, poc, remarks, reminder_count, interview_status, post_interview_eligible, reward_item, category, funnel, comments, interview_type, project_candidates ( id, email, whatsapp_number, project_title, problem_statement, target_user, ai_usage, demo_link, status, poc_assigned, poc_assigned_at, interview_type )`;
+/** Interview rows only — join `project_candidates` client-side so a failed embed never blocks loading candidates. */
+const PROJECT_INTERVIEW_COLUMNS = `id, created_at, project_candidate_id, scheduled_date, previous_scheduled_date, reschedule_reason, completed_at, interviewer, zoom_link, language, invitation_sent, poc, remarks, reminder_count, interview_status, post_interview_eligible, reward_item, category, funnel, comments, interview_type`;
 
 type ProjectSubTab = "pending" | "scheduled" | "rescheduled" | "completed";
 
@@ -34,6 +36,8 @@ function formatDateTime(iso: string | null | undefined) {
 }
 
 function projectDisplayName(pc: ProjectCandidateRow): string {
+  const fn = pc.full_name?.trim();
+  if (fn) return fn;
   const e = pc.email?.trim();
   if (!e) return "—";
   const local = e.split("@")[0] ?? "";
@@ -46,6 +50,7 @@ function matchesPendingSearch(pc: ProjectCandidateRow, q: string): boolean {
   if (!s) return true;
   return (
     projectDisplayName(pc).toLowerCase().includes(s) ||
+    (pc.full_name ?? "").toLowerCase().includes(s) ||
     (pc.email ?? "").toLowerCase().includes(s) ||
     (pc.whatsapp_number ?? "").toLowerCase().includes(s) ||
     (pc.project_title ?? "").toLowerCase().includes(s)
@@ -170,30 +175,77 @@ export function ProjectInterviewsPanel({
   const [sheetSyncBusy, setSheetSyncBusy] = useState(false);
 
   const loadProjectData = useCallback(async () => {
-    const [{ data: pc, error: e1 }, { data: pi, error: e2 }] =
-      await Promise.all([
-        supabase
-          .from("project_candidates")
-          .select(
-            "id, created_at, email, whatsapp_number, project_title, problem_statement, target_user, ai_usage, demo_link, status, poc_assigned, poc_assigned_at, interview_type",
-          )
-          .order("created_at", { ascending: true }),
-        supabase
-          .from("project_interviews")
-          .select(PROJECT_INTERVIEW_SELECT)
-          .order("scheduled_date", { ascending: true }),
-      ]);
-    if (e1 || e2) {
-      onError(e1?.message ?? e2?.message ?? "Failed to load project pipeline");
-      return;
+    const { data: pc, error: eCandidates } = await supabase
+      .from("project_candidates")
+      .select(
+        "id, created_at, email, full_name, whatsapp_number, project_title, problem_statement, target_user, ai_usage, demo_link, status, poc_assigned, poc_assigned_at, interview_type",
+      )
+      .order("created_at", { ascending: false });
+
+    let candidateList: ProjectCandidateRow[] = [];
+    if (eCandidates) {
+      console.log(
+        "[ProjectInterviewsPanel] project_candidates load error:",
+        eCandidates,
+      );
+      setCandidates([]);
+    } else {
+      candidateList = (pc ?? []) as ProjectCandidateRow[];
+      console.log(
+        `[ProjectInterviewsPanel] Loaded ${candidateList.length} project_candidates from DB`,
+      );
+      setCandidates(candidateList);
     }
-    onError(null);
-    setCandidates((pc ?? []) as ProjectCandidateRow[]);
-    setInterviews(
-      (pi ?? []).map((row) =>
-        normalizeProjectInterviewRow(row as Record<string, unknown>),
-      ),
+
+    const candidateById = new Map(
+      candidateList.map((c) => [c.id, c] as const),
     );
+
+    const { data: pi, error: eInterviews } = await supabase
+      .from("project_interviews")
+      .select(PROJECT_INTERVIEW_COLUMNS)
+      .order("created_at", { ascending: false });
+
+    if (eInterviews) {
+      console.log(
+        "[ProjectInterviewsPanel] project_interviews load error:",
+        eInterviews,
+      );
+      setInterviews([]);
+    } else {
+      const rows = (pi ?? []) as Record<string, unknown>[];
+      console.log(
+        `[ProjectInterviewsPanel] Loaded ${rows.length} project_interviews from DB (merged with candidates client-side)`,
+      );
+      const merged = rows.map((row) => {
+        const pid = row.project_candidate_id as string;
+        return normalizeProjectInterviewRow({
+          ...row,
+          project_candidates: candidateById.get(pid) ?? null,
+        });
+      });
+      merged.sort((a, b) => {
+        const ca = a.project_candidates?.created_at ?? "";
+        const cb = b.project_candidates?.created_at ?? "";
+        if (ca !== cb) return cb.localeCompare(ca);
+        return (b.created_at ?? "").localeCompare(a.created_at ?? "");
+      });
+      setInterviews(merged);
+    }
+
+    if (eCandidates && eInterviews) {
+      onError(
+        `${eCandidates.message} · ${eInterviews.message}`,
+      );
+    } else if (eCandidates) {
+      onError(eCandidates.message);
+    } else if (eInterviews) {
+      onError(
+        `Could not load project interviews: ${eInterviews.message}. Pending list still uses candidates.`,
+      );
+    } else {
+      onError(null);
+    }
   }, [supabase, onError]);
 
   useEffect(() => {
@@ -268,27 +320,43 @@ export function ProjectInterviewsPanel({
     return m;
   }, [interviews]);
 
-  const busyCandidateIds = useMemo(() => {
-    return new Set(
-      interviews
-        .filter(
-          (i) =>
-            i.interview_status === "scheduled" ||
-            i.interview_status === "rescheduled",
-        )
-        .map((i) => i.project_candidate_id),
-    );
-  }, [interviews]);
-
-  const pendingQueue = useMemo(
-    () =>
-      candidates.filter(
-        (c) =>
-          !busyCandidateIds.has(c.id) &&
-          matchesPendingSearch(c, filters.pending.search),
-      ),
-    [candidates, busyCandidateIds, filters.pending.search],
+  /** Any interview row linked to this candidate (draft, scheduled, etc.). */
+  const candidateIdsWithInterview = useMemo(
+    () => new Set(interviews.map((i) => i.project_candidate_id)),
+    [interviews],
   );
+
+  /** Candidates currently in Scheduled or Rescheduled tabs — hide from Pending. */
+  const activePipelineCandidateIds = useMemo(
+    () =>
+      new Set(
+        interviews
+          .filter(
+            (i) =>
+              i.interview_status === "scheduled" ||
+              i.interview_status === "rescheduled",
+          )
+          .map((i) => i.project_candidate_id),
+      ),
+    [interviews],
+  );
+
+  const pendingQueue = useMemo(() => {
+    const q = filters.pending.search;
+    return candidates.filter((c) => {
+      if (activePipelineCandidateIds.has(c.id)) return false;
+      const statusNorm = (c.status ?? "pending").trim() || "pending";
+      const hasInterview = candidateIdsWithInterview.has(c.id);
+      const qualifiesPending =
+        statusNorm === "pending" || !hasInterview;
+      return qualifiesPending && matchesPendingSearch(c, q);
+    });
+  }, [
+    candidates,
+    candidateIdsWithInterview,
+    activePipelineCandidateIds,
+    filters.pending.search,
+  ]);
 
   const scheduledFiltered = useMemo(
     () =>
@@ -373,11 +441,11 @@ export function ProjectInterviewsPanel({
     if (name) {
       const display =
         pc.project_title?.trim() || pc.email || "Project candidate";
-      const { data: authPoc } = await supabase.auth.getUser();
-      if (authPoc.user) {
+      const authPoc = await getUserSafe(supabase);
+      if (authPoc) {
         await logActivity({
           supabase,
-          user: authPoc.user,
+          user: authPoc,
           action_type: "interviews",
           entity_type: "project_candidate",
           entity_id: pc.id,

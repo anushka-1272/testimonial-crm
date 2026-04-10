@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { logActivity } from "@/lib/activity-logger";
+import { getUserSafe } from "@/lib/supabase-auth";
 
 import {
   type InterviewWithCandidate,
@@ -323,11 +324,11 @@ export function PostInterviewDrawer({
       if (eligible !== true) rewardLog = "—";
       else if (rewardChoice === "no_dispatch") rewardLog = REWARD_NO_DISPATCH;
       else rewardLog = rewardItemForDb ?? "—";
-      const { data: authPi } = await supabase.auth.getUser();
-      if (authPi.user) {
+      const authPi = await getUserSafe(supabase);
+      if (authPi) {
         await logActivity({
           supabase,
-          user: authPi.user,
+          user: authPi,
           action_type: "interviews",
           entity_type: "interview",
           entity_id: interview.id,
