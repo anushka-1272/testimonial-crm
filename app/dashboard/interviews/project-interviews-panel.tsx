@@ -1,7 +1,7 @@
 "use client";
 
 import { format, parseISO } from "date-fns";
-import { Loader2, Pencil, RefreshCw } from "lucide-react";
+import { Loader2, Pencil, RefreshCw, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -134,6 +134,7 @@ function truncateWithTooltip(text: string | null | undefined, maxLen: number) {
 
 type Props = {
   supabase: SupabaseClient;
+  isAdmin: boolean;
   onError: (msg: string | null) => void;
   onPipelineChanged: () => void;
   onScheduleProject: (c: ScheduleProjectCandidate) => void;
@@ -153,6 +154,7 @@ const defaultFilters = (): Record<ProjectSubTab, TabFilters> => ({
 
 export function ProjectInterviewsPanel({
   supabase,
+  isAdmin,
   onError,
   onPipelineChanged,
   onScheduleProject,
@@ -173,6 +175,7 @@ export function ProjectInterviewsPanel({
     null,
   );
   const [sheetSyncBusy, setSheetSyncBusy] = useState(false);
+  const [deleteBusyId, setDeleteBusyId] = useState<string | null>(null);
 
   const loadProjectData = useCallback(async () => {
     const { data: pc, error: eCandidates } = await supabase
@@ -421,6 +424,46 @@ export function ProjectInterviewsPanel({
 
   const setPage = (tab: ProjectSubTab, page: number) => {
     setFilters((prev) => ({ ...prev, [tab]: { ...prev[tab], page } }));
+  };
+
+  const deleteProjectCandidate = async (pc: ProjectCandidateRow) => {
+    if (!isAdmin) return;
+    const displayName = projectDisplayName(pc);
+    const nameForMsg =
+      displayName === "—"
+        ? pc.email?.trim() || "this project candidate"
+        : displayName;
+    const ok = window.confirm(
+      `Are you sure you want to delete ${nameForMsg}? This will permanently remove this project candidate and all associated records.`,
+    );
+    if (!ok) return;
+    setDeleteBusyId(pc.id);
+    const { error: dErr } = await supabase
+      .from("project_candidates")
+      .delete()
+      .eq("id", pc.id);
+    setDeleteBusyId(null);
+    if (dErr) {
+      onError(dErr.message);
+      return;
+    }
+    onError(null);
+    const actor = await getUserSafe(supabase);
+    if (actor) {
+      await logActivity({
+        supabase,
+        user: actor,
+        action_type: "interviews",
+        entity_type: "project_candidate",
+        entity_id: pc.id,
+        candidate_name: nameForMsg,
+        description: `Deleted project candidate ${nameForMsg}`,
+      });
+    }
+    setDetail((prev) => (prev?.id === pc.id ? null : prev));
+    setPocEditingId((prev) => (prev === pc.id ? null : prev));
+    await loadProjectData();
+    onPipelineChanged();
   };
 
   const handlePocChange = async (pc: ProjectCandidateRow, value: string) => {
@@ -732,10 +775,14 @@ export function ProjectInterviewsPanel({
                             )}
                           </td>
                           <td className={tdActions}>
-                            <div className="flex justify-end">
+                            <div className="flex flex-wrap justify-end gap-2">
                               <button
                                 type="button"
-                                disabled={!hasPoc}
+                                disabled={
+                                  !hasPoc ||
+                                  deleteBusyId === c.id ||
+                                  pocSavingId === c.id
+                                }
                                 title={
                                   hasPoc ? undefined : "Assign a POC first"
                                 }
@@ -752,6 +799,27 @@ export function ProjectInterviewsPanel({
                               >
                                 Schedule
                               </button>
+                              {isAdmin ? (
+                                <button
+                                  type="button"
+                                  disabled={
+                                    deleteBusyId === c.id ||
+                                    pocSavingId === c.id
+                                  }
+                                  title="Delete project candidate"
+                                  aria-label="Delete project candidate"
+                                  className="inline-flex items-center justify-center rounded-lg border border-[#fecaca] bg-[#fef2f2] p-2 text-[#dc2626] transition-colors hover:bg-[#fee2e2] disabled:opacity-50"
+                                  onClick={() =>
+                                    void deleteProjectCandidate(c)
+                                  }
+                                >
+                                  <Trash2
+                                    className="h-4 w-4"
+                                    strokeWidth={2}
+                                    aria-hidden
+                                  />
+                                </button>
+                              ) : null}
                             </div>
                           </td>
                         </tr>

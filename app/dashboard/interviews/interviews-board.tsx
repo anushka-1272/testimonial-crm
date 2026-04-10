@@ -1313,7 +1313,7 @@ export function InterviewsBoard() {
                 </div>
 
                 <div className={tableWrap}>
-                  <div className="w-full overflow-x-auto">
+                  <div className="w-full min-w-0 max-w-full overflow-x-auto">
                     <table className="w-full min-w-[940px] table-auto border-collapse">
                       <thead>
                         <tr>
@@ -1481,7 +1481,7 @@ export function InterviewsBoard() {
                       </p>
                     </div>
                     <div className={tableWrap}>
-                      <div className="w-full overflow-x-auto">
+                      <div className="w-full min-w-0 max-w-full overflow-x-auto">
                         <table className="w-full min-w-[980px] table-auto border-collapse">
                           <thead>
                             <tr>
@@ -1731,7 +1731,7 @@ export function InterviewsBoard() {
                 </div>
 
                 <div className={tableWrap}>
-                  <div className="w-full overflow-x-auto">
+                  <div className="w-full min-w-0 max-w-full overflow-x-auto">
                     <table className="w-full min-w-[1380px] table-auto border-collapse">
                       <thead>
                         <tr>
@@ -1905,7 +1905,7 @@ export function InterviewsBoard() {
                 </div>
 
                 <div className={tableWrap}>
-                  <div className="w-full overflow-x-auto">
+                  <div className="w-full min-w-0 max-w-full overflow-x-auto">
                     <table className="w-full min-w-[1280px] table-auto border-collapse">
                       <thead>
                         <tr>
@@ -2184,7 +2184,7 @@ export function InterviewsBoard() {
                 </div>
 
                 <div className={tableWrap}>
-                  <div className="w-full overflow-x-auto">
+                  <div className="w-full min-w-0 max-w-full overflow-x-auto">
                     <table className="w-full min-w-[1520px] table-auto border-collapse">
                       <thead>
                         <tr>

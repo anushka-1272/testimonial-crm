@@ -966,7 +966,7 @@ export function DispatchDashboard() {
         </div>
 
         <div className={`overflow-hidden ${cardChrome}`}>
-          <div className="overflow-x-auto">
+          <div className="w-full min-w-0 max-w-full overflow-x-auto">
             <table className="min-w-full text-left text-sm">
               <thead>
                 <tr className="border-b border-[#f5f5f5]">

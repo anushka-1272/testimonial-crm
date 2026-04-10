@@ -72,7 +72,7 @@ async function loadProjectPipelineStats(
 }
 
 export function ProjectInterviewsPage() {
-  const { showViewOnlyBadge } = useAccessControl();
+  const { role, showViewOnlyBadge } = useAccessControl();
   const supabase = useMemo(() => {
     try {
       return createBrowserSupabaseClient();
@@ -209,6 +209,7 @@ export function ProjectInterviewsPage() {
 
         <ProjectInterviewsPanel
           supabase={supabase}
+          isAdmin={role === "admin"}
           onError={setError}
           onPipelineChanged={refreshStats}
           onScheduleProject={(c) => {

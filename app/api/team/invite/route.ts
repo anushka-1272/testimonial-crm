@@ -2,7 +2,6 @@ import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 
 import type { TeamRole } from "@/lib/access-control";
-import { createSupabaseAdmin } from "@/lib/supabase";
 import { getUserSafe } from "@/lib/supabase-auth";
 
 type InviteBody = {
@@ -46,8 +45,20 @@ export async function POST(request: Request) {
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    const admin = createSupabaseAdmin();
-    const { data: adminRow } = await admin
+
+    const serviceUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!serviceUrl || !serviceRoleKey) {
+      return NextResponse.json(
+        { error: "Server misconfiguration" },
+        { status: 500 },
+      );
+    }
+    const supabaseAdmin = createClient(serviceUrl, serviceRoleKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+
+    const { data: adminRow } = await supabaseAdmin
       .from("team_members")
       .select("role, status")
       .eq("user_id", user.id)
@@ -64,9 +75,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
     }
 
-    const inviteRes = await admin.auth.admin.inviteUserByEmail(email, {
-      data: { name: fullName ?? undefined },
-    });
+    const inviteRes = await supabaseAdmin.auth.admin.inviteUserByEmail(
+      email,
+      {
+        data: { name: fullName ?? undefined },
+      },
+    );
     if (inviteRes.error) {
       return NextResponse.json(
         { error: inviteRes.error.message },
@@ -75,7 +89,7 @@ export async function POST(request: Request) {
     }
     const invitedUserId = inviteRes.data.user?.id ?? null;
 
-    const { error: upErr } = await admin.from("team_members").upsert(
+    const { error: upErr } = await supabaseAdmin.from("team_members").upsert(
       {
         user_id: invitedUserId,
         email,
@@ -95,7 +109,7 @@ export async function POST(request: Request) {
       (typeof user.user_metadata?.name === "string" && user.user_metadata.name) ||
       user.email ||
       "Admin";
-    await admin.from("activity_log").insert({
+    await supabaseAdmin.from("activity_log").insert({
       user_id: user.id,
       user_name: actorName,
       action_type: "settings",

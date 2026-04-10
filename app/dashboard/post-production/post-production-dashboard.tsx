@@ -862,7 +862,7 @@ export function PostProductionDashboard() {
 
     if (editing) {
       return (
-        <div className="flex max-w-[200px] flex-col gap-1">
+        <div className="flex w-full min-w-0 max-w-full flex-col gap-1">
           <input
             type="url"
             className="w-full rounded-lg border border-[#e5e5e5] px-2 py-1 text-xs"
@@ -901,7 +901,7 @@ export function PostProductionDashboard() {
         <button
           type="button"
           disabled={busy}
-          className="rounded-lg border border-[#e5e5e5] bg-[#fafafa] px-2 py-1 text-xs font-medium text-[#6e6e73] hover:bg-[#f0f0f0] disabled:opacity-50"
+          className="rounded border border-[#e5e5e5] bg-[#fafafa] px-2 py-1 text-xs font-medium text-[#6e6e73] hover:bg-[#f0f0f0] disabled:opacity-50"
           onClick={() =>
             setLinkEdit({ rowId: row.id, field, value: "" })
           }
@@ -917,7 +917,7 @@ export function PostProductionDashboard() {
           href={raw}
           target="_blank"
           rel="noopener noreferrer"
-          className="rounded-lg bg-[#1d1d1f] px-2 py-1 text-xs font-medium text-white hover:bg-[#2d2d2f]"
+          className="rounded bg-[#1d1d1f] px-2 py-1 text-xs font-medium text-white hover:bg-[#2d2d2f]"
         >
           View
         </a>
@@ -965,23 +965,21 @@ export function PostProductionDashboard() {
 
     return (
       <div className="relative" ref={open ? reviewRootRef : null}>
-        <div className="space-y-1">
+        <div className="flex flex-col items-start gap-1">
           <span className="inline-flex rounded-full bg-[#fef2f2] px-2 py-0.5 text-xs font-medium text-[#dc2626]">
             ✗ Not Done
           </span>
-          <div>
-            <button
-              type="button"
-              disabled={busy}
-              className="text-xs font-medium text-[#3b82f6] hover:underline disabled:opacity-50"
-              onClick={() => {
-                setReviewBy("Harika");
-                setReviewPopover({ rowId: row.id, kind });
-              }}
-            >
-              Mark Done
-            </button>
-          </div>
+          <button
+            type="button"
+            disabled={busy}
+            className="text-left text-xs font-medium text-[#3b82f6] hover:underline disabled:opacity-50"
+            onClick={() => {
+              setReviewBy("Harika");
+              setReviewPopover({ rowId: row.id, kind });
+            }}
+          >
+            Mark Done
+          </button>
         </div>
         {open ? (
           <div className="absolute left-0 top-full z-50 mt-1 w-56 rounded-xl border border-[#f0f0f0] bg-white p-3 shadow-lg">
@@ -1022,9 +1020,22 @@ export function PostProductionDashboard() {
   };
 
   const th =
-    "border-b border-gray-100 bg-[#fafafa] py-3 px-3 text-left text-xs font-semibold tracking-wider text-gray-400";
+    "border-b border-gray-100 bg-[#fafafa] py-2 px-2 text-left text-xs font-semibold tracking-wider text-gray-400";
   const td =
-    "border-b border-gray-100 px-3 py-3 text-sm align-top text-[#1d1d1f]";
+    "border-b border-gray-100 px-2 py-2 text-sm align-top text-[#1d1d1f]";
+  const ppCol = {
+    name: "w-[140px] max-w-[140px]",
+    source: "w-[110px] max-w-[110px]",
+    raw: "w-[100px] max-w-[100px]",
+    edited: "w-[100px] max-w-[100px]",
+    pre: "w-[130px] max-w-[130px]",
+    post: "w-[130px] max-w-[130px]",
+    editedBy: "w-[120px] max-w-[120px]",
+    youtube: "w-[100px] max-w-[100px]",
+    status: "w-[120px] max-w-[120px]",
+    summary: "w-[90px] max-w-[90px]",
+    actions: "w-[90px] max-w-[90px]",
+  } as const;
 
   if (!supabase) {
     return (
@@ -1262,21 +1273,25 @@ export function PostProductionDashboard() {
             </div>
 
             <div className="overflow-hidden rounded-2xl border border-[#f0f0f0] bg-white shadow-sm">
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[1520px] table-auto border-collapse text-sm">
+              <div className="w-full min-w-0 max-w-full overflow-x-auto">
+                <table className="w-full min-w-[1240px] table-fixed border-collapse text-sm">
                   <thead>
                     <tr>
-                      <th className={th}>Name</th>
-                      <th className={th}>SOURCE</th>
-                      <th className={th}>Raw video</th>
-                      <th className={th}>Edited video</th>
-                      <th className={th}>Pre-edit review</th>
-                      <th className={th}>Post-edit review</th>
-                      <th className={th}>Edited by</th>
-                      <th className={th}>YouTube</th>
-                      <th className={th}>Status</th>
-                      <th className={th}>Summary</th>
-                      <th className={`${th} text-right`}>Actions</th>
+                      <th className={`${th} ${ppCol.name}`}>Name</th>
+                      <th className={`${th} ${ppCol.source}`}>SOURCE</th>
+                      <th className={`${th} ${ppCol.raw}`}>Raw video</th>
+                      <th className={`${th} ${ppCol.edited}`}>Edited video</th>
+                      <th className={`${th} ${ppCol.pre}`}>Pre-edit review</th>
+                      <th className={`${th} ${ppCol.post}`}>
+                        Post-edit review
+                      </th>
+                      <th className={`${th} ${ppCol.editedBy}`}>Edited by</th>
+                      <th className={`${th} ${ppCol.youtube}`}>YouTube</th>
+                      <th className={`${th} ${ppCol.status}`}>Status</th>
+                      <th className={`${th} ${ppCol.summary}`}>Summary</th>
+                      <th className={`${th} ${ppCol.actions} text-right`}>
+                        Actions
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1301,35 +1316,38 @@ export function PostProductionDashboard() {
                           (row.source_type === "project" && !!pcid);
                         return (
                           <tr key={row.id}>
-                            <td className={td}>
+                            <td className={`${td} ${ppCol.name}`}>
                               {nameClickable ? (
                                 <button
                                   type="button"
-                                  className="text-left font-medium text-[#3b82f6] hover:underline"
+                                  className="block max-w-full truncate text-left font-medium text-[#3b82f6] hover:underline"
+                                  title={row.candidate_name?.trim() || undefined}
                                   onClick={() => void openNameDetail(row)}
                                 >
                                   {row.candidate_name?.trim() || "—"}
                                 </button>
                               ) : (
-                                <span>{row.candidate_name?.trim() || "—"}</span>
+                                <span className="block max-w-full truncate">
+                                  {row.candidate_name?.trim() || "—"}
+                                </span>
                               )}
                             </td>
-                            <td className={td}>
+                            <td className={`${td} ${ppCol.source}`}>
                               {sourceBadge(row.source_type)}
                             </td>
-                            <td className={td}>
+                            <td className={`${td} ${ppCol.raw}`}>
                               {renderLinkCell(row, "raw_video_link")}
                             </td>
-                            <td className={td}>
+                            <td className={`${td} ${ppCol.edited}`}>
                               {renderLinkCell(row, "edited_video_link")}
                             </td>
-                            <td className={td}>
+                            <td className={`${td} ${ppCol.pre}`}>
                               {renderReviewCell(row, "pre")}
                             </td>
-                            <td className={td}>
+                            <td className={`${td} ${ppCol.post}`}>
                               {renderReviewCell(row, "post")}
                             </td>
-                            <td className={td}>
+                            <td className={`${td} ${ppCol.editedBy}`}>
                               {row.edited_by?.trim() ? (
                                 <div className="flex flex-col gap-1">
                                   <span className="inline-flex w-fit rounded-full bg-[#f5f5f7] px-2.5 py-1 text-xs font-medium text-[#6e6e73]">
@@ -1337,7 +1355,7 @@ export function PostProductionDashboard() {
                                   </span>
                                   <select
                                     disabled={busy}
-                                    className="max-w-[160px] rounded-lg border border-[#e5e5e5] px-2 py-1 text-xs disabled:opacity-50"
+                                    className="max-w-[112px] rounded-lg border border-[#e5e5e5] px-2 py-1 text-xs disabled:opacity-50"
                                     value={
                                       TEAM.includes(
                                         row.edited_by as (typeof TEAM)[number],
@@ -1370,7 +1388,7 @@ export function PostProductionDashboard() {
                               ) : (
                                 <select
                                   disabled={busy}
-                                  className="max-w-[130px] rounded-lg border border-[#e5e5e5] px-2 py-1 text-xs disabled:opacity-50"
+                                  className="max-w-[112px] rounded-lg border border-[#e5e5e5] px-2 py-1 text-xs disabled:opacity-50"
                                   value=""
                                   onChange={(e) => {
                                     const v = e.target.value || null;
@@ -1387,15 +1405,15 @@ export function PostProductionDashboard() {
                                 </select>
                               )}
                             </td>
-                            <td className={td}>
+                            <td className={`${td} ${ppCol.youtube}`}>
                               {renderLinkCell(row, "youtube_link")}
                             </td>
-                            <td className={td}>
+                            <td className={`${td} ${ppCol.status}`}>
                               <div className="flex flex-col gap-1">
                                 {youtubeStatusBadge(row.youtube_status)}
                                 <select
                                   disabled={busy}
-                                  className="max-w-[120px] rounded-lg border border-[#e5e5e5] px-2 py-1 text-xs disabled:opacity-50"
+                                  className="max-w-[100px] rounded-lg border border-[#e5e5e5] px-2 py-1 text-xs disabled:opacity-50"
                                   value={row.youtube_status}
                                   onChange={(e) =>
                                     void onYoutubeStatusChange(
@@ -1410,8 +1428,8 @@ export function PostProductionDashboard() {
                                 </select>
                               </div>
                             </td>
-                            <td className={td}>
-                              <div className="max-w-[180px] space-y-1">
+                            <td className={`${td} ${ppCol.summary}`}>
+                              <div className="max-w-[90px] space-y-1">
                                 {!row.summary?.trim() ? (
                                   <span className="text-[#aeaeb2]">—</span>
                                 ) : (
@@ -1439,7 +1457,7 @@ export function PostProductionDashboard() {
                                 ) : null}
                               </div>
                             </td>
-                            <td className={`${td} text-right`}>
+                            <td className={`${td} ${ppCol.actions} text-right`}>
                               {row.youtube_status === "live" ? (
                                 <div className="flex flex-col items-end gap-1">
                                   <button

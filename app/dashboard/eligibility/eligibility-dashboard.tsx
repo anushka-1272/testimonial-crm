@@ -1,7 +1,7 @@
 "use client";
 
 import { endOfDay, parseISO, startOfDay, startOfWeek } from "date-fns";
-import { Check, Loader2, RefreshCw, X } from "lucide-react";
+import { Check, Loader2, RefreshCw, Trash2, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useAccessControl } from "@/components/access-control-context";
@@ -135,7 +135,7 @@ function DetailField({
 }
 
 export function EligibilityDashboard() {
-  const { canEditCurrentPage, showViewOnlyBadge } = useAccessControl();
+  const { role, canEditCurrentPage, showViewOnlyBadge } = useAccessControl();
   const [rows, setRows] = useState<CandidateRow[]>([]);
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -348,6 +348,47 @@ export function EligibilityDashboard() {
       return n;
     });
     setDetailCandidate((prev) => (prev?.id === r.id ? null : prev));
+  };
+
+  const deleteCandidate = async (r: CandidateRow) => {
+    if (role !== "admin") return;
+    if (!supabase) return;
+    const displayName =
+      r.full_name?.trim() || r.email?.trim() || "this candidate";
+    const ok = window.confirm(
+      `Are you sure you want to delete ${displayName}? This will permanently remove the candidate and all associated interviews and dispatch records.`,
+    );
+    if (!ok) return;
+    setBusyId(r.id);
+    const { error: dErr } = await supabase
+      .from("candidates")
+      .delete()
+      .eq("id", r.id);
+    setBusyId(null);
+    if (dErr) {
+      setError(dErr.message);
+      return;
+    }
+    const actor = await getUserSafe(supabase);
+    if (actor) {
+      await logActivity({
+        supabase,
+        user: actor,
+        action_type: "eligibility",
+        entity_type: "candidate",
+        entity_id: r.id,
+        candidate_name: displayName,
+        description: `Deleted candidate ${displayName}`,
+      });
+    }
+    setSelected((prev) => {
+      const n = new Set(prev);
+      n.delete(r.id);
+      return n;
+    });
+    setDetailCandidate((prev) => (prev?.id === r.id ? null : prev));
+    void loadRows();
+    void loadStats();
   };
 
   const markNotEligible = async (r: CandidateRow) => {
@@ -770,7 +811,7 @@ export function EligibilityDashboard() {
         )}
 
         <div className={`overflow-hidden ${cardChrome}`}>
-          <div className="overflow-x-auto">
+          <div className="w-full min-w-0 max-w-full overflow-x-auto">
             <table className="min-w-full text-left text-sm">
               <thead>
                 <tr className="border-b border-[#f5f5f5]">
@@ -937,6 +978,22 @@ export function EligibilityDashboard() {
                             >
                               View details
                             </button>
+                            {role === "admin" ? (
+                              <button
+                                type="button"
+                                disabled={busyId === r.id}
+                                title="Delete candidate"
+                                aria-label="Delete candidate"
+                                className="inline-flex items-center justify-center rounded-lg border border-[#fecaca] bg-[#fef2f2] p-2 text-[#dc2626] transition-colors hover:bg-[#fee2e2] disabled:opacity-50"
+                                onClick={() => void deleteCandidate(r)}
+                              >
+                                <Trash2
+                                  className="h-4 w-4"
+                                  strokeWidth={2}
+                                  aria-hidden
+                                />
+                              </button>
+                            ) : null}
                           </div>
                         </td>
                       </tr>
