@@ -1,8 +1,43 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 
 import type { TeamRole } from "@/lib/access-control";
 import { getUserSafe } from "@/lib/supabase-auth";
+
+/** GoTrue returns this when the email already has an auth account. */
+function isExistingAuthUserInviteError(err: {
+  message: string;
+  status?: number;
+  code?: string;
+}): boolean {
+  const code = (err.code ?? "").toLowerCase();
+  const msg = err.message.toLowerCase();
+  if (code === "email_exists" || code === "user_already_exists") return true;
+  if (msg.includes("already registered")) return true;
+  if (msg.includes("already been registered")) return true;
+  return false;
+}
+
+/** Resolve auth user id by email (admin listUsers is paginated; no getUserByEmail in this SDK). */
+async function authUserIdByEmail(
+  admin: SupabaseClient,
+  email: string,
+): Promise<string | null> {
+  const normalized = email.toLowerCase();
+  let page = 1;
+  const perPage = 1000;
+  for (let guard = 0; guard < 100; guard++) {
+    const { data, error } = await admin.auth.admin.listUsers({ page, perPage });
+    if (error) return null;
+    const users = data?.users ?? [];
+    for (const u of users) {
+      if ((u.email ?? "").toLowerCase() === normalized) return u.id;
+    }
+    if (users.length < perPage) break;
+    page += 1;
+  }
+  return null;
+}
 
 type InviteBody = {
   full_name?: string;
@@ -81,23 +116,46 @@ export async function POST(request: Request) {
         data: { name: fullName ?? undefined },
       },
     );
-    if (inviteRes.error) {
+
+    let targetUserId: string | null = null;
+    let reactivatedExistingAccount = false;
+
+    if (!inviteRes.error && inviteRes.data.user?.id) {
+      targetUserId = inviteRes.data.user.id;
+    } else if (inviteRes.error && isExistingAuthUserInviteError(inviteRes.error)) {
+      const existingId = await authUserIdByEmail(supabaseAdmin, email);
+      if (!existingId) {
+        return NextResponse.json(
+          {
+            error:
+              "This email is already registered, but the account could not be found. Please try again.",
+          },
+          { status: 400 },
+        );
+      }
+      targetUserId = existingId;
+      reactivatedExistingAccount = true;
+    } else if (inviteRes.error) {
       return NextResponse.json(
         { error: inviteRes.error.message },
         { status: 400 },
       );
+    } else {
+      return NextResponse.json(
+        { error: "Invite did not return a user id" },
+        { status: 400 },
+      );
     }
-    const invitedUserId = inviteRes.data.user?.id ?? null;
 
     const { error: upErr } = await supabaseAdmin.from("team_members").upsert(
       {
-        user_id: invitedUserId,
+        user_id: targetUserId,
         email,
         full_name: fullName,
         role,
         invited_by: user.id,
         invited_at: new Date().toISOString(),
-        status: "invited",
+        status: reactivatedExistingAccount ? "active" : "invited",
       },
       { onConflict: "email" },
     );
@@ -115,10 +173,18 @@ export async function POST(request: Request) {
       action_type: "settings",
       entity_type: "team_member",
       candidate_name: email,
-      description: `Admin ${actorName} invited ${email} as ${role}`,
+      description: reactivatedExistingAccount
+        ? `Admin ${actorName} added ${email} as ${role} (existing account)`
+        : `Admin ${actorName} invited ${email} as ${role}`,
       metadata: { role },
     });
 
+    if (reactivatedExistingAccount) {
+      return NextResponse.json({
+        ok: true,
+        success: "Member added successfully",
+      });
+    }
     return NextResponse.json({ ok: true });
   } catch (error) {
     const message =

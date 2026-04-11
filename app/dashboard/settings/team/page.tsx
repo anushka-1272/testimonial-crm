@@ -119,13 +119,18 @@ export default function TeamSettingsPage() {
           role: inviteRole,
         }),
       });
-      const j = (await res.json().catch(() => ({}))) as { error?: string };
+      const j = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        success?: string;
+      };
       if (!res.ok) {
         setError(j.error ?? "Failed to invite member");
         setSubmitting(false);
         return;
       }
-      setToast(`Invite sent to ${inviteEmail.trim()}`);
+      setToast(
+        j.success ?? `Invite sent to ${inviteEmail.trim()}`,
+      );
       setInviteOpen(false);
       setInviteName("");
       setInviteEmail("");
