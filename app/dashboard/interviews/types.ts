@@ -35,6 +35,7 @@ export type InterviewWithCandidate = {
     email: string;
     whatsapp_number?: string | null;
     poc_assigned?: string | null;
+    is_deleted?: boolean | null;
   } | null;
 };
 
@@ -73,6 +74,7 @@ export type ProjectCandidateRow = {
   poc_assigned: string | null;
   poc_assigned_at: string | null;
   interview_type: string | null;
+  is_deleted?: boolean | null;
 };
 
 /** Project pipeline interview row (joined with project_candidates). */

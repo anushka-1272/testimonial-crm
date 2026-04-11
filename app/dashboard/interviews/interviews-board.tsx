@@ -42,7 +42,7 @@ const PAGE_SIZE = 20;
 
 const TEAM_POC_MEMBERS = ["Harika", "Anushka", "Gargi", "Mudit"] as const;
 
-const INTERVIEW_SELECT = `id, candidate_id, scheduled_date, previous_scheduled_date, reschedule_reason, completed_at, interviewer, zoom_link, zoom_account, language, interview_language, invitation_sent, poc, remarks, reminder_count, interview_status, post_interview_eligible, reward_item, category, funnel, comments, interview_type, candidates ( id, created_at, full_name, email, whatsapp_number, poc_assigned )`;
+const INTERVIEW_SELECT = `id, candidate_id, scheduled_date, previous_scheduled_date, reschedule_reason, completed_at, interviewer, zoom_link, zoom_account, language, interview_language, invitation_sent, poc, remarks, reminder_count, interview_status, post_interview_eligible, reward_item, category, funnel, comments, interview_type, candidates ( id, created_at, full_name, email, whatsapp_number, poc_assigned, is_deleted )`;
 
 const cardChrome =
   "rounded-2xl bg-white shadow-[0_4px_16px_rgba(0,0,0,0.08)] border border-[#f0f0f0]";
@@ -518,6 +518,7 @@ export function InterviewsBoard() {
           .select(
             "id, created_at, full_name, email, interview_type, poc_assigned, poc_assigned_at, linkedin_track, linkedin_track_status",
           )
+          .eq("is_deleted", false)
           .eq("eligibility_status", "eligible")
           .order("created_at", { ascending: false }),
         supabase.from("interviews").select(INTERVIEW_SELECT),
@@ -530,6 +531,11 @@ export function InterviewsBoard() {
 
     const list = (inv ?? [])
       .map((row) => normalizeInterviewRow(row as Record<string, unknown>))
+      .filter((i) => {
+        const c = i.candidates;
+        const one = c == null ? null : Array.isArray(c) ? c[0] ?? null : c;
+        return one != null && !one.is_deleted;
+      })
       .sort(compareInterviewByCandidateCreatedDesc);
     const busy = new Set(
       list
@@ -912,7 +918,8 @@ export function InterviewsBoard() {
         poc_assigned: name,
         poc_assigned_at: name ? new Date().toISOString() : null,
       })
-      .eq("id", candidate.id);
+      .eq("id", candidate.id)
+      .eq("is_deleted", false);
     setPocSavingId(null);
     if (uErr) {
       setError(uErr.message);
@@ -951,7 +958,8 @@ export function InterviewsBoard() {
         linkedin_track: true,
         linkedin_track_status: "pending_post",
       })
-      .eq("id", c.id);
+      .eq("id", c.id)
+      .eq("is_deleted", false);
     setLiBusyId(null);
     if (uErr) {
       setError(uErr.message);
@@ -983,7 +991,8 @@ export function InterviewsBoard() {
     const { error: uErr } = await supabase
       .from("candidates")
       .update({ linkedin_track_status: next })
-      .eq("id", c.id);
+      .eq("id", c.id)
+      .eq("is_deleted", false);
     setLiBusyId(null);
     if (uErr) {
       setError(uErr.message);
@@ -1014,7 +1023,8 @@ export function InterviewsBoard() {
     const { error: uErr } = await supabase
       .from("candidates")
       .update({ linkedin_track_status: "eligible" })
-      .eq("id", c.id);
+      .eq("id", c.id)
+      .eq("is_deleted", false);
     if (uErr) {
       setLiBusyId(null);
       setError(uErr.message);
@@ -1032,7 +1042,8 @@ export function InterviewsBoard() {
       await supabase
         .from("candidates")
         .update({ linkedin_track_status: prevStatus })
-        .eq("id", c.id);
+        .eq("id", c.id)
+        .eq("is_deleted", false);
       setLiBusyId(null);
       setError(dErr.message);
       return;

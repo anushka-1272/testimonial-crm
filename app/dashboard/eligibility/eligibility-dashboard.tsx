@@ -10,7 +10,7 @@ import {
   truncateText,
 } from "@/lib/candidate-summary";
 import { logActivity } from "@/lib/activity-logger";
-import { getUserSafe } from "@/lib/supabase-auth";
+import { displayNameFromUser, getUserSafe } from "@/lib/supabase-auth";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 
 type EligibilityStatus = "pending_review" | "eligible" | "not_eligible";
@@ -167,6 +167,7 @@ export function EligibilityDashboard() {
     const { data, error: qErr } = await supabase
       .from("candidates")
       .select(SELECT_COLUMNS)
+      .eq("is_deleted", false)
       .order("created_at", { ascending: false });
 
     if (qErr) {
@@ -185,18 +186,22 @@ export function EligibilityDashboard() {
       supabase
         .from("candidates")
         .select("id", { count: "exact", head: true })
+        .eq("is_deleted", false)
         .gte("created_at", weekStart.toISOString()),
       supabase
         .from("candidates")
         .select("id", { count: "exact", head: true })
+        .eq("is_deleted", false)
         .eq("eligibility_status", "pending_review"),
       supabase
         .from("candidates")
         .select("id", { count: "exact", head: true })
+        .eq("is_deleted", false)
         .eq("eligibility_status", "eligible"),
       supabase
         .from("candidates")
         .select("id", { count: "exact", head: true })
+        .eq("is_deleted", false)
         .eq("eligibility_status", "not_eligible"),
     ]);
 
@@ -305,7 +310,8 @@ export function EligibilityDashboard() {
         congratulation_call_pending: true,
         interview_type: interviewType,
       })
-      .eq("id", r.id);
+      .eq("id", r.id)
+      .eq("is_deleted", false);
     setBusyId(null);
     if (uErr) {
       setError(uErr.message);
@@ -356,20 +362,26 @@ export function EligibilityDashboard() {
     const displayName =
       r.full_name?.trim() || r.email?.trim() || "this candidate";
     const ok = window.confirm(
-      `Are you sure you want to delete ${displayName}? This will permanently remove the candidate and all associated interviews and dispatch records.`,
+      `Are you sure you want to delete ${displayName}? They will be removed from active views; restore anytime from Settings → Deleted Entries.`,
     );
     if (!ok) return;
     setBusyId(r.id);
+    const actor = await getUserSafe(supabase);
+    const deletedBy = actor ? displayNameFromUser(actor) : "Unknown";
     const { error: dErr } = await supabase
       .from("candidates")
-      .delete()
-      .eq("id", r.id);
+      .update({
+        is_deleted: true,
+        deleted_at: new Date().toISOString(),
+        deleted_by: deletedBy,
+      })
+      .eq("id", r.id)
+      .eq("is_deleted", false);
     setBusyId(null);
     if (dErr) {
       setError(dErr.message);
       return;
     }
-    const actor = await getUserSafe(supabase);
     if (actor) {
       await logActivity({
         supabase,
@@ -398,7 +410,8 @@ export function EligibilityDashboard() {
     const { error: uErr } = await supabase
       .from("candidates")
       .update({ eligibility_status: "not_eligible" })
-      .eq("id", r.id);
+      .eq("id", r.id)
+      .eq("is_deleted", false);
     if (uErr) {
       setBusyId(null);
       setError(uErr.message);
@@ -455,7 +468,8 @@ export function EligibilityDashboard() {
         congratulation_call_pending: true,
         interview_type: "testimonial",
       })
-      .in("id", ids);
+      .in("id", ids)
+      .eq("is_deleted", false);
     setBulkBusy(false);
     if (uErr) setError(uErr.message);
     else {
@@ -489,7 +503,8 @@ export function EligibilityDashboard() {
     const { error: uErr } = await supabase
       .from("candidates")
       .update({ eligibility_status: "not_eligible" })
-      .in("id", ids);
+      .in("id", ids)
+      .eq("is_deleted", false);
     if (uErr) {
       setBulkBusy(false);
       setError(uErr.message);

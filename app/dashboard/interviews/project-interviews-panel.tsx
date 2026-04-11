@@ -8,7 +8,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { ProjectCandidateDetailModal } from "@/components/project-candidate-detail-modal";
 import { logActivity } from "@/lib/activity-logger";
-import { getUserSafe } from "@/lib/supabase-auth";
+import { displayNameFromUser, getUserSafe } from "@/lib/supabase-auth";
 
 import type { ScheduleProjectCandidate } from "./schedule-interview-modal";
 import type {
@@ -183,6 +183,7 @@ export function ProjectInterviewsPanel({
       .select(
         "id, created_at, email, full_name, whatsapp_number, project_title, problem_statement, target_user, ai_usage, demo_link, status, poc_assigned, poc_assigned_at, interview_type",
       )
+      .eq("is_deleted", false)
       .order("created_at", { ascending: false });
 
     let candidateList: ProjectCandidateRow[] = [];
@@ -220,13 +221,15 @@ export function ProjectInterviewsPanel({
       console.log(
         `[ProjectInterviewsPanel] Loaded ${rows.length} project_interviews from DB (merged with candidates client-side)`,
       );
-      const merged = rows.map((row) => {
-        const pid = row.project_candidate_id as string;
-        return normalizeProjectInterviewRow({
-          ...row,
-          project_candidates: candidateById.get(pid) ?? null,
-        });
-      });
+      const merged = rows
+        .map((row) => {
+          const pid = row.project_candidate_id as string;
+          return normalizeProjectInterviewRow({
+            ...row,
+            project_candidates: candidateById.get(pid) ?? null,
+          });
+        })
+        .filter((i) => i.project_candidates != null);
       merged.sort((a, b) => {
         const ca = a.project_candidates?.created_at ?? "";
         const cb = b.project_candidates?.created_at ?? "";
@@ -434,21 +437,27 @@ export function ProjectInterviewsPanel({
         ? pc.email?.trim() || "this project candidate"
         : displayName;
     const ok = window.confirm(
-      `Are you sure you want to delete ${nameForMsg}? This will permanently remove this project candidate and all associated records.`,
+      `Are you sure you want to delete ${nameForMsg}? They will be removed from active views; restore anytime from Settings → Deleted Entries.`,
     );
     if (!ok) return;
     setDeleteBusyId(pc.id);
+    const actor = await getUserSafe(supabase);
+    const deletedBy = actor ? displayNameFromUser(actor) : "Unknown";
     const { error: dErr } = await supabase
       .from("project_candidates")
-      .delete()
-      .eq("id", pc.id);
+      .update({
+        is_deleted: true,
+        deleted_at: new Date().toISOString(),
+        deleted_by: deletedBy,
+      })
+      .eq("id", pc.id)
+      .eq("is_deleted", false);
     setDeleteBusyId(null);
     if (dErr) {
       onError(dErr.message);
       return;
     }
     onError(null);
-    const actor = await getUserSafe(supabase);
     if (actor) {
       await logActivity({
         supabase,
@@ -475,7 +484,8 @@ export function ProjectInterviewsPanel({
         poc_assigned: name,
         poc_assigned_at: name ? new Date().toISOString() : null,
       })
-      .eq("id", pc.id);
+      .eq("id", pc.id)
+      .eq("is_deleted", false);
     setPocSavingId(null);
     if (uErr) {
       onError(uErr.message);

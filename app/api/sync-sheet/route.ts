@@ -286,16 +286,24 @@ export async function POST(request: Request) {
 
       const { data: existing } = await supabase
         .from("candidates")
-        .select("id")
+        .select("id, is_deleted")
         .ilike("email", escapeILikeExact(emailRaw.trim()))
         .maybeSingle();
+
+      if (existing?.is_deleted) {
+        errors.push(
+          `Row ${sheetRowNum}: skipped (candidate deleted — not restored from sheet)`,
+        );
+        continue;
+      }
 
       if (existing?.id) {
         const { created_at: _omitCreated, ...updateFields } = payload;
         const { error: upErr } = await supabase
           .from("candidates")
           .update(updateFields)
-          .eq("id", existing.id);
+          .eq("id", existing.id)
+          .eq("is_deleted", false);
 
         if (upErr) {
           errors.push(`Row ${sheetRowNum}: ${upErr.message}`);
@@ -320,6 +328,22 @@ export async function POST(request: Request) {
         .single();
 
       if (insErr) {
+        const dup =
+          insErr.code === "23505" ||
+          (insErr.message ?? "").toLowerCase().includes("duplicate");
+        if (dup) {
+          const { data: clash } = await supabase
+            .from("candidates")
+            .select("is_deleted")
+            .ilike("email", escapeILikeExact(emailRaw.trim()))
+            .maybeSingle();
+          if (clash?.is_deleted) {
+            errors.push(
+              `Row ${sheetRowNum}: skipped (deleted candidate with same email — not restored)`,
+            );
+            continue;
+          }
+        }
         errors.push(`Row ${sheetRowNum}: ${insErr.message}`);
         continue;
       }

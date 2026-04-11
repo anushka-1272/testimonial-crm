@@ -7,7 +7,6 @@ import {
   type FormEvent,
   useCallback,
   useEffect,
-  useRef,
   useState,
 } from "react";
 
@@ -32,8 +31,6 @@ const INTERVIEW_LOOKUP_SELECT =
 
 const DISPATCH_LOOKUP_SELECT =
   "dispatch_status, tracking_id, expected_delivery_date, reward_item";
-
-const COOLDOWN_SECONDS = 30;
 
 function CandidateLookupResultCard({
   payload,
@@ -134,14 +131,11 @@ function interviewTypeBadge(t: string | null | undefined) {
   );
 }
 
-function mapAuthError(message: string): string {
-  if (message === "Request rate limit reached") {
-    return "Too many attempts. Please wait a moment and try again.";
-  }
+function authFormErrorMessage(message: string): string {
   if (message === "Invalid login credentials") {
-    return "Invalid email or password. Please try again.";
+    return "Invalid email or password";
   }
-  return "Something went wrong. Please try again.";
+  return "Something went wrong, please try again";
 }
 
 export default function LoginPage() {
@@ -157,7 +151,6 @@ export default function LoginPage() {
   const [resetSuccess, setResetSuccess] = useState("");
   const [resetLoading, setResetLoading] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [cooldownRemaining, setCooldownRemaining] = useState(0);
   const [rightVisible, setRightVisible] = useState(false);
   const [lookupModalOpen, setLookupModalOpen] = useState(false);
   const [lookupModalQuery, setLookupModalQuery] = useState("");
@@ -167,7 +160,6 @@ export default function LoginPage() {
   );
   const [lookupNotFound, setLookupNotFound] = useState(false);
   const [lookupMultiPhone, setLookupMultiPhone] = useState(false);
-  const errorDelayRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const router = useRouter();
   const supabase = createClientComponentClient();
 
@@ -186,20 +178,6 @@ export default function LoginPage() {
   }, []);
 
   useEffect(() => {
-    return () => {
-      if (errorDelayRef.current) clearTimeout(errorDelayRef.current);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (cooldownRemaining <= 0) return;
-    const t = setInterval(() => {
-      setCooldownRemaining((c) => (c <= 1 ? 0 : c - 1));
-    }, 1000);
-    return () => clearInterval(t);
-  }, [cooldownRemaining > 0]);
-
-  useEffect(() => {
     if (!lookupModalOpen) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") closeLookupModal();
@@ -210,23 +188,20 @@ export default function LoginPage() {
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (errorDelayRef.current) {
-      clearTimeout(errorDelayRef.current);
-      errorDelayRef.current = null;
-    }
     setError("");
     setLoading(true);
-    const { error: signErr } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
     setLoading(false);
-    if (signErr) {
-      setCooldownRemaining(COOLDOWN_SECONDS);
-      errorDelayRef.current = setTimeout(() => {
-        setError(mapAuthError(signErr.message));
-        errorDelayRef.current = null;
-      }, 500);
+
+    console.log("Login attempt:", { email });
+    console.log("Login error:", error);
+    console.log("Login data:", data);
+
+    if (error) {
+      setError(error.message);
       return;
     }
     router.push("/dashboard");
@@ -251,7 +226,7 @@ export default function LoginPage() {
     );
     setResetLoading(false);
     if (resetErr) {
-      setResetError(mapAuthError(resetErr.message));
+      setResetError(authFormErrorMessage(resetErr.message));
       return;
     }
     setResetSuccess("Check your email for a reset link");
@@ -272,6 +247,7 @@ export default function LoginPage() {
         const { data, error } = await supabase
           .from("candidates")
           .select(CANDIDATE_LOOKUP_SELECT)
+          .eq("is_deleted", false)
           .ilike("email", raw)
           .limit(2);
         if (error) {
@@ -290,6 +266,7 @@ export default function LoginPage() {
         const { data, error } = await supabase
           .from("candidates")
           .select(CANDIDATE_LOOKUP_SELECT)
+          .eq("is_deleted", false)
           .ilike("whatsapp_number", `%${digits}%`)
           .limit(15);
         if (error) {
@@ -337,8 +314,6 @@ export default function LoginPage() {
       setLookupLoading(false);
     }
   }, [lookupModalQuery, supabase]);
-
-  const submitDisabled = loading || cooldownRemaining > 0;
 
   return (
     <div className="flex min-h-screen flex-col font-sans lg:flex-row">
@@ -482,17 +457,14 @@ export default function LoginPage() {
                   </div>
 
                   {error ? (
-                    <p
-                      className="mt-3 rounded-lg bg-[#fef2f2] px-3 py-2 text-xs text-[#ef4444]"
-                      role="alert"
-                    >
+                    <p className="mt-3 text-sm text-[#dc2626]" role="alert">
                       {error}
                     </p>
                   ) : null}
 
                   <button
                     type="submit"
-                    disabled={submitDisabled}
+                    disabled={loading}
                     className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-[#1d1d1f] py-3 text-sm font-medium text-white transition-all duration-200 hover:bg-[#2d2d2f] disabled:cursor-not-allowed disabled:opacity-70"
                   >
                     {loading ? (
@@ -503,8 +475,6 @@ export default function LoginPage() {
                         />
                         Signing in...
                       </>
-                    ) : cooldownRemaining > 0 ? (
-                      `Try again in ${cooldownRemaining}s...`
                     ) : (
                       "Sign in"
                     )}

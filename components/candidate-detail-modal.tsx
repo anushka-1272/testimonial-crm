@@ -99,6 +99,7 @@ export function CandidateDetailModal({
         .from("candidates")
         .select(SELECT)
         .eq("id", candidateId)
+        .eq("is_deleted", false)
         .maybeSingle();
 
       if (cancelled) return;

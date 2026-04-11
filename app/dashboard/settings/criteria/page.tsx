@@ -194,9 +194,21 @@ export default function CriteriaPage() {
           <div className="flex flex-wrap items-center gap-3">
             <Link
               href="/dashboard/settings/team"
-              className="text-sm font-medium text-[#3b82f6] transition-all hover:text-[#2563eb]"
+              className="text-sm font-medium text-[#6e6e73] transition-all hover:text-[#1d1d1f]"
             >
               Team
+            </Link>
+            <Link
+              href="/dashboard/settings/criteria"
+              className="text-sm font-medium text-[#1d1d1f]"
+            >
+              Criteria
+            </Link>
+            <Link
+              href="/dashboard/settings/deleted-entries"
+              className="text-sm font-medium text-[#6e6e73] transition-all hover:text-[#1d1d1f]"
+            >
+              Deleted Entries
             </Link>
             {showViewOnlyBadge ? (
               <span className="rounded-full bg-[#f3f4f6] px-3 py-1 text-xs font-medium text-[#6b7280]">

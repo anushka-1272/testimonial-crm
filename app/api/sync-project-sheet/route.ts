@@ -71,6 +71,7 @@ async function loadExistingEmails(supabase: SupabaseAdmin): Promise<{
     const { data: batch, error } = await supabase
       .from("project_candidates")
       .select("email")
+      .eq("is_deleted", false)
       .order("id", { ascending: true })
       .range(rangeStart, rangeStart + pageSize - 1);
     if (error) {
@@ -220,7 +221,8 @@ export async function POST(request: Request) {
         const { error: updateErr } = await supabase
           .from("project_candidates")
           .update(updateFields)
-          .eq("email", email);
+          .eq("email", email)
+          .eq("is_deleted", false);
 
         if (updateErr) {
           console.log("Update error:", updateErr);
@@ -245,10 +247,22 @@ export async function POST(request: Request) {
       console.log("Insert error:", insertErr);
 
       if (isUniqueViolation(insertErr)) {
+        const { data: clash } = await supabase
+          .from("project_candidates")
+          .select("is_deleted")
+          .eq("email", email)
+          .maybeSingle();
+        if (clash?.is_deleted) {
+          errors.push(
+            `Row ${sheetRowNum}: skipped (deleted project candidate — not restored)`,
+          );
+          continue;
+        }
         const { error: updateErr } = await supabase
           .from("project_candidates")
           .update(updateFields)
-          .eq("email", email);
+          .eq("email", email)
+          .eq("is_deleted", false);
         if (updateErr) {
           console.log("Update after duplicate insert error:", updateErr);
           errors.push(

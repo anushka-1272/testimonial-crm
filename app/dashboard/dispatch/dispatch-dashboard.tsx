@@ -37,7 +37,7 @@ export type DispatchRow = {
   } | null;
 };
 
-const SELECT = `id, candidate_id, shipping_address, dispatch_status, dispatch_date, expected_delivery_date, actual_delivery_date, tracking_id, special_comments, reward_item, candidates ( full_name, email, whatsapp_number )`;
+const SELECT = `id, candidate_id, shipping_address, dispatch_status, dispatch_date, expected_delivery_date, actual_delivery_date, tracking_id, special_comments, reward_item, candidates!inner ( full_name, email, whatsapp_number )`;
 
 function normalizeRow(
   row: Record<string, unknown> & {
@@ -731,6 +731,7 @@ export function DispatchDashboard() {
     const { data, error: qErr } = await supabase
       .from("dispatch")
       .select(SELECT)
+      .eq("candidates.is_deleted", false)
       .order("dispatch_date", { ascending: false, nullsFirst: false });
 
     if (qErr) {
@@ -752,17 +753,20 @@ export function DispatchDashboard() {
     const [pendingRes, dispRes, delRes] = await Promise.all([
       supabase
         .from("dispatch")
-        .select("id", { count: "exact", head: true })
+        .select("id, candidates!inner(id)", { count: "exact", head: true })
+        .eq("candidates.is_deleted", false)
         .eq("dispatch_status", "pending"),
       supabase
         .from("dispatch")
-        .select("id", { count: "exact", head: true })
+        .select("id, candidates!inner(id)", { count: "exact", head: true })
+        .eq("candidates.is_deleted", false)
         .eq("dispatch_status", "dispatched")
         .gte("dispatch_date", ws)
         .lte("dispatch_date", we),
       supabase
         .from("dispatch")
-        .select("id", { count: "exact", head: true })
+        .select("id, candidates!inner(id)", { count: "exact", head: true })
+        .eq("candidates.is_deleted", false)
         .eq("dispatch_status", "delivered")
         .gte("actual_delivery_date", ws)
         .lte("actual_delivery_date", we),

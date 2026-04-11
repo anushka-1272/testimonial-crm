@@ -223,12 +223,18 @@ export default function TeamSettingsPage() {
             ) : null}
           </div>
         </div>
-        <div className="mt-3 flex items-center gap-4 text-sm">
+        <div className="mt-3 flex flex-wrap items-center gap-4 text-sm">
           <Link href="/dashboard/settings/team" className="font-medium text-[#1d1d1f]">
             Team
           </Link>
           <Link href="/dashboard/settings/criteria" className="text-[#6e6e73] hover:text-[#1d1d1f]">
             Criteria
+          </Link>
+          <Link
+            href="/dashboard/settings/deleted-entries"
+            className="text-[#6e6e73] hover:text-[#1d1d1f]"
+          >
+            Deleted Entries
           </Link>
         </div>
       </header>

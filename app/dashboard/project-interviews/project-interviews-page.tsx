@@ -30,7 +30,10 @@ async function loadProjectPipelineStats(
   supabase: SupabaseClient,
 ): Promise<ProjectPipelineStats> {
   const [{ data: pcRows }, { data: piRows }] = await Promise.all([
-    supabase.from("project_candidates").select("id, status"),
+    supabase
+      .from("project_candidates")
+      .select("id, status")
+      .eq("is_deleted", false),
     supabase
       .from("project_interviews")
       .select("project_candidate_id, interview_status"),

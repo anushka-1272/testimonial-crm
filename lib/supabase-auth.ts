@@ -19,6 +19,13 @@ export function isSupabaseAuthLockError(error: unknown): boolean {
   return msg.includes("lock") || msg.includes("steal");
 }
 
+/** Display name for activity / audit fields (metadata name, else email). */
+export function displayNameFromUser(user: User): string {
+  const n = user.user_metadata?.name;
+  if (typeof n === "string" && n.trim()) return n.trim();
+  return user.email ?? "Unknown";
+}
+
 export async function getUserSafe(
   supabase: SupabaseLike,
 ): Promise<User | null> {

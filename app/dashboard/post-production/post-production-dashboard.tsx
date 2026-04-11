@@ -109,6 +109,7 @@ export type PostProductionRow = {
   candidates?: {
     domain: string | null;
     job_role: string | null;
+    is_deleted?: boolean | null;
   } | null;
   project_candidates?: ProjectCandidateRow | ProjectCandidateRow[] | null;
 };
@@ -116,7 +117,7 @@ export type PostProductionRow = {
 type LinkField = "raw_video_link" | "edited_video_link" | "youtube_link";
 
 const PP_SELECT =
-  "id, created_at, candidate_id, project_candidate_id, source_type, candidate_name, raw_video_link, edited_video_link, pre_edit_review, pre_edit_review_by, post_edit_review, post_edit_review_by, edited_by, youtube_link, youtube_status, summary, cx_mail_sent, cx_mail_sent_at, updated_at, interview_language, candidates ( domain, job_role ), project_candidates ( id, email, full_name, whatsapp_number, project_title, problem_statement, target_user, ai_usage, demo_link, status, poc_assigned, poc_assigned_at, interview_type )";
+  "id, created_at, candidate_id, project_candidate_id, source_type, candidate_name, raw_video_link, edited_video_link, pre_edit_review, pre_edit_review_by, post_edit_review, post_edit_review_by, edited_by, youtube_link, youtube_status, summary, cx_mail_sent, cx_mail_sent_at, updated_at, interview_language, candidates ( domain, job_role, is_deleted ), project_candidates ( id, email, full_name, whatsapp_number, project_title, problem_statement, target_user, ai_usage, demo_link, status, poc_assigned, poc_assigned_at, interview_type, is_deleted )";
 
 function normalizePostProductionRow(
   r: Record<string, unknown>,
@@ -285,9 +286,23 @@ export function PostProductionDashboard() {
       return;
     }
     setRows(
-      (data ?? []).map((row) =>
-        normalizePostProductionRow(row as Record<string, unknown>),
-      ),
+      (data ?? [])
+        .map((row) =>
+          normalizePostProductionRow(row as Record<string, unknown>),
+        )
+        .filter((row) => {
+          if (row.source_type === "testimonial" && row.candidate_id) {
+            const c = row.candidates;
+            const one = c == null ? null : Array.isArray(c) ? c[0] ?? null : c;
+            if (one?.is_deleted) return false;
+          }
+          if (row.source_type === "project" && row.project_candidate_id) {
+            const p = row.project_candidates;
+            const one = p == null ? null : Array.isArray(p) ? p[0] ?? null : p;
+            if (one && "is_deleted" in one && one.is_deleted) return false;
+          }
+          return true;
+        }),
     );
     setError(null);
   }, [supabase]);
@@ -456,15 +471,17 @@ export function PostProductionDashboard() {
         supabase
           .from("interviews")
           .select(
-            "candidate_id, completed_at, scheduled_date, interviewer, candidates ( id, full_name, email )",
+            "candidate_id, completed_at, scheduled_date, interviewer, candidates!inner ( id, full_name, email )",
           )
-          .eq("interview_status", "completed"),
+          .eq("interview_status", "completed")
+          .eq("candidates.is_deleted", false),
         supabase
           .from("project_interviews")
           .select(
-            "project_candidate_id, completed_at, scheduled_date, project_candidates ( id, email, full_name, project_title )",
+            "project_candidate_id, completed_at, scheduled_date, project_candidates!inner ( id, email, full_name, project_title )",
           )
-          .eq("interview_status", "completed"),
+          .eq("interview_status", "completed")
+          .eq("project_candidates.is_deleted", false),
         supabase.from("post_production").select("candidate_id, project_candidate_id"),
       ]);
     setAddLoading(false);
@@ -690,6 +707,7 @@ export function PostProductionDashboard() {
           "id, email, full_name, whatsapp_number, project_title, problem_statement, target_user, ai_usage, demo_link, status, poc_assigned, poc_assigned_at, interview_type",
         )
         .eq("id", row.project_candidate_id)
+        .eq("is_deleted", false)
         .maybeSingle();
       if (data) setProjectDetailCandidate(data as ProjectCandidateRow);
       return;

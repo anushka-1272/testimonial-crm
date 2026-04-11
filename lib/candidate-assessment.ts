@@ -54,6 +54,7 @@ export async function runAssessEligibilityAndPersist(
       "id, full_name, achievement_type, achievement_title, achievement_summary, quantified_result, primary_goal, skills_modules_helped, how_program_helped, proof_document_url, role_before_program, job_role, domain, linkedin_url",
     )
     .eq("id", candidateId)
+    .eq("is_deleted", false)
     .maybeSingle();
 
   if (fetchError) {
@@ -78,7 +79,8 @@ export async function runAssessEligibilityAndPersist(
       ai_eligibility_reason: assessment.reason,
       eligibility_status: "pending_review",
     })
-    .eq("id", candidateId);
+    .eq("id", candidateId)
+    .eq("is_deleted", false);
 
   if (updateError) {
     return { ok: false, candidate_id: candidateId, error: updateError.message };

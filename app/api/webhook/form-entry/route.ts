@@ -238,6 +238,25 @@ export async function POST(request: Request) {
         : String(r.criteria_description),
   }));
 
+  const emailKey = String(row.email ?? "").trim().toLowerCase();
+  if (emailKey) {
+    const { data: existingDel } = await supabase
+      .from("candidates")
+      .select("id, is_deleted")
+      .eq("email", emailKey)
+      .maybeSingle();
+    if (existingDel?.is_deleted) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error:
+            "This email was removed from the CRM and cannot be updated via webhook.",
+        },
+        { status: 409 },
+      );
+    }
+  }
+
   const candidateForAi = eligibilityCandidateFromDbRow(
     row as Parameters<typeof eligibilityCandidateFromDbRow>[0],
   );

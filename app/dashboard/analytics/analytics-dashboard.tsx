@@ -285,7 +285,8 @@ export function AnalyticsDashboard() {
       .from("candidates")
       .select(
         "id, created_at, email, eligibility_status, domain, job_role, role_before_program, primary_goal",
-      );
+      )
+      .eq("is_deleted", false);
 
     const intQ = supabase
       .from("interviews")
@@ -326,6 +327,13 @@ export function AnalyticsDashboard() {
     } else {
       dispRows = (dRes.data ?? []) as DispatchRow[];
     }
+
+    const activeCandidateIds = new Set(
+      (cRes.data ?? []).map((c) => (c as CandidateRow).id),
+    );
+    dispRows = dispRows.filter((d) =>
+      activeCandidateIds.has(d.candidate_id),
+    );
 
     setCandidates((cRes.data ?? []) as CandidateRow[]);
     setInterviews((iRes.data ?? []) as InterviewRow[]);

@@ -48,6 +48,7 @@ export async function GET(request: Request) {
       .from("candidates")
       .select("email, full_name")
       .eq("id", inv.candidate_id)
+      .eq("is_deleted", false)
       .maybeSingle();
 
     if (cErr || !cand?.email) {

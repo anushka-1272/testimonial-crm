@@ -118,13 +118,15 @@ export default function DashboardPage() {
 
     let entriesQ = supabase
       .from("candidates")
-      .select("*", { count: "exact", head: true });
+      .select("*", { count: "exact", head: true })
+      .eq("is_deleted", false);
     if (from) entriesQ = entriesQ.gte("created_at", from);
     const { count: entries } = await entriesQ;
 
     let callsQ = supabase
       .from("candidates")
       .select("*", { count: "exact", head: true })
+      .eq("is_deleted", false)
       .eq("eligibility_status", "eligible");
     if (from) callsQ = callsQ.gte("created_at", from);
     const { count: calls } = await callsQ;
@@ -139,7 +141,8 @@ export default function DashboardPage() {
 
     let projQ = supabase
       .from("project_candidates")
-      .select("*", { count: "exact", head: true });
+      .select("*", { count: "exact", head: true })
+      .eq("is_deleted", false);
     if (from) projQ = projQ.gte("created_at", from);
     const { count: projects } = await projQ;
 
@@ -172,10 +175,12 @@ export default function DashboardPage() {
 
     const { count: fEntries } = await supabase
       .from("candidates")
-      .select("*", { count: "exact", head: true });
+      .select("*", { count: "exact", head: true })
+      .eq("is_deleted", false);
     const { count: fEligible } = await supabase
       .from("candidates")
       .select("*", { count: "exact", head: true })
+      .eq("is_deleted", false)
       .eq("eligibility_status", "eligible");
     const { count: fScheduled } = await supabase
       .from("interviews")
