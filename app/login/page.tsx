@@ -178,6 +178,16 @@ export default function LoginPage() {
   }, []);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    const sp = new URLSearchParams(window.location.search);
+    if (sp.get("forgot_password") !== "1") return;
+    setAuthView("forgot_password");
+    setResetError("");
+    setResetSuccess("");
+    window.history.replaceState(null, "", window.location.pathname);
+  }, []);
+
+  useEffect(() => {
     if (!lookupModalOpen) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") closeLookupModal();

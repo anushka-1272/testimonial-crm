@@ -1,33 +1,35 @@
 "use client";
 
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+import { createBrowserClient } from "@supabase/ssr";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import {
-  type FormEvent,
-  useEffect,
-  useState,
-} from "react";
+import { type FormEvent, useEffect, useState } from "react";
 
 import { LogoOnDark, LogoOnLight } from "@/components/brand-logo";
 
 const inputClass =
   "w-full rounded-xl border border-[#e5e5e5] px-4 py-3 text-sm text-[#1d1d1f] placeholder:text-[#aeaeb2] focus:border-[#3b82f6] focus:outline-none focus:ring-1 focus:ring-[#3b82f6]";
 
+const LINK_EXPIRED_MESSAGE =
+  "This link has expired or was already used. Please request a new password reset.";
+
 /**
  * Handles Supabase email links (forgot password + team invite) via:
- * - PKCE: ?code=... → exchangeCodeForSession
+ * - PKCE: ?code=... → exchangeCodeForSession (use @supabase/ssr browser client for verifier storage)
  * - Implicit: #access_token=...&refresh_token=... → setSession
- * onAuthStateChange covers edge cases after the client establishes a session.
  */
 export default function ResetPasswordPage() {
   const router = useRouter();
-  const supabase = createClientComponentClient();
+  const supabase = createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+  );
 
   const [initializing, setInitializing] = useState(true);
   const [sessionOk, setSessionOk] = useState(false);
   const [initError, setInitError] = useState("");
+  const [offerRequestNewLink, setOfferRequestNewLink] = useState(false);
 
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -44,19 +46,20 @@ export default function ResetPasswordPage() {
 
   useEffect(() => {
     let cancelled = false;
-    const client = createClientComponentClient();
 
     const markReady = () => {
       if (!cancelled) {
         setSessionOk(true);
         setInitError("");
+        setOfferRequestNewLink(false);
       }
     };
 
-    const markInitError = (msg: string) => {
+    const markInitError = (msg: string, opts?: { offerNewLink?: boolean }) => {
       if (!cancelled) {
         setSessionOk(false);
         setInitError(msg);
+        setOfferRequestNewLink(opts?.offerNewLink ?? false);
       }
     };
 
@@ -65,10 +68,10 @@ export default function ResetPasswordPage() {
         const url = new URL(window.location.href);
         const code = url.searchParams.get("code");
         if (code) {
-          const { error } = await client.auth.exchangeCodeForSession(code);
+          const { error } = await supabase.auth.exchangeCodeForSession(code);
           if (cancelled) return;
           if (error) {
-            markInitError(error.message);
+            markInitError(LINK_EXPIRED_MESSAGE, { offerNewLink: true });
           } else {
             markReady();
           }
@@ -82,7 +85,7 @@ export default function ResetPasswordPage() {
           const access_token = hp.get("access_token");
           const refresh_token = hp.get("refresh_token");
           if (access_token && refresh_token) {
-            const { error } = await client.auth.setSession({
+            const { error } = await supabase.auth.setSession({
               access_token,
               refresh_token,
             });
@@ -99,7 +102,7 @@ export default function ResetPasswordPage() {
 
         const {
           data: { session },
-        } = await client.auth.getSession();
+        } = await supabase.auth.getSession();
         if (cancelled) return;
         if (session) {
           markReady();
@@ -115,7 +118,7 @@ export default function ResetPasswordPage() {
 
     const {
       data: { subscription },
-    } = client.auth.onAuthStateChange((event, session) => {
+    } = supabase.auth.onAuthStateChange((event, session) => {
       if (cancelled) return;
       if (
         session &&
@@ -123,6 +126,7 @@ export default function ResetPasswordPage() {
       ) {
         setSessionOk(true);
         setInitError("");
+        setOfferRequestNewLink(false);
       }
     });
 
@@ -130,7 +134,7 @@ export default function ResetPasswordPage() {
       cancelled = true;
       subscription.unsubscribe();
     };
-  }, []);
+  }, [supabase]);
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -237,9 +241,19 @@ export default function ResetPasswordPage() {
                 >
                   {initError}
                 </p>
+                {offerRequestNewLink ? (
+                  <Link
+                    href="/login?forgot_password=1"
+                    className="flex w-full items-center justify-center rounded-xl bg-[#1d1d1f] py-3 text-sm font-medium text-white transition-colors hover:bg-[#2d2d2f]"
+                  >
+                    Request new link
+                  </Link>
+                ) : null}
                 <Link
                   href="/login"
-                  className="block text-center text-sm font-medium text-[#1d1d1f] underline-offset-2 hover:underline"
+                  className={`block text-center text-sm font-medium text-[#1d1d1f] underline-offset-2 hover:underline ${
+                    offerRequestNewLink ? "pt-1" : ""
+                  }`}
                 >
                   Back to sign in
                 </Link>
