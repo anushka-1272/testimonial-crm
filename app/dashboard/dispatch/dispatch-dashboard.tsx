@@ -16,6 +16,7 @@ import { CandidateDetailModal } from "@/components/candidate-detail-modal";
 import { logActivity } from "@/lib/activity-logger";
 import { getUserSafe } from "@/lib/supabase-auth";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
+import { sendWatiNotification } from "@/lib/wati-client";
 
 type DispatchStatus = "pending" | "dispatched" | "delivered";
 
@@ -453,12 +454,14 @@ function UpdateDispatchModal({
   onClose,
   supabase,
   onSaved,
+  onWatiFailure,
 }: {
   row: DispatchRow | null;
   open: boolean;
   onClose: () => void;
   supabase: ReturnType<typeof createBrowserSupabaseClient>;
   onSaved: () => void;
+  onWatiFailure?: (message: string) => void;
 }) {
   const [trackingId, setTrackingId] = useState("");
   const [dispatchDate, setDispatchDate] = useState("");
@@ -543,6 +546,35 @@ function UpdateDispatchModal({
           description: `Updated dispatch for ${candDisplay} — Tracking: ${trackingId.trim()}, Expected: ${expectedStr}`,
         });
       }
+
+      const waPhone = row.candidates?.whatsapp_number?.trim();
+      const watiCandName =
+        row.candidates?.full_name?.trim() ||
+        row.candidates?.email ||
+        "Candidate";
+      const rewardItemVal = row.reward_item?.trim() ?? "";
+      const tid = trackingId.trim();
+      const param3 = tid ? `Tracking ID: ${tid}` : "";
+      const formattedExpectedDelivery = format(
+        parseISO(expectedIso),
+        "dd MMM yyyy",
+      );
+
+      void (async () => {
+        if (!waPhone) return;
+        try {
+          const ok = await sendWatiNotification(supabase, waPhone, "rewardsss_", [
+            { name: "1", value: watiCandName },
+            { name: "2", value: rewardItemVal },
+            { name: "3", value: param3 },
+            { name: "4", value: formattedExpectedDelivery },
+          ]);
+          if (!ok) onWatiFailure?.("WhatsApp notification failed to send");
+        } catch (err) {
+          console.error("WATI reward dispatched:", err);
+          onWatiFailure?.("WhatsApp notification failed to send");
+        }
+      })();
 
       if (email && row.dispatch_status !== "delivered") {
         const expectedLabel = expectedStr;
@@ -708,6 +740,7 @@ export function DispatchDashboard() {
     dispatchedWeek: number;
     deliveredWeek: number;
   } | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const supabase = useMemo(() => {
     try {
@@ -809,6 +842,12 @@ export function DispatchDashboard() {
     };
   }, [supabase, loadRows, loadStats]);
 
+  useEffect(() => {
+    if (!toastMessage) return;
+    const t = window.setTimeout(() => setToastMessage(null), 4000);
+    return () => window.clearTimeout(t);
+  }, [toastMessage]);
+
   const filtered = useMemo(() => {
     if (filter === "all") return rows;
     return rows.filter((r) => r.dispatch_status === filter);
@@ -882,6 +921,15 @@ export function DispatchDashboard() {
 
   return (
     <>
+      {toastMessage ? (
+        <div
+          className="fixed bottom-6 left-1/2 z-[70] max-w-md -translate-x-1/2 rounded-xl border border-[#e5e5e5] bg-[#1d1d1f] px-4 py-3 text-center text-sm font-medium text-white shadow-lg"
+          role="status"
+        >
+          {toastMessage}
+        </div>
+      ) : null}
+
       <header className="sticky top-0 z-30 bg-[#f5f5f7]/90 px-8 py-6 backdrop-blur-md">
         <h1 className="text-2xl font-semibold tracking-tight text-[#1d1d1f]">
           Dispatch
@@ -1124,6 +1172,7 @@ export function DispatchDashboard() {
           void loadRows();
           void loadStats();
         }}
+        onWatiFailure={(msg) => setToastMessage(msg)}
       />
 
       <CandidateDetailModal

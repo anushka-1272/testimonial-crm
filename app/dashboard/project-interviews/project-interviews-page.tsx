@@ -128,6 +128,13 @@ export function ProjectInterviewsPage() {
     interview: ProjectInterviewWithProjectCandidate;
     mode: "from_scheduled" | "from_rescheduled";
   } | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!toastMessage) return;
+    const t = window.setTimeout(() => setToastMessage(null), 4000);
+    return () => window.clearTimeout(t);
+  }, [toastMessage]);
 
   if (!supabase) {
     return (
@@ -139,6 +146,15 @@ export function ProjectInterviewsPage() {
 
   return (
     <>
+      {toastMessage ? (
+        <div
+          className="fixed bottom-6 left-1/2 z-[70] max-w-md -translate-x-1/2 rounded-xl border border-[#e5e5e5] bg-[#1d1d1f] px-4 py-3 text-center text-sm font-medium text-white shadow-lg"
+          role="status"
+        >
+          {toastMessage}
+        </div>
+      ) : null}
+
       <header className="sticky top-0 z-30 bg-[#f5f5f7]/90 px-8 py-6 backdrop-blur-md">
         <h1 className="text-2xl font-semibold tracking-tight text-[#1d1d1f]">
           Project Interviews
@@ -252,6 +268,7 @@ export function ProjectInterviewsPage() {
         supabase={supabase}
         onClose={() => setPostFor(null)}
         onSaved={() => setPostFor(null)}
+        onToast={(msg) => setToastMessage(msg)}
       />
     </>
   );

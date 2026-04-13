@@ -6,6 +6,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { logActivity } from "@/lib/activity-logger";
 import { getUserSafe } from "@/lib/supabase-auth";
+import { sendWatiNotification } from "@/lib/wati-client";
 
 import {
   type InterviewWithCandidate,
@@ -114,6 +115,27 @@ function rewardFieldsValid(choice: RewardChoice, otherText: string): boolean {
   return true;
 }
 
+function watiCandidatePhoneAndName(
+  interview: InterviewWithCandidate | ProjectInterviewWithProjectCandidate,
+): { phone: string | null; name: string } {
+  if (isProjectInterviewRow(interview)) {
+    const pc = interview.project_candidates;
+    return {
+      phone: pc?.whatsapp_number?.trim() || null,
+      name:
+        pc?.full_name?.trim() ||
+        pc?.project_title?.trim() ||
+        pc?.email ||
+        "Candidate",
+    };
+  }
+  const c = interview.candidates;
+  return {
+    phone: c?.whatsapp_number?.trim() || null,
+    name: c?.full_name?.trim() || c?.email || "Candidate",
+  };
+}
+
 type Props = {
   open: boolean;
   interview:
@@ -123,6 +145,7 @@ type Props = {
   supabase: SupabaseClient;
   onClose: () => void;
   onSaved: () => void;
+  onToast?: (message: string) => void;
 };
 
 const rewardCardsAll: {
@@ -178,6 +201,7 @@ export function PostInterviewDrawer({
   supabase,
   onClose,
   onSaved,
+  onToast,
 }: Props) {
   const [eligible, setEligible] = useState<boolean | null>(null);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
@@ -336,6 +360,37 @@ export function PostInterviewDrawer({
           description: `Completed interview for ${candDisplay} — Post-eligible: ${postLabel}, Reward: ${rewardLog}`,
         });
       }
+
+      const { phone: waPhone, name: waName } = watiCandidatePhoneAndName(interview);
+      void (async () => {
+        if (!waPhone) return;
+        try {
+          const ok = await sendWatiNotification(
+            supabase,
+            waPhone,
+            "interview_completed",
+            [{ name: "1", value: waName }],
+          );
+          if (!ok) onToast?.("WhatsApp notification failed to send");
+        } catch (err) {
+          console.error("WATI interview_completed:", err);
+          onToast?.("WhatsApp notification failed to send");
+        }
+        if (eligible === false) {
+          try {
+            const ok2 = await sendWatiNotification(
+              supabase,
+              waPhone,
+              "succcess_story_rejected",
+              [{ name: "1", value: waName }],
+            );
+            if (!ok2) onToast?.("WhatsApp notification failed to send");
+          } catch (err) {
+            console.error("WATI succcess_story_rejected:", err);
+            onToast?.("WhatsApp notification failed to send");
+          }
+        }
+      })();
 
       if (
         eligible === true &&

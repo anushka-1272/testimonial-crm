@@ -7,6 +7,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { logActivity } from "@/lib/activity-logger";
 import { getUserSafe } from "@/lib/supabase-auth";
+import { sendWatiNotification } from "@/lib/wati-client";
 
 import type { InterviewWithCandidate } from "./types";
 
@@ -128,6 +129,29 @@ export function AddZoomDetailsModal({
           metadata: {},
         });
       }
+
+      const formattedDateTime = interview.scheduled_date
+        ? format(parseISO(interview.scheduled_date), "dd MMM yyyy, h:mm a")
+        : "";
+      const waPhone = interview.candidates?.whatsapp_number?.trim();
+      const watiName =
+        interview.candidates?.full_name?.trim() ||
+        interview.candidates?.email ||
+        candName;
+      void (async () => {
+        if (!waPhone) return;
+        try {
+          const ok = await sendWatiNotification(supabase, waPhone, "interview_", [
+            { name: "1", value: watiName },
+            { name: "2", value: formattedDateTime },
+            { name: "3", value: link },
+          ]);
+          if (!ok) onToast("WhatsApp notification failed to send");
+        } catch (err) {
+          console.error("WATI:", err);
+          onToast("WhatsApp notification failed to send");
+        }
+      })();
 
       const toEmail = interview.candidates?.email;
       const toName = interview.candidates?.full_name;

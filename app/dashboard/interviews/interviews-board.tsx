@@ -2453,6 +2453,7 @@ export function InterviewsBoard() {
         supabase={supabase}
         onClose={() => setPostFor(null)}
         onSaved={() => void loadData()}
+        onToast={(msg) => setToastMessage(msg)}
       />
     </>
   );
