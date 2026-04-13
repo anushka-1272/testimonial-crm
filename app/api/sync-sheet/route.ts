@@ -193,6 +193,8 @@ export async function POST(request: Request) {
   let newInserted = 0;
   let updatedRows = 0;
   let skippedEmptyEmail = 0;
+  let scored = 0;
+  let failedScore = 0;
 
   try {
     const user = await verifyRequestUser(request);
@@ -210,6 +212,9 @@ export async function POST(request: Request) {
           total_rows: 0,
           new_inserted: 0,
           updated_rows: 0,
+          upserted: 0,
+          scored: 0,
+          failed: 0,
           skipped_empty_email: 0,
           errors: [],
         },
@@ -229,6 +234,9 @@ export async function POST(request: Request) {
           total_rows: 0,
           new_inserted: 0,
           updated_rows: 0,
+          upserted: 0,
+          scored: 0,
+          failed: 0,
           skipped_empty_email: 0,
           errors: [msg],
         },
@@ -245,6 +253,9 @@ export async function POST(request: Request) {
           total_rows: 0,
           new_inserted: 0,
           updated_rows: 0,
+          upserted: 0,
+          scored: 0,
+          failed: 0,
           skipped_empty_email: 0,
           errors: [msg],
         },
@@ -258,6 +269,9 @@ export async function POST(request: Request) {
         total_rows: 0,
         new_inserted: 0,
         updated_rows: 0,
+        upserted: 0,
+        scored: 0,
+        failed: 0,
         skipped_empty_email: 0,
         errors: [],
       });
@@ -268,7 +282,8 @@ export async function POST(request: Request) {
     totalRows = dataRows.length;
 
     const supabase = createSupabaseAdmin();
-    const newIdsForAssessment: string[] = [];
+    /** Candidate rows successfully written this run (insert or update). */
+    const syncedCandidateIds = new Set<string>();
 
     for (let idx = 0; idx < dataRows.length; idx++) {
       const row = dataRows[idx];
@@ -309,6 +324,7 @@ export async function POST(request: Request) {
           errors.push(`Row ${sheetRowNum}: ${upErr.message}`);
           continue;
         }
+        syncedCandidateIds.add(existing.id);
         updatedRows++;
         continue;
       }
@@ -349,27 +365,65 @@ export async function POST(request: Request) {
       }
 
       if (inserted?.id) {
-        newIdsForAssessment.push(inserted.id);
+        syncedCandidateIds.add(inserted.id);
         newInserted++;
       }
     }
 
-    for (let i = 0; i < newIdsForAssessment.length; i++) {
-      const id = newIdsForAssessment[i];
-      const result = await runAssessEligibilityAndPersist(supabase, id);
-      if (!result.ok) {
-        errors.push(`Assessment ${id}: ${result.error}`);
-      }
-      if (i < newIdsForAssessment.length - 1) {
-        await sleep(500);
+    const idsSynced = [...syncedCandidateIds];
+    if (idsSynced.length > 0) {
+      const { data: needScoreRows, error: needScoreErr } = await supabase
+        .from("candidates")
+        .select("id, email")
+        .in("id", idsSynced)
+        .is("ai_eligibility_score", null)
+        .eq("is_deleted", false);
+
+      if (needScoreErr) {
+        errors.push(`AI scoring prefetch: ${needScoreErr.message}`);
+      } else {
+        const candidatesNeedingScore = needScoreRows ?? [];
+        const total = candidatesNeedingScore.length;
+        for (let i = 0; i < total; i++) {
+          const row = candidatesNeedingScore[i];
+          const email = row.email ?? row.id;
+          console.log(`Scoring candidate ${i + 1} of ${total}: ${email}`);
+          try {
+            const result = await runAssessEligibilityAndPersist(
+              supabase,
+              row.id as string,
+            );
+            if (result.ok) {
+              scored++;
+            } else {
+              failedScore++;
+              errors.push(`Assessment ${row.id}: ${result.error}`);
+              console.error("AI scoring failed for:", email, result.error);
+            }
+          } catch (err) {
+            failedScore++;
+            console.error("AI scoring failed for:", email, err);
+            errors.push(
+              `Assessment ${row.id}: ${err instanceof Error ? err.message : String(err)}`,
+            );
+          }
+          if (i < total - 1) {
+            await sleep(1000);
+          }
+        }
       }
     }
+
+    const upserted = newInserted + updatedRows;
 
     // UI lists testimonial candidates by created_at DESC so the newest sheet rows appear first after sync.
     return NextResponse.json({
       total_rows: totalRows,
       new_inserted: newInserted,
       updated_rows: updatedRows,
+      upserted,
+      scored,
+      failed: failedScore,
       skipped_empty_email: skippedEmptyEmail,
       errors,
     });
@@ -382,6 +436,9 @@ export async function POST(request: Request) {
         total_rows: totalRows,
         new_inserted: newInserted,
         updated_rows: updatedRows,
+        upserted: newInserted + updatedRows,
+        scored,
+        failed: failedScore,
         skipped_empty_email: skippedEmptyEmail,
         errors,
       },

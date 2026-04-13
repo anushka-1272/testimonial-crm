@@ -571,6 +571,9 @@ export function EligibilityDashboard() {
         total_rows?: number;
         new_inserted?: number;
         updated_rows?: number;
+        upserted?: number;
+        scored?: number;
+        failed?: number;
         skipped_empty_email?: number;
         errors?: string[];
       };
@@ -581,8 +584,11 @@ export function EligibilityDashboard() {
       const inserted = j.new_inserted ?? 0;
       const updated = j.updated_rows ?? 0;
       const skippedEmail = j.skipped_empty_email ?? 0;
+      const upserted = j.upserted ?? inserted + updated;
+      const scored = j.scored ?? 0;
+      const failedAi = j.failed ?? 0;
       alert(
-        `Synced ${inserted} new, ${updated} updated, ${skippedEmail} rows without email (from ${j.total_rows ?? 0} sheet rows).`,
+        `Synced ${inserted} new, ${updated} updated (${upserted} upserted), ${skippedEmail} rows without email (from ${j.total_rows ?? 0} sheet rows). AI scored: ${scored}, failed: ${failedAi}.`,
       );
       if (j.errors?.length) {
         setError(j.errors.slice(0, 5).join(" · "));
