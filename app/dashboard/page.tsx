@@ -24,6 +24,9 @@ const INTERVIEWER_THEME: Record<
   Mudit: { bar: "#d97706", avatar: "#d97706" },
 };
 
+/** Rows fetched and stored in `recentActivity` for the dashboard preview only. */
+const DASHBOARD_RECENT_ACTIVITY_LIMIT = 3;
+
 function getDateRange(period: Period) {
   const now = new Date();
   if (period === "weekly") {
@@ -272,7 +275,7 @@ export default function DashboardPage() {
       .from("activity_log")
       .select("id, created_at, user_id, user_name, action_type, description")
       .order("created_at", { ascending: false })
-      .limit(3);
+      .limit(DASHBOARD_RECENT_ACTIVITY_LIMIT);
 
     const raw = (rows ?? []) as {
       id: string;
@@ -315,7 +318,7 @@ export default function DashboardPage() {
       };
     });
 
-    setRecentActivity(enriched.slice(0, 3));
+    setRecentActivity(enriched.slice(0, DASHBOARD_RECENT_ACTIVITY_LIMIT));
     setRecentLoading(false);
   }, [supabase]);
 
