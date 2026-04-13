@@ -144,9 +144,10 @@ export default function DashboardPage() {
     const { count: testimonials } = await testQ;
 
     let projQ = supabase
-      .from("project_candidates")
-      .select("*", { count: "exact", head: true })
-      .eq("is_deleted", false);
+      .from("project_interviews")
+      .select("id, project_candidates!inner(id)", { count: "exact", head: true })
+      .eq("interview_status", "completed")
+      .eq("project_candidates.is_deleted", false);
     if (from) projQ = projQ.gte("created_at", from);
     const { count: projects } = await projQ;
 
