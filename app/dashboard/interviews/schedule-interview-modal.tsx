@@ -12,11 +12,14 @@ import {
   type InterviewLangPreset,
 } from "@/lib/interview-language";
 import { getUserSafe } from "@/lib/supabase-auth";
+import { SLACK_DISHAN_EMAIL } from "@/lib/slack-contacts";
+import { voidSlackNotify } from "@/lib/slack-client";
 
 export type ScheduleCandidate = {
   id: string;
   full_name: string | null;
   email: string;
+  whatsapp_number?: string | null;
   interview_type?: "testimonial" | "project" | null;
   poc_assigned?: string | null;
 };
@@ -210,6 +213,13 @@ export function ScheduleInterviewModal({
       }
 
       if (!isProject) {
+        const dishMsg =
+          `🔗 New interview draft needs Zoom details!\n` +
+          `*Candidate:* ${candDisplay}\n` +
+          `*Scheduled:* ${dateLabel} at ${timeLabel}\n` +
+          `*Interviewer:* ${interviewer}\n` +
+          `Please add Zoom link in the CRM.`;
+        voidSlackNotify(supabase, SLACK_DISHAN_EMAIL, dishMsg);
         setDate("");
         setTime("");
         setPoc("");

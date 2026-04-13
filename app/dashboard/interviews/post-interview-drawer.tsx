@@ -1,11 +1,14 @@
 "use client";
 
+import { format, parseISO } from "date-fns";
 import { useEffect, useRef, useState } from "react";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { logActivity } from "@/lib/activity-logger";
 import { getUserSafe } from "@/lib/supabase-auth";
+import { SLACK_RIANKA_EMAIL } from "@/lib/slack-contacts";
+import { voidSlackNotify } from "@/lib/slack-client";
 import { sendWatiNotification } from "@/lib/wati-client";
 
 import {
@@ -316,12 +319,13 @@ export function PostInterviewDrawer({
 
     setSubmitting(true);
     try {
+      const completedAtIso = new Date().toISOString();
       const table = isProject ? "project_interviews" : "interviews";
       const { error: upErr } = await supabase
         .from(table)
         .update({
           interview_status: "completed",
-          completed_at: new Date().toISOString(),
+          completed_at: completedAtIso,
           post_interview_eligible: eligible,
           reward_item: rewardItemForDb,
           category: isProject
@@ -360,6 +364,17 @@ export function PostInterviewDrawer({
           description: `Completed interview for ${candDisplay} — Post-eligible: ${postLabel}, Reward: ${rewardLog}`,
         });
       }
+
+      const completedLabel = format(
+        parseISO(completedAtIso),
+        "MMMM d, yyyy h:mm a",
+      );
+      const riankaMsg =
+        `🎬 Interview completed for *${candDisplay}*!\n` +
+        `Please check for raw recordings and add to Post Production in the CRM.\n` +
+        `*Interviewer:* ${interview.interviewer}\n` +
+        `*Completed:* ${completedLabel}`;
+      voidSlackNotify(supabase, SLACK_RIANKA_EMAIL, riankaMsg);
 
       const { phone: waPhone, name: waName } = watiCandidatePhoneAndName(interview);
       void (async () => {

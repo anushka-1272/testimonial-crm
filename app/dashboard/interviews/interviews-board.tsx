@@ -22,6 +22,8 @@ import {
 } from "@/lib/interview-language";
 import { getUserSafe } from "@/lib/supabase-auth";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
+import { slackEmailForTeamMember } from "@/lib/slack-contacts";
+import { voidSlackNotify } from "@/lib/slack-client";
 
 import { PostInterviewDrawer } from "./post-interview-drawer";
 import { RescheduleInterviewModal } from "./reschedule-interview-modal";
@@ -516,7 +518,7 @@ export function InterviewsBoard() {
         supabase
           .from("candidates")
           .select(
-            "id, created_at, full_name, email, interview_type, poc_assigned, poc_assigned_at, linkedin_track, linkedin_track_status",
+            "id, created_at, full_name, email, whatsapp_number, interview_type, poc_assigned, poc_assigned_at, linkedin_track, linkedin_track_status",
           )
           .eq("is_deleted", false)
           .eq("eligibility_status", "eligible")
@@ -558,6 +560,7 @@ export function InterviewsBoard() {
           created_at: r.created_at as string | undefined,
           full_name: r.full_name as string | null,
           email: r.email as string,
+          whatsapp_number: r.whatsapp_number as string | null | undefined,
           interview_type: r.interview_type as EligibleCandidate["interview_type"],
           poc_assigned: r.poc_assigned as string | null,
           poc_assigned_at: r.poc_assigned_at as string | null,
@@ -939,6 +942,23 @@ export function InterviewsBoard() {
           candidate_name: candDisplay,
           description: `Assigned ${name} as POC for ${candDisplay}`,
         });
+      }
+      const pocSlackEmail = slackEmailForTeamMember(name);
+      if (pocSlackEmail) {
+        const phone =
+          candidate.whatsapp_number?.trim() || "—";
+        const typeLabel =
+          candidate.interview_type === "project"
+            ? "Project"
+            : candidate.interview_type === "testimonial"
+              ? "Testimonial"
+              : "Not set";
+        const pocMsg =
+          `👋 Hi! You've been assigned as POC for *${candDisplay}*.\n` +
+          `📞 Phone: ${phone}\n` +
+          `🎯 Interview Type: ${typeLabel}\n` +
+          `Please reach out to schedule their interview.`;
+        voidSlackNotify(supabase, pocSlackEmail, pocMsg);
       }
     }
     setPocEditingId((prev) => (prev === candidate.id ? null : prev));
@@ -1456,6 +1476,7 @@ export function InterviewsBoard() {
                                           id: c.id,
                                           full_name: c.full_name,
                                           email: c.email,
+                                          whatsapp_number: c.whatsapp_number,
                                           interview_type: c.interview_type,
                                           poc_assigned: c.poc_assigned,
                                         });

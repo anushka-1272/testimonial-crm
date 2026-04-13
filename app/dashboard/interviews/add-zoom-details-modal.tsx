@@ -7,6 +7,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { logActivity } from "@/lib/activity-logger";
 import { getUserSafe } from "@/lib/supabase-auth";
+import { slackEmailForTeamMember } from "@/lib/slack-contacts";
+import { voidSlackNotify } from "@/lib/slack-client";
 import { sendWatiNotification } from "@/lib/wati-client";
 
 import type { InterviewWithCandidate } from "./types";
@@ -133,6 +135,18 @@ export function AddZoomDetailsModal({
       const formattedDateTime = interview.scheduled_date
         ? format(parseISO(interview.scheduled_date), "dd MMM yyyy, h:mm a")
         : "";
+      const interviewerSlackEmail = slackEmailForTeamMember(
+        interview.interviewer,
+      );
+      if (interviewerSlackEmail) {
+        const slackMsg =
+          `📅 New interview scheduled!\n` +
+          `*Candidate:* ${candName}\n` +
+          `*Date & Time:* ${formattedDateTime || "—"}\n` +
+          `*Zoom Link:* ${link}\n` +
+          `*Zoom Account:* ${account}`;
+        voidSlackNotify(supabase, interviewerSlackEmail, slackMsg);
+      }
       const waPhone = interview.candidates?.whatsapp_number?.trim();
       const watiName =
         interview.candidates?.full_name?.trim() ||

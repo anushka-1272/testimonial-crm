@@ -52,6 +52,7 @@ export type EligibleCandidate = {
   created_at?: string;
   full_name: string | null;
   email: string;
+  whatsapp_number?: string | null;
   interview_type: "testimonial" | "project" | null;
   poc_assigned: string | null;
   poc_assigned_at: string | null;

@@ -728,7 +728,7 @@ function UpdateDispatchModal({
 }
 
 export function DispatchDashboard() {
-  const { canEditCurrentPage, showViewOnlyBadge } = useAccessControl();
+  const { canEditCurrentPage, showViewOnlyBadge, role } = useAccessControl();
   const [rows, setRows] = useState<DispatchRow[]>([]);
   const [filter, setFilter] = useState<DispatchStatus | "all">("all");
   const [loading, setLoading] = useState(true);
@@ -744,6 +744,7 @@ export function DispatchDashboard() {
     deliveredWeek: number;
   } | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [dispatchSlackBusy, setDispatchSlackBusy] = useState(false);
 
   const supabase = useMemo(() => {
     try {
@@ -856,6 +857,31 @@ export function DispatchDashboard() {
     return rows.filter((r) => r.dispatch_status === filter);
   }, [rows, filter]);
 
+  const notifyDispatchTeamSlack = useCallback(async () => {
+    if (!supabase || role !== "admin") return;
+    setDispatchSlackBusy(true);
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) return;
+      const res = await fetch("/api/slack/dispatch-reminder", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const j = (await res.json().catch(() => ({}))) as {
+        success?: boolean;
+        pending_count?: number;
+      };
+      console.log("Dispatch Slack reminder:", j);
+    } catch (e) {
+      console.error("Dispatch Slack reminder:", e);
+    } finally {
+      setDispatchSlackBusy(false);
+    }
+  }, [supabase, role]);
+
   const exportCsv = () => {
     const csv = buildCsv(filtered);
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
@@ -934,17 +960,33 @@ export function DispatchDashboard() {
       ) : null}
 
       <header className="sticky top-0 z-30 bg-[#f5f5f7]/90 px-8 py-6 backdrop-blur-md">
-        <h1 className="text-2xl font-semibold tracking-tight text-[#1d1d1f]">
-          Dispatch
-        </h1>
-        <p className="mt-1 text-sm text-[#6e6e73]">
-          Track shipments and delivery status
-        </p>
-        {showViewOnlyBadge ? (
-          <span className="mt-2 inline-flex rounded-full bg-[#f3f4f6] px-3 py-1 text-xs font-medium text-[#6b7280]">
-            View only
-          </span>
-        ) : null}
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight text-[#1d1d1f]">
+              Dispatch
+            </h1>
+            <p className="mt-1 text-sm text-[#6e6e73]">
+              Track shipments and delivery status
+            </p>
+            {showViewOnlyBadge ? (
+              <span className="mt-2 inline-flex rounded-full bg-[#f3f4f6] px-3 py-1 text-xs font-medium text-[#6b7280]">
+                View only
+              </span>
+            ) : null}
+          </div>
+          {role === "admin" ? (
+            <button
+              type="button"
+              disabled={dispatchSlackBusy || loading}
+              onClick={() => void notifyDispatchTeamSlack()}
+              className="shrink-0 rounded-xl border border-[#e5e5e5] bg-white px-4 py-2.5 text-sm font-medium text-[#1d1d1f] shadow-sm transition-colors hover:bg-[#fafafa] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {dispatchSlackBusy
+                ? "Sending…"
+                : `Notify Dispatch Team (${stats?.pending ?? 0} pending)`}
+            </button>
+          ) : null}
+        </div>
       </header>
 
       <main className="mx-auto max-w-7xl px-8 pb-12 pt-2 text-sm text-[#1d1d1f]">

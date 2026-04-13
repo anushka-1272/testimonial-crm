@@ -17,6 +17,8 @@ import {
   type InterviewLanguageFilter,
 } from "@/lib/interview-language";
 import { getUserSafe } from "@/lib/supabase-auth";
+import { SLACK_PRKHRVV_EMAIL } from "@/lib/slack-contacts";
+import { voidSlackNotify } from "@/lib/slack-client";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 
 const TEAM = ["Harika", "Anushka", "Gargi", "Mudit"] as const;
@@ -649,6 +651,12 @@ export function PostProductionDashboard() {
           description: `Added ${name} (Testimonial) to post production`,
         });
       }
+      const ppSlackT =
+        `🎥 New post production entry added!\n` +
+        `*Candidate:* ${name}\n` +
+        `*Source:* Testimonial\n` +
+        `Please begin the editing process in the CRM.`;
+      voidSlackNotify(supabase, SLACK_PRKHRVV_EMAIL, ppSlackT);
     } else {
       const p = selectedAdd.pick;
       const name =
@@ -687,6 +695,12 @@ export function PostProductionDashboard() {
           description: `Added ${name} (Project) to post production`,
         });
       }
+      const ppSlackP =
+        `🎥 New post production entry added!\n` +
+        `*Candidate:* ${name}\n` +
+        `*Source:* Project\n` +
+        `Please begin the editing process in the CRM.`;
+      voidSlackNotify(supabase, SLACK_PRKHRVV_EMAIL, ppSlackP);
     }
 
     setAddOpen(false);
