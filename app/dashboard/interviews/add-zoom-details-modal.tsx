@@ -155,37 +155,48 @@ export function AddZoomDetailsModal({
 
       const toEmail = interview.candidates?.email;
       const toName = interview.candidates?.full_name;
+      let emailFailed = false;
       if (toEmail && dateLabel && timeLabel) {
-        const emailRes = await fetch("/api/send-email", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            type: "interview_confirmation",
-            to: toEmail,
-            name: toName,
-            date: dateLabel,
-            time: timeLabel,
-            zoom_link: link,
-          }),
-        });
+        try {
+          const emailRes = await fetch("/api/send-email", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              type: "interview_confirmation",
+              to: toEmail,
+              name: toName,
+              date: dateLabel,
+              time: timeLabel,
+              zoom_link: link,
+            }),
+          });
 
-        if (!emailRes.ok) {
-          const j = (await emailRes.json().catch(() => ({}))) as {
-            error?: string;
-          };
-          setError(j.error ?? "Interview updated but confirmation email failed.");
-          setSubmitting(false);
-          onSaved();
-          return;
+          if (emailRes.ok) {
+            await supabase
+              .from("interviews")
+              .update({ invitation_sent: true })
+              .eq("id", interview.id);
+          } else {
+            emailFailed = true;
+            const errBody = (await emailRes.json().catch(() => ({}))) as {
+              error?: string;
+            };
+            console.error(
+              "Interview confirmation email failed:",
+              errBody.error ?? emailRes.status,
+            );
+          }
+        } catch (err) {
+          emailFailed = true;
+          console.error("Interview confirmation email:", err);
         }
-
-        await supabase
-          .from("interviews")
-          .update({ invitation_sent: true })
-          .eq("id", interview.id);
       }
 
-      onToast("Interview scheduled successfully");
+      onToast(
+        emailFailed
+          ? "Interview scheduled. Email notification failed (domain not verified)"
+          : "Interview scheduled successfully",
+      );
       onSaved();
       onClose();
     } catch {
