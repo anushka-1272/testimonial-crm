@@ -70,7 +70,8 @@ export function AddZoomDetailsModal({
     interview.candidates?.full_name?.trim() ||
     interview.candidates?.email ||
     "Candidate";
-  const subtitle = `${candName} · ${formatSlot(interview.scheduled_date)}`;
+  const ivLabel = interview.interviewer?.trim() || "—";
+  const subtitle = `${candName} · ${formatSlot(interview.scheduled_date)} · Interviewer: ${ivLabel}`;
 
   const inp =
     "mt-1 w-full rounded-xl border border-[#e5e5e5] px-3 py-2.5 text-sm text-[#1d1d1f] focus:border-[#3b82f6] focus:outline-none focus:ring-0";

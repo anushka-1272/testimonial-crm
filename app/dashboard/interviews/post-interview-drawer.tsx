@@ -372,7 +372,7 @@ export function PostInterviewDrawer({
       const riankaMsg =
         `🎬 Interview completed for *${candDisplay}*!\n` +
         `Please check for raw recordings and add to Post Production in the CRM.\n` +
-        `*Interviewer:* ${interview.interviewer}\n` +
+        `*Interviewer:* ${interview.interviewer ?? "—"}\n` +
         `*Completed:* ${completedLabel}`;
       voidSlackNotify(supabase, SLACK_RIANKA_EMAIL, riankaMsg);
 

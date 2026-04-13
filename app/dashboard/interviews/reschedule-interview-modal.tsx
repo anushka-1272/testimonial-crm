@@ -53,8 +53,13 @@ export function RescheduleInterviewModal({
     const d = parseISO(interview.scheduled_date);
     setDate(format(d, "yyyy-MM-dd"));
     setTime(format(d, "HH:mm"));
-    const iv = interview.interviewer as (typeof INTERVIEWERS)[number];
-    setInterviewer(INTERVIEWERS.includes(iv) ? iv : "Harika");
+    const raw = interview.interviewer?.trim();
+    const iv = (
+      raw && INTERVIEWERS.includes(raw as (typeof INTERVIEWERS)[number])
+        ? raw
+        : "Harika"
+    ) as (typeof INTERVIEWERS)[number];
+    setInterviewer(iv);
     setReason(
       mode === "from_rescheduled" ? (interview.reschedule_reason ?? "") : "",
     );

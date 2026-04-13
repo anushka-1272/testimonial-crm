@@ -28,6 +28,7 @@ import { voidSlackNotify } from "@/lib/slack-client";
 import { PostInterviewDrawer } from "./post-interview-drawer";
 import { RescheduleInterviewModal } from "./reschedule-interview-modal";
 import { AddZoomDetailsModal } from "./add-zoom-details-modal";
+import { AssignInterviewerModal } from "./assign-interviewer-modal";
 import {
   ScheduleInterviewModal,
   type ScheduleCandidate,
@@ -44,7 +45,7 @@ const PAGE_SIZE = 20;
 
 const TEAM_POC_MEMBERS = ["Harika", "Anushka", "Gargi", "Mudit"] as const;
 
-const INTERVIEW_SELECT = `id, candidate_id, scheduled_date, previous_scheduled_date, reschedule_reason, completed_at, interviewer, zoom_link, zoom_account, language, interview_language, invitation_sent, poc, remarks, reminder_count, interview_status, post_interview_eligible, reward_item, category, funnel, comments, interview_type, candidates ( id, created_at, full_name, email, whatsapp_number, poc_assigned, is_deleted )`;
+const INTERVIEW_SELECT = `id, candidate_id, scheduled_date, previous_scheduled_date, reschedule_reason, completed_at, interviewer, interviewer_assigned_at, zoom_link, zoom_account, language, interview_language, invitation_sent, poc, remarks, reminder_count, interview_status, post_interview_eligible, reward_item, category, funnel, comments, interview_type, candidates ( id, created_at, full_name, email, whatsapp_number, poc_assigned, is_deleted )`;
 
 const cardChrome =
   "rounded-2xl bg-white shadow-[0_4px_16px_rgba(0,0,0,0.08)] border border-[#f0f0f0]";
@@ -57,7 +58,11 @@ type BoardTab =
 
 type InterviewTypeFilter = "all" | "testimonial" | "project";
 
-type ZoomStatusFilter = "all" | "awaiting_zoom" | "zoom_added";
+type ZoomStatusFilter =
+  | "all"
+  | "awaiting_interviewer"
+  | "awaiting_zoom"
+  | "zoom_added";
 
 const LANGUAGE_FILTER_OPTIONS: {
   value: InterviewLanguageFilter;
@@ -76,6 +81,7 @@ const LANGUAGE_FILTER_OPTIONS: {
 const ZOOM_STATUS_FILTER_OPTIONS: { value: ZoomStatusFilter; label: string }[] =
   [
     { value: "all", label: "All" },
+    { value: "awaiting_interviewer", label: "Awaiting Interviewer" },
     { value: "awaiting_zoom", label: "Awaiting Zoom" },
     { value: "zoom_added", label: "Zoom Added" },
   ];
@@ -130,6 +136,21 @@ function matchesRowSearch(
   );
 }
 
+function hasAssignedInterviewer(i: InterviewWithCandidate): boolean {
+  return Boolean(i.interviewer?.trim());
+}
+
+function zoomPipelineFilterKey(
+  i: InterviewWithCandidate,
+): ZoomStatusFilter | null {
+  if (i.interview_status === "scheduled") return "zoom_added";
+  if (i.interview_status === "draft") {
+    if (!hasAssignedInterviewer(i)) return "awaiting_interviewer";
+    return "awaiting_zoom";
+  }
+  return null;
+}
+
 function interviewCategoryLines(raw: string | null | undefined): string[] {
   return (raw ?? "")
     .split("\n")
@@ -157,7 +178,10 @@ function filterCompletedInterviews(
       i.post_interview_eligible !== false
     )
       return false;
-    if (f.interviewer !== "all" && i.interviewer !== f.interviewer)
+    if (
+      f.interviewer !== "all" &&
+      (i.interviewer ?? "") !== f.interviewer
+    )
       return false;
     if (f.category) {
       const lines = interviewCategoryLines(i.category);
@@ -334,9 +358,15 @@ function zoomStatusColumn(i: InterviewWithCandidate) {
   const isScheduled = i.interview_status === "scheduled";
   const link = i.zoom_link?.trim();
   const acct = i.zoom_account?.trim();
+  const awaitingIv = isDraft && !hasAssignedInterviewer(i);
+  const awaitingZoom = isDraft && hasAssignedInterviewer(i);
   return (
     <div className="flex flex-col items-start gap-2">
-      {isDraft ? (
+      {awaitingIv ? (
+        <span className="inline-flex rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-600">
+          Awaiting Interviewer
+        </span>
+      ) : awaitingZoom ? (
         <span className="inline-flex rounded-full bg-[#fff7ed] px-2.5 py-1 text-xs font-medium text-[#c2410c]">
           Awaiting Zoom
         </span>
@@ -437,12 +467,17 @@ function normalizeInterviewRow(
   const c = r.candidates;
   const candidate =
     c == null ? null : Array.isArray(c) ? (c[0] ?? null) : c;
+  const ivRaw = r.interviewer as string | null | undefined;
+  const ivTrim = typeof ivRaw === "string" ? ivRaw.trim() : "";
   return {
     ...r,
     previous_scheduled_date:
       (r.previous_scheduled_date as string | null) ?? null,
     reschedule_reason: (r.reschedule_reason as string | null) ?? null,
     completed_at: (r.completed_at as string | null) ?? null,
+    interviewer: ivTrim || null,
+    interviewer_assigned_at:
+      (r.interviewer_assigned_at as string | null | undefined) ?? null,
     reward_item: (r.reward_item as string | null) ?? null,
     zoom_account: (r.zoom_account as string | null | undefined) ?? null,
     interview_language: (r.interview_language as string | null | undefined) ?? null,
@@ -480,6 +515,8 @@ export function InterviewsBoard() {
   const [addZoomFor, setAddZoomFor] = useState<InterviewWithCandidate | null>(
     null,
   );
+  const [assignInterviewerFor, setAssignInterviewerFor] =
+    useState<InterviewWithCandidate | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const [pocSavingId, setPocSavingId] = useState<string | null>(null);
@@ -757,16 +794,10 @@ export function InterviewsBoard() {
           )
         )
           return false;
-        if (
-          f.zoomStatus === "awaiting_zoom" &&
-          i.interview_status !== "draft"
-        )
-          return false;
-        if (
-          f.zoomStatus === "zoom_added" &&
-          i.interview_status !== "scheduled"
-        )
-          return false;
+        if (f.zoomStatus !== "all") {
+          const z = zoomPipelineFilterKey(i);
+          if (z !== f.zoomStatus) return false;
+        }
         const name = i.candidates?.full_name;
         const email = i.candidates?.email;
         return matchesRowSearch(name, email, f.search);
@@ -1787,8 +1818,10 @@ export function InterviewsBoard() {
                           </tr>
                         ) : (
                           scheduledPage.slice.map((i) => {
-                            const awaitingZoom =
-                              i.interview_status === "draft";
+                            const isDraftRow = i.interview_status === "draft";
+                            const isScheduledRow =
+                              i.interview_status === "scheduled";
+                            const hasIv = hasAssignedInterviewer(i);
                             return (
                               <tr key={i.id}>
                                 <td className={tdName}>
@@ -1819,7 +1852,7 @@ export function InterviewsBoard() {
                                   {formatDateTime(i.scheduled_date)}
                                 </td>
                                 <td className={tdInterviewer}>
-                                  {i.interviewer}
+                                  {i.interviewer?.trim() || "—"}
                                 </td>
                                 <td className={tdZoomStatus}>
                                   {zoomStatusColumn(i)}
@@ -1831,13 +1864,41 @@ export function InterviewsBoard() {
                                 </td>
                                 <td className={tdActions}>
                                   <div className="flex flex-wrap items-center justify-end gap-2">
-                                    {awaitingZoom ? (
+                                    {isDraftRow && !hasIv ? (
                                       <button
                                         type="button"
                                         disabled={!canEditScheduledTab}
-                                        className="rounded-lg border border-[#1d1d1f] bg-white px-3 py-1.5 text-xs font-medium text-[#1d1d1f] hover:bg-[#fafafa]"
+                                        title={
+                                          !canEditScheduledTab
+                                            ? "View only"
+                                            : undefined
+                                        }
+                                        className="rounded-lg bg-[#2563eb] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#1d4ed8] disabled:cursor-not-allowed disabled:bg-[#d1d5db] disabled:text-[#6b7280]"
                                         onClick={() =>
                                           canEditScheduledTab
+                                            ? setAssignInterviewerFor(i)
+                                            : undefined
+                                        }
+                                      >
+                                        Assign Interviewer
+                                      </button>
+                                    ) : null}
+                                    {isDraftRow ? (
+                                      <button
+                                        type="button"
+                                        disabled={
+                                          !canEditScheduledTab || !hasIv
+                                        }
+                                        title={
+                                          !canEditScheduledTab
+                                            ? "View only"
+                                            : !hasIv
+                                              ? "Assign interviewer first"
+                                              : undefined
+                                        }
+                                        className="rounded-lg border border-[#1d1d1f] bg-white px-3 py-1.5 text-xs font-medium text-[#1d1d1f] hover:bg-[#fafafa] disabled:cursor-not-allowed disabled:border-[#d1d5db] disabled:text-[#9ca3af]"
+                                        onClick={() =>
+                                          canEditScheduledTab && hasIv
                                             ? setAddZoomFor(i)
                                             : undefined
                                         }
@@ -1847,13 +1908,15 @@ export function InterviewsBoard() {
                                     ) : null}
                                     <button
                                       type="button"
-                                      disabled={!canEditScheduledTab || awaitingZoom}
+                                      disabled={
+                                        !canEditScheduledTab || !isScheduledRow
+                                      }
                                       title={
                                         !canEditScheduledTab
                                           ? "View only"
-                                          : awaitingZoom
-                                          ? "Add Zoom details first"
-                                          : undefined
+                                          : !isScheduledRow
+                                            ? "Disabled until scheduled"
+                                            : undefined
                                       }
                                       className="rounded-lg bg-[#ea580c] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#c2410c] disabled:cursor-not-allowed disabled:bg-[#d1d5db] disabled:text-[#6b7280]"
                                       onClick={() =>
@@ -1867,13 +1930,15 @@ export function InterviewsBoard() {
                                     </button>
                                     <button
                                       type="button"
-                                      disabled={!canEditScheduledTab || awaitingZoom}
+                                      disabled={
+                                        !canEditScheduledTab || !isScheduledRow
+                                      }
                                       title={
                                         !canEditScheduledTab
                                           ? "View only"
-                                          : awaitingZoom
-                                          ? "Add Zoom details first"
-                                          : undefined
+                                          : !isScheduledRow
+                                            ? "Disabled until scheduled"
+                                            : undefined
                                       }
                                       className="rounded-lg bg-[#16a34a] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#15803d] disabled:cursor-not-allowed disabled:bg-[#d1d5db] disabled:text-[#6b7280]"
                                       onClick={() => setPostFor(i)}
@@ -2448,6 +2513,15 @@ export function InterviewsBoard() {
         onClose={() => setAddZoomFor(null)}
         onSaved={() => void loadData()}
         onToast={(msg) => setToastMessage(msg)}
+      />
+
+      <AssignInterviewerModal
+        key={assignInterviewerFor?.id ?? "assign-iv-closed"}
+        open={!!assignInterviewerFor}
+        interview={assignInterviewerFor}
+        supabase={supabase}
+        onClose={() => setAssignInterviewerFor(null)}
+        onSaved={() => void loadData()}
       />
 
       <CandidateDetailModal

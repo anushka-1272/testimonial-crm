@@ -12,7 +12,10 @@ import {
   type InterviewLangPreset,
 } from "@/lib/interview-language";
 import { getUserSafe } from "@/lib/supabase-auth";
-import { SLACK_DISHAN_EMAIL } from "@/lib/slack-contacts";
+import {
+  POC_INTERVIEWER_SLACK_EMAILS,
+  SLACK_DISHAN_EMAIL,
+} from "@/lib/slack-contacts";
 import { voidSlackNotify } from "@/lib/slack-client";
 
 export type ScheduleCandidate = {
@@ -33,6 +36,8 @@ export type ScheduleProjectCandidate = {
 };
 
 const INTERVIEWERS = ["Harika", "Gargi", "Mudit", "Anushka"] as const;
+
+const SLACK_ANUSHKA_EMAIL = POC_INTERVIEWER_SLACK_EMAILS.Anushka;
 
 const LANG_CARD_ORDER: { key: InterviewLangPreset | "other"; label: string }[] =
   [
@@ -131,6 +136,7 @@ export function ScheduleInterviewModal({
 
     setSubmitting(true);
     try {
+      const assignedNow = new Date().toISOString();
       const insertPayload = isProject
         ? {
             project_candidate_id: projectCandidate!.id,
@@ -147,7 +153,10 @@ export function ScheduleInterviewModal({
         : {
             candidate_id: candidate!.id,
             scheduled_date: localIso,
-            interviewer,
+            interviewer:
+              interviewType === "testimonial" ? null : interviewer,
+            interviewer_assigned_at:
+              interviewType === "testimonial" ? null : assignedNow,
             zoom_link: null,
             language: languageDisplay,
             interview_language: langSubmit.value,
@@ -213,12 +222,20 @@ export function ScheduleInterviewModal({
       }
 
       if (!isProject) {
-        const dishMsg =
-          `🔗 New interview draft needs Zoom details!\n` +
+        const anushkaMsg =
+          `👋 New interview draft needs an interviewer!\n` +
           `*Candidate:* ${candDisplay}\n` +
-          `*Scheduled:* ${dateLabel} at ${timeLabel}\n` +
-          `*Interviewer:* ${interviewer}\n` +
-          `Please add Zoom link in the CRM.`;
+          `*Date & Time:* ${dateLabel} at ${timeLabel}\n` +
+          `*POC:* ${actorName}\n` +
+          `*Interview Type:* ${typeWord}\n` +
+          `Please assign an interviewer in the CRM.`;
+        voidSlackNotify(supabase, SLACK_ANUSHKA_EMAIL, anushkaMsg);
+
+        const dishMsg =
+          `🗓️ New interview draft created!\n` +
+          `*Candidate:* ${candDisplay}\n` +
+          `*Date & Time:* ${dateLabel} at ${timeLabel}\n` +
+          `Please wait for Anushka to assign an interviewer before adding Zoom details.`;
         voidSlackNotify(supabase, SLACK_DISHAN_EMAIL, dishMsg);
         setDate("");
         setTime("");
@@ -344,22 +361,24 @@ export function ScheduleInterviewModal({
             </label>
           </div>
 
-          <label className="block text-sm">
-            <span className={lab}>Interviewer</span>
-            <select
-              className={inp}
-              value={interviewer}
-              onChange={(e) =>
-                setInterviewer(e.target.value as (typeof INTERVIEWERS)[number])
-              }
-            >
-              {INTERVIEWERS.map((n) => (
-                <option key={n} value={n}>
-                  {n}
-                </option>
-              ))}
-            </select>
-          </label>
+          {(isProject || interviewType === "project") ? (
+            <label className="block text-sm">
+              <span className={lab}>Interviewer</span>
+              <select
+                className={inp}
+                value={interviewer}
+                onChange={(e) =>
+                  setInterviewer(e.target.value as (typeof INTERVIEWERS)[number])
+                }
+              >
+                {INTERVIEWERS.map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
 
           {!isProject ? (
             <label className="block text-sm">

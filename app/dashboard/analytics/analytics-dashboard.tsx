@@ -121,6 +121,37 @@ function inRangeInclusive(
   return d >= start && d <= end;
 }
 
+/** Completed = status completed OR completed_at set (per product spec). */
+function isInterviewCompleted(i: InterviewRow): boolean {
+  return i.interview_status === "completed" || Boolean(i.completed_at);
+}
+
+function interviewAnchorIso(i: InterviewRow): string | null {
+  return i.completed_at ?? i.scheduled_date;
+}
+
+/** When range is "all time" (start null), completed rows with no date still count. */
+function completedInterviewInSelectedRange(
+  i: InterviewRow,
+  start: Date | null,
+  end: Date,
+): boolean {
+  if (!isInterviewCompleted(i)) return false;
+  const anchor = interviewAnchorIso(i);
+  if (!anchor) return start == null;
+  return inRangeInclusive(anchor, start, end);
+}
+
+function pickLatestInterview(rows: InterviewRow[]): InterviewRow {
+  return rows.reduce((best, cur) => {
+    const bestT = interviewAnchorIso(best);
+    const curT = interviewAnchorIso(cur);
+    if (!curT) return best;
+    if (!bestT) return cur;
+    return parseISO(curT) >= parseISO(bestT) ? cur : best;
+  });
+}
+
 /** Map free-text role / goal (domain–industry style intake) into a fixed bucket. */
 function mapToDomainIndustryBucket(raw: string | null | undefined): DomainIndustryBucket {
   const s = raw?.trim().toLowerCase() ?? "";
@@ -352,6 +383,24 @@ export function AnalyticsDashboard() {
     [interviews],
   );
 
+  /** Latest testimonial interview per candidate, among completed-in-range only (for domain / job role). */
+  const candidateLatestCompletedInterviewInRange = useMemo(() => {
+    const inRange = testimonialInterviews.filter((i) =>
+      completedInterviewInSelectedRange(i, start, end),
+    );
+    const byCandidate = new Map<string, InterviewRow[]>();
+    for (const i of inRange) {
+      const list = byCandidate.get(i.candidate_id) ?? [];
+      list.push(i);
+      byCandidate.set(i.candidate_id, list);
+    }
+    const out = new Map<string, InterviewRow>();
+    for (const [cid, list] of byCandidate) {
+      out.set(cid, pickLatestInterview(list));
+    }
+    return out;
+  }, [testimonialInterviews, start, end]);
+
   const overview = useMemo(() => {
     const entries = candidates.filter((c) =>
       inRangeInclusive(c.created_at, start, end),
@@ -361,11 +410,8 @@ export function AnalyticsDashboard() {
     const eligibleRate =
       totalEntries > 0 ? Math.round((eligible.length / totalEntries) * 100) : 0;
 
-    const completed = testimonialInterviews.filter(
-      (i) =>
-        i.interview_status === "completed" &&
-        i.completed_at &&
-        inRangeInclusive(i.completed_at, start, end),
+    const completed = testimonialInterviews.filter((i) =>
+      completedInterviewInSelectedRange(i, start, end),
     ).length;
 
     const dispatched = dispatches.filter((d) =>
@@ -381,9 +427,7 @@ export function AnalyticsDashboard() {
   }, [candidates, testimonialInterviews, dispatches, start, end]);
 
   const domainData = useMemo(() => {
-    const entries = candidates.filter((c) =>
-      inRangeInclusive(c.created_at, start, end),
-    );
+    const byId = new Map(candidates.map((c) => [c.id, c]));
     const counts = new Map<
       DomainIndustryBucket,
       { eligible: number; notEligible: number }
@@ -391,10 +435,12 @@ export function AnalyticsDashboard() {
     for (const b of DOMAIN_INDUSTRY_BUCKETS) {
       counts.set(b, { eligible: 0, notEligible: 0 });
     }
-    for (const c of entries) {
+    for (const [candidateId, iv] of candidateLatestCompletedInterviewInRange) {
+      const c = byId.get(candidateId);
+      if (!c) continue;
       const bucket = mapToDomainIndustryBucket(domainIndustrySource(c));
       const row = counts.get(bucket)!;
-      if (c.eligibility_status === "eligible") row.eligible += 1;
+      if (iv.post_interview_eligible === true) row.eligible += 1;
       else row.notEligible += 1;
     }
     return DOMAIN_INDUSTRY_BUCKETS.map((domain) => {
@@ -409,22 +455,22 @@ export function AnalyticsDashboard() {
           total > 0 ? Math.round((eligible / total) * 100) : 0,
       };
     });
-  }, [candidates, start, end]);
+  }, [candidates, candidateLatestCompletedInterviewInRange]);
 
   const jobRoleData = useMemo(() => {
-    const entries = candidates.filter((c) =>
-      inRangeInclusive(c.created_at, start, end),
-    );
+    const byId = new Map(candidates.map((c) => [c.id, c]));
     const map = new Map<
       string,
       { role: string; eligible: number; notEligible: number }
     >();
-    for (const c of entries) {
+    for (const [candidateId, iv] of candidateLatestCompletedInterviewInRange) {
+      const c = byId.get(candidateId);
+      if (!c) continue;
       const role = c.role_before_program?.trim() || "Unknown";
       if (!map.has(role))
         map.set(role, { role, eligible: 0, notEligible: 0 });
       const row = map.get(role)!;
-      if (c.eligibility_status === "eligible") row.eligible += 1;
+      if (iv.post_interview_eligible === true) row.eligible += 1;
       else row.notEligible += 1;
     }
     return [...map.values()]
@@ -434,14 +480,11 @@ export function AnalyticsDashboard() {
       }))
       .sort((a, b) => b.total - a.total)
       .slice(0, 10);
-  }, [candidates, start, end]);
+  }, [candidates, candidateLatestCompletedInterviewInRange]);
 
   const languageDonut = useMemo(() => {
-    const completed = testimonialInterviews.filter(
-      (i) =>
-        i.interview_status === "completed" &&
-        i.completed_at &&
-        inRangeInclusive(i.completed_at, start, end),
+    const completed = testimonialInterviews.filter((i) =>
+      completedInterviewInSelectedRange(i, start, end),
     );
     const counts: Record<Exclude<InterviewLanguageFilter, "all">, number> = {
       english: 0,
@@ -470,11 +513,8 @@ export function AnalyticsDashboard() {
   }, [testimonialInterviews, start, end]);
 
   const topCategories = useMemo(() => {
-    const completed = testimonialInterviews.filter(
-      (i) =>
-        i.interview_status === "completed" &&
-        i.completed_at &&
-        inRangeInclusive(i.completed_at, start, end),
+    const completed = testimonialInterviews.filter((i) =>
+      completedInterviewInSelectedRange(i, start, end),
     );
     const freq = new Map<string, number>();
     for (const iv of completed) {
@@ -491,9 +531,11 @@ export function AnalyticsDashboard() {
   const avgDispatchDays = useMemo(() => {
     const completedByCandidate = new Map<string, string[]>();
     for (const iv of testimonialInterviews) {
-      if (iv.interview_status !== "completed" || !iv.completed_at) continue;
+      if (!isInterviewCompleted(iv)) continue;
+      const anchor = iv.completed_at ?? iv.scheduled_date;
+      if (!anchor) continue;
       const list = completedByCandidate.get(iv.candidate_id) ?? [];
-      list.push(iv.completed_at);
+      list.push(anchor);
       completedByCandidate.set(iv.candidate_id, list);
     }
     for (const [, list] of completedByCandidate) {
@@ -652,7 +694,7 @@ export function AnalyticsDashboard() {
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             <ChartCard
               title="Domain breakdown"
-              subtitle="Mapped from role before program and primary goal; stacked eligible vs not eligible"
+              subtitle="Candidates with a completed testimonial interview in range; intake mapped to domain; stacked by post-interview eligibility"
               empty={domainChartTotal === 0}
             >
               <ResponsiveContainer width="100%" height="100%">
@@ -677,8 +719,12 @@ export function AnalyticsDashboard() {
                       return (
                         <div className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs shadow-md">
                           <p className="font-medium">{p.domain}</p>
-                          <p className="text-green-700">Eligible: {p.eligible}</p>
-                          <p className="text-red-700">Not eligible: {p.notEligible}</p>
+                          <p className="text-green-700">
+                            Post-interview eligible: {p.eligible}
+                          </p>
+                          <p className="text-red-700">
+                            Not post-interview eligible: {p.notEligible}
+                          </p>
                           <p className="text-gray-600">
                             Conversion: {p.conversion}%
                           </p>
@@ -691,13 +737,13 @@ export function AnalyticsDashboard() {
                     dataKey="eligible"
                     stackId="a"
                     fill={COLORS.success}
-                    name="Eligible"
+                    name="Post-interview eligible"
                   />
                   <Bar
                     dataKey="notEligible"
                     stackId="a"
                     fill={COLORS.danger}
-                    name="Not eligible"
+                    name="Not post-interview eligible"
                   >
                     <LabelList
                       dataKey="conversion"
@@ -712,7 +758,7 @@ export function AnalyticsDashboard() {
 
             <ChartCard
               title="Job role breakdown"
-              subtitle="Top 10 roles by submissions (intake); green = eligible, red = not"
+              subtitle="Top 10 roles (intake) among candidates with a completed testimonial interview in range; stacked by post-interview eligibility"
               empty={jobRoleData.length === 0}
             >
               <ResponsiveContainer width="100%" height="100%">
@@ -731,12 +777,17 @@ export function AnalyticsDashboard() {
                   />
                   <Tooltip />
                   <Legend />
-                  <Bar dataKey="eligible" stackId="r" fill={COLORS.success} name="Eligible" />
+                  <Bar
+                    dataKey="eligible"
+                    stackId="r"
+                    fill={COLORS.success}
+                    name="Post-interview eligible"
+                  />
                   <Bar
                     dataKey="notEligible"
                     stackId="r"
                     fill={COLORS.danger}
-                    name="Not eligible"
+                    name="Not post-interview eligible"
                   />
                 </BarChart>
               </ResponsiveContainer>
