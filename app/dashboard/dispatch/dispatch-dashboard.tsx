@@ -554,7 +554,8 @@ function UpdateDispatchModal({
         "Candidate";
       const rewardItemVal = row.reward_item?.trim() ?? "";
       const tid = trackingId.trim();
-      const param3 = tid ? `Tracking ID: ${tid}` : "";
+      const param3 =
+        tid && tid !== "NA" ? `Tracking ID: ${tid}` : "";
       const formattedExpectedDelivery = format(
         parseISO(expectedIso),
         "dd MMM yyyy",
