@@ -272,7 +272,7 @@ export default function DashboardPage() {
       .from("activity_log")
       .select("id, created_at, user_id, user_name, action_type, description")
       .order("created_at", { ascending: false })
-      .limit(12);
+      .limit(3);
 
     const raw = (rows ?? []) as {
       id: string;
@@ -315,7 +315,7 @@ export default function DashboardPage() {
       };
     });
 
-    setRecentActivity(enriched.slice(0, 8));
+    setRecentActivity(enriched.slice(0, 3));
     setRecentLoading(false);
   }, [supabase]);
 
