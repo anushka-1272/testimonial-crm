@@ -548,27 +548,29 @@ function UpdateDispatchModal({
       }
 
       const waPhone = row.candidates?.whatsapp_number?.trim();
-      const watiCandName =
-        row.candidates?.full_name?.trim() ||
-        row.candidates?.email ||
-        "Candidate";
-      const rewardItemVal = row.reward_item?.trim() ?? "";
-      const tid = trackingId.trim();
-      const param3 =
-        tid && tid !== "NA" ? `Tracking ID: ${tid}` : "";
-      const formattedExpectedDelivery = format(
-        parseISO(expectedIso),
-        "dd MMM yyyy",
-      );
+      const cand = row.candidates;
+      const watiParam1 =
+        cand?.full_name?.trim() ||
+        cand?.email?.trim() ||
+        "there";
+      const watiParam2 = row.reward_item?.trim() || "your reward";
+      const tidRaw = trackingId.trim();
+      const watiParam3 =
+        tidRaw && tidRaw !== "NA"
+          ? `Tracking ID: ${tidRaw}`
+          : "Tracking details will be shared soon";
+      const watiParam4 = expectedIso
+        ? format(parseISO(expectedIso), "dd MMM yyyy")
+        : "7-10 working days";
 
       void (async () => {
         if (!waPhone) return;
         try {
           const ok = await sendWatiNotification(supabase, waPhone, "rewardsss_", [
-            { name: "1", value: watiCandName },
-            { name: "2", value: rewardItemVal },
-            { name: "3", value: param3 },
-            { name: "4", value: formattedExpectedDelivery },
+            { name: "1", value: watiParam1 },
+            { name: "2", value: watiParam2 },
+            { name: "3", value: watiParam3 },
+            { name: "4", value: watiParam4 },
           ]);
           if (!ok) onWatiFailure?.("WhatsApp notification failed to send");
         } catch (err) {
