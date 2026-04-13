@@ -29,6 +29,8 @@ import { PostInterviewDrawer } from "./post-interview-drawer";
 import { RescheduleInterviewModal } from "./reschedule-interview-modal";
 import { AddZoomDetailsModal } from "./add-zoom-details-modal";
 import { AssignInterviewerModal } from "./assign-interviewer-modal";
+import { FollowupHistoryModal } from "./followup-history-modal";
+import { LogFollowupCallModal } from "./log-followup-call-modal";
 import {
   ScheduleInterviewModal,
   type ScheduleCandidate,
@@ -36,6 +38,7 @@ import {
 } from "./schedule-interview-modal";
 import type {
   EligibleCandidate,
+  FollowupStatus,
   InterviewWithCandidate,
   LinkedInTrackStatus,
   ProjectInterviewWithProjectCandidate,
@@ -431,6 +434,105 @@ function pocOptionsFor(candidate: EligibleCandidate): string[] {
   return [...TEAM_POC_MEMBERS];
 }
 
+function normalizeFollowupStatus(v: unknown): FollowupStatus {
+  const allowed: FollowupStatus[] = [
+    "pending",
+    "no_answer",
+    "callback",
+    "wrong_number",
+    "not_interested",
+    "scheduled",
+    "interested",
+  ];
+  if (typeof v === "string" && (allowed as string[]).includes(v)) {
+    return v as FollowupStatus;
+  }
+  return "pending";
+}
+
+function canShowEligibleScheduleButton(c: EligibleCandidate): boolean {
+  if (c.followup_status === "not_interested") return false;
+  if (c.followup_status === "wrong_number") return false;
+  if (c.followup_status === "no_answer" && c.followup_count >= 3)
+    return false;
+  return true;
+}
+
+function eligibleScheduleDisabled(c: EligibleCandidate): boolean {
+  return c.followup_status === "callback" && Boolean(c.callback_datetime);
+}
+
+function eligibleScheduleTooltip(c: EligibleCandidate): string | undefined {
+  if (!canShowEligibleScheduleButton(c)) return undefined;
+  if (eligibleScheduleDisabled(c) && c.callback_datetime) {
+    try {
+      return `Callback scheduled for ${format(parseISO(c.callback_datetime), "MMM d, yyyy h:mm a")}`;
+    } catch {
+      return "Callback scheduled";
+    }
+  }
+  return undefined;
+}
+
+function followupStatusBadge(c: EligibleCandidate) {
+  if (c.followup_status === "wrong_number") {
+    return (
+      <span className="inline-flex rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-700">
+        Wrong Number
+      </span>
+    );
+  }
+  if (c.followup_status === "callback" && c.callback_datetime) {
+    let label = "Callback";
+    try {
+      label = format(parseISO(c.callback_datetime), "MMM d, h:mm a");
+    } catch {
+      /* ignore */
+    }
+    return (
+      <span className="inline-flex rounded-full bg-[#eff6ff] px-2.5 py-1 text-xs font-medium text-[#1d4ed8]">
+        Callback: {label}
+      </span>
+    );
+  }
+  if (c.followup_count >= 3 && c.followup_status === "no_answer") {
+    return (
+      <span className="inline-flex rounded-full bg-[#374151] px-2.5 py-1 text-xs font-medium text-gray-100">
+        Max attempts reached
+      </span>
+    );
+  }
+  if (c.followup_status === "interested") {
+    return (
+      <span className="inline-flex rounded-full bg-[#f0fdf4] px-2.5 py-1 text-xs font-medium text-[#15803d]">
+        Interested
+      </span>
+    );
+  }
+  if (c.followup_count === 2 && c.followup_status === "pending") {
+    return (
+      <span className="inline-flex rounded-full bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700">
+        Final attempt
+      </span>
+    );
+  }
+  if (c.followup_count === 2) {
+    return (
+      <span className="inline-flex rounded-full bg-[#fff7ed] px-2.5 py-1 text-xs font-medium text-[#c2410c]">
+        Follow-up 2/3
+      </span>
+    );
+  }
+  if (c.followup_count === 1) {
+    return (
+      <span className="inline-flex rounded-full bg-[#fef9c3] px-2.5 py-1 text-xs font-medium text-[#a16207]">
+        Follow-up 1/3
+      </span>
+    );
+  }
+  return null;
+}
+
 function compareInterviewByCandidateCreatedDesc(
   a: InterviewWithCandidate,
   b: InterviewWithCandidate,
@@ -517,6 +619,16 @@ export function InterviewsBoard() {
   );
   const [assignInterviewerFor, setAssignInterviewerFor] =
     useState<InterviewWithCandidate | null>(null);
+  const [logFollowupFor, setLogFollowupFor] =
+    useState<EligibleCandidate | null>(null);
+  const [followupHistoryFor, setFollowupHistoryFor] = useState<{
+    id: string;
+    label: string;
+  } | null>(null);
+  const [notInterestedOpen, setNotInterestedOpen] = useState(false);
+  const [restoringNotInterestedId, setRestoringNotInterestedId] = useState<
+    string | null
+  >(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const [pocSavingId, setPocSavingId] = useState<string | null>(null);
@@ -555,7 +667,7 @@ export function InterviewsBoard() {
         supabase
           .from("candidates")
           .select(
-            "id, created_at, full_name, email, whatsapp_number, interview_type, poc_assigned, poc_assigned_at, linkedin_track, linkedin_track_status",
+            "id, created_at, full_name, email, whatsapp_number, interview_type, poc_assigned, poc_assigned_at, linkedin_track, linkedin_track_status, followup_status, followup_count, callback_datetime, not_interested_reason, not_interested_at",
           )
           .eq("is_deleted", false)
           .eq("eligibility_status", "eligible")
@@ -607,6 +719,13 @@ export function InterviewsBoard() {
                 r.linkedin_track_status as string | null,
               )
             : null,
+          followup_status: normalizeFollowupStatus(r.followup_status),
+          followup_count: Math.max(0, Number(r.followup_count ?? 0)),
+          callback_datetime: (r.callback_datetime as string | null) ?? null,
+          not_interested_reason:
+            (r.not_interested_reason as string | null) ?? null,
+          not_interested_at:
+            (r.not_interested_at as string | null) ?? null,
         } satisfies EligibleCandidate;
       });
     setEligibleQueue(queue);
@@ -811,7 +930,19 @@ export function InterviewsBoard() {
   );
 
   const interviewEligibleFiltered = useMemo(
-    () => eligibleFiltered.filter((c) => !c.linkedin_track),
+    () =>
+      eligibleFiltered.filter(
+        (c) =>
+          !c.linkedin_track && c.followup_status !== "not_interested",
+      ),
+    [eligibleFiltered],
+  );
+
+  const notInterestedEligibleFiltered = useMemo(
+    () =>
+      eligibleFiltered.filter(
+        (c) => !c.linkedin_track && c.followup_status === "not_interested",
+      ),
     [eligibleFiltered],
   );
 
@@ -996,6 +1127,42 @@ export function InterviewsBoard() {
     void loadData();
   };
 
+  const handleMarkNotInterestedActive = async (c: EligibleCandidate) => {
+    if (!supabase) return;
+    setRestoringNotInterestedId(c.id);
+    const { error: uErr } = await supabase
+      .from("candidates")
+      .update({
+        followup_status: "pending",
+        followup_count: 0,
+        callback_datetime: null,
+        not_interested_reason: null,
+        not_interested_at: null,
+      })
+      .eq("id", c.id)
+      .eq("is_deleted", false);
+    setRestoringNotInterestedId(null);
+    if (uErr) {
+      setError(uErr.message);
+      return;
+    }
+    const display = c.full_name?.trim() || c.email || "Candidate";
+    const authUser = await getUserSafe(supabase);
+    if (authUser) {
+      await logActivity({
+        supabase,
+        user: authUser,
+        action_type: "eligibility",
+        entity_type: "candidate",
+        entity_id: c.id,
+        candidate_name: display,
+        description: `Marked ${display} active again (follow-up pipeline)`,
+        metadata: { followup: true },
+      });
+    }
+    void loadData();
+  };
+
   const moveCandidateToLinkedInTrack = async (c: EligibleCandidate) => {
     if (!supabase) return;
     const confirmed = window.confirm(
@@ -1130,7 +1297,8 @@ export function InterviewsBoard() {
   const thTrack = `${thBase} min-w-[130px] text-left`;
   const thLinkedInStatus = `${thBase} min-w-[140px] text-left`;
   const thPocAssigned = `${thBase} min-w-[160px] text-left`;
-  const thActions = `${thBase} min-w-[120px] text-right`;
+  const thFollowUp = `${thBase} min-w-[150px] text-left`;
+  const thActions = `${thBase} min-w-[220px] text-right`;
 
   const tdName = `${tdBase} min-w-[180px] text-left`;
   const tdEmail = `${tdBase} min-w-[220px] text-left text-[#6e6e73]`;
@@ -1139,7 +1307,8 @@ export function InterviewsBoard() {
   const tdTrack = `${tdBase} min-w-[130px] text-left align-top`;
   const tdLinkedInStatus = `${tdBase} min-w-[140px] text-left align-top`;
   const tdPocAssigned = `${tdBase} min-w-[160px] text-left`;
-  const tdActions = `${tdBase} min-w-[120px] text-right`;
+  const tdFollowUp = `${tdBase} min-w-[150px] text-left align-top`;
+  const tdActions = `${tdBase} min-w-[220px] text-right`;
 
   const thDateTime = `${thBase} min-w-[170px] text-left`;
   const tdDateTime = `${tdBase} min-w-[170px] text-left`;
@@ -1376,7 +1545,7 @@ export function InterviewsBoard() {
 
                 <div className={tableWrap}>
                   <div className="w-full min-w-0 max-w-full overflow-x-auto">
-                    <table className="w-full min-w-[940px] table-auto border-collapse">
+                    <table className="w-full min-w-[1100px] table-auto border-collapse">
                       <thead>
                         <tr>
                           <th className={thName}>Name</th>
@@ -1384,13 +1553,14 @@ export function InterviewsBoard() {
                           <th className={thInterviewType}>Interview type</th>
                           <th className={thTrack}>Track</th>
                           <th className={thPocAssigned}>POC assigned</th>
+                          <th className={thFollowUp}>Follow-up</th>
                           <th className={thActions}>Actions</th>
                         </tr>
                       </thead>
                       <tbody>
                         {eligiblePage.slice.length === 0 ? (
                           <tr>
-                            <td className={tdBase} colSpan={6}>
+                            <td className={tdBase} colSpan={7}>
                               {emptyState}
                             </td>
                           </tr>
@@ -1399,18 +1569,45 @@ export function InterviewsBoard() {
                             const hasPoc = Boolean(c.poc_assigned?.trim());
                             const showPocDropdown =
                               !hasPoc || pocEditingId === c.id;
+                            const showSchedule = canShowEligibleScheduleButton(c);
+                            const scheduleDisabled =
+                              !canEditEligibleTab ||
+                              !hasPoc ||
+                              eligibleScheduleDisabled(c);
+                            const scheduleTitle = !canEditEligibleTab
+                              ? "View only"
+                              : !hasPoc
+                                ? "Assign a POC first"
+                                : eligibleScheduleTooltip(c);
                             return (
                               <tr key={c.id}>
                                 <td className={tdName}>
-                                  <button
-                                    type="button"
-                                    className={nameLinkBtn}
-                                    onClick={() =>
-                                      setDetailCandidateId(c.id)
-                                    }
-                                  >
-                                    {c.full_name?.trim() || "—"}
-                                  </button>
+                                  <div className="flex flex-col gap-1">
+                                    <button
+                                      type="button"
+                                      className={nameLinkBtn}
+                                      onClick={() =>
+                                        setDetailCandidateId(c.id)
+                                      }
+                                    >
+                                      {c.full_name?.trim() || "—"}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="w-fit text-left text-xs font-medium text-[#6e6e73] underline decoration-[#d1d5db] underline-offset-2 hover:text-[#1d1d1f]"
+                                      onClick={() =>
+                                        setFollowupHistoryFor({
+                                          id: c.id,
+                                          label:
+                                            c.full_name?.trim() ||
+                                            c.email ||
+                                            "Candidate",
+                                        })
+                                      }
+                                    >
+                                      View history
+                                    </button>
+                                  </div>
                                 </td>
                                 <td className={tdEmail}>{c.email}</td>
                                 <td className={tdInterviewType}>
@@ -1488,33 +1685,52 @@ export function InterviewsBoard() {
                                     </div>
                                   )}
                                 </td>
+                                <td className={tdFollowUp}>
+                                  <div className="flex flex-col gap-1">
+                                    {followupStatusBadge(c)}
+                                  </div>
+                                </td>
                                 <td className={tdActions}>
-                                  <div className="flex justify-end">
+                                  <div className="flex flex-wrap items-center justify-end gap-2">
                                     <button
                                       type="button"
-                                      disabled={!canEditEligibleTab || !hasPoc}
+                                      disabled={!canEditEligibleTab}
                                       title={
                                         !canEditEligibleTab
                                           ? "View only"
-                                          : hasPoc
-                                            ? undefined
-                                            : "Assign a POC first"
+                                          : undefined
                                       }
-                                      className="rounded-lg bg-[#1d1d1f] px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-[#2d2d2f] disabled:cursor-not-allowed disabled:bg-[#d1d5db] disabled:text-[#6b7280]"
-                                      onClick={() => {
-                                        setScheduleProjectFor(null);
-                                        setScheduleFor({
-                                          id: c.id,
-                                          full_name: c.full_name,
-                                          email: c.email,
-                                          whatsapp_number: c.whatsapp_number,
-                                          interview_type: c.interview_type,
-                                          poc_assigned: c.poc_assigned,
-                                        });
-                                      }}
+                                      className="rounded-lg border border-[#e5e5e5] bg-white px-3 py-1.5 text-xs font-medium text-[#1d1d1f] transition-colors hover:bg-[#fafafa] disabled:cursor-not-allowed disabled:opacity-50"
+                                      onClick={() =>
+                                        canEditEligibleTab
+                                          ? setLogFollowupFor(c)
+                                          : undefined
+                                      }
                                     >
-                                      Schedule
+                                      Log Call
                                     </button>
+                                    {showSchedule ? (
+                                      <button
+                                        type="button"
+                                        disabled={scheduleDisabled}
+                                        title={scheduleTitle}
+                                        className="rounded-lg bg-[#1d1d1f] px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-[#2d2d2f] disabled:cursor-not-allowed disabled:bg-[#d1d5db] disabled:text-[#6b7280]"
+                                        onClick={() => {
+                                          setScheduleProjectFor(null);
+                                          setScheduleFor({
+                                            id: c.id,
+                                            full_name: c.full_name,
+                                            email: c.email,
+                                            whatsapp_number:
+                                              c.whatsapp_number,
+                                            interview_type: c.interview_type,
+                                            poc_assigned: c.poc_assigned,
+                                          });
+                                        }}
+                                      >
+                                        Schedule
+                                      </button>
+                                    ) : null}
                                   </div>
                                 </td>
                               </tr>
@@ -1530,6 +1746,79 @@ export function InterviewsBoard() {
                     eligiblePage.total,
                   )}
                 </div>
+
+                {notInterestedEligibleFiltered.length > 0 ? (
+                  <div className="mt-8 space-y-2">
+                    <button
+                      type="button"
+                      onClick={() => setNotInterestedOpen((o) => !o)}
+                      className="flex w-full items-center justify-between rounded-xl border border-[#f0f0f0] bg-[#fafafa] px-4 py-3 text-left text-sm font-semibold text-[#1d1d1f] transition-colors hover:bg-[#f5f5f7]"
+                    >
+                      <span>
+                        Not Interested ({notInterestedEligibleFiltered.length})
+                      </span>
+                      <span className="text-[#6e6e73]">
+                        {notInterestedOpen ? "▼" : "▶"}
+                      </span>
+                    </button>
+                    {notInterestedOpen ? (
+                      <div className={tableWrap}>
+                        <div className="w-full min-w-0 max-w-full overflow-x-auto">
+                          <table className="w-full min-w-[800px] table-auto border-collapse">
+                            <thead>
+                              <tr>
+                                <th className={thName}>Name</th>
+                                <th className={thPhone}>Phone</th>
+                                <th className={thReason}>Reason</th>
+                                <th className={thDateOnly}>Date</th>
+                                <th className={thActions}>Actions</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {notInterestedEligibleFiltered.map((c) => {
+                                const label =
+                                  c.full_name?.trim() || c.email || "—";
+                                return (
+                                  <tr key={c.id}>
+                                    <td className={tdName}>{label}</td>
+                                    <td className={tdPhone}>
+                                      {c.whatsapp_number?.trim() || "—"}
+                                    </td>
+                                    <td className={tdReason}>
+                                      {c.not_interested_reason?.trim() || "—"}
+                                    </td>
+                                    <td className={tdDateOnly}>
+                                      {c.not_interested_at
+                                        ? formatDateOnly(c.not_interested_at)
+                                        : "—"}
+                                    </td>
+                                    <td className={tdActions}>
+                                      <button
+                                        type="button"
+                                        disabled={
+                                          !canEditEligibleTab ||
+                                          restoringNotInterestedId === c.id
+                                        }
+                                        className="rounded-lg border border-[#1d1d1f] bg-white px-3 py-1.5 text-xs font-medium text-[#1d1d1f] hover:bg-[#fafafa] disabled:cursor-not-allowed disabled:opacity-50"
+                                        onClick={() =>
+                                          void handleMarkNotInterestedActive(c)
+                                        }
+                                      >
+                                        {restoringNotInterestedId === c.id
+                                          ? "Saving…"
+                                          : "Mark as Active"}
+                                      </button>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
 
                 {linkedInTrackFiltered.length > 0 ? (
                   <div className="mt-10 space-y-3">
@@ -2489,6 +2778,23 @@ export function InterviewsBoard() {
           </>
         )}
       </main>
+
+      <LogFollowupCallModal
+        key={logFollowupFor?.id ?? "log-followup-closed"}
+        open={!!logFollowupFor}
+        candidate={logFollowupFor}
+        supabase={supabase}
+        onClose={() => setLogFollowupFor(null)}
+        onSaved={() => void loadData()}
+      />
+
+      <FollowupHistoryModal
+        open={!!followupHistoryFor}
+        candidateId={followupHistoryFor?.id ?? null}
+        candidateLabel={followupHistoryFor?.label ?? ""}
+        supabase={supabase}
+        onClose={() => setFollowupHistoryFor(null)}
+      />
 
       <ScheduleInterviewModal
         key={

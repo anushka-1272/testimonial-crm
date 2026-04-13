@@ -48,6 +48,35 @@ export type LinkedInTrackStatus =
   | "eligible"
   | "not_eligible";
 
+/** Matches `candidates.followup_status` + log outcome values. */
+export type FollowupStatus =
+  | "pending"
+  | "no_answer"
+  | "callback"
+  | "wrong_number"
+  | "not_interested"
+  | "scheduled"
+  | "interested";
+
+export type FollowupCallOutcome =
+  | "no_answer"
+  | "callback"
+  | "interested"
+  | "not_interested"
+  | "wrong_number";
+
+export type FollowupLogRow = {
+  id: string;
+  created_at: string;
+  candidate_id: string;
+  attempt_number: number;
+  status: string;
+  notes: string | null;
+  callback_datetime: string | null;
+  logged_by: string | null;
+  logged_by_email: string | null;
+};
+
 export type EligibleCandidate = {
   id: string;
   created_at?: string;
@@ -59,6 +88,11 @@ export type EligibleCandidate = {
   poc_assigned_at: string | null;
   linkedin_track: boolean;
   linkedin_track_status: LinkedInTrackStatus | null;
+  followup_status: FollowupStatus;
+  followup_count: number;
+  callback_datetime: string | null;
+  not_interested_reason: string | null;
+  not_interested_at: string | null;
 };
 
 export type ProjectCandidateRow = {
