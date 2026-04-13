@@ -56,8 +56,11 @@ function greetNameFromEmail(email: string | undefined): string {
 type RecentActivityRow = {
   id: string;
   created_at: string;
+  user_id: string | null;
   user_name: string | null;
   description: string;
+  /** Resolved from team_members.full_name when available */
+  display_user_name: string;
 };
 
 function avatarHue(s: string): string {
@@ -133,9 +136,10 @@ export default function DashboardPage() {
 
     let testQ = supabase
       .from("interviews")
-      .select("*", { count: "exact", head: true })
+      .select("id, candidates!inner(id)", { count: "exact", head: true })
       .eq("interview_status", "completed")
-      .eq("interview_type", "testimonial");
+      .eq("interview_type", "testimonial")
+      .eq("candidates.is_deleted", false);
     if (from) testQ = testQ.gte("created_at", from);
     const { count: testimonials } = await testQ;
 
@@ -148,7 +152,8 @@ export default function DashboardPage() {
 
     let dispQ = supabase
       .from("dispatch")
-      .select("*", { count: "exact", head: true });
+      .select("id, candidates!inner(id)", { count: "exact", head: true })
+      .eq("candidates.is_deleted", false);
     if (from) dispQ = dispQ.gte("created_at", from);
     const { count: dispatches } = await dispQ;
 
@@ -164,9 +169,10 @@ export default function DashboardPage() {
     for (const iv of INTERVIEWERS) {
       let q = supabase
         .from("interviews")
-        .select("*", { count: "exact", head: true })
+        .select("id, candidates!inner(id)", { count: "exact", head: true })
         .eq("interviewer", iv)
-        .eq("interview_status", "completed");
+        .eq("interview_status", "completed")
+        .eq("candidates.is_deleted", false);
       if (from) q = q.gte("created_at", from);
       const { count } = await q;
       ivStats[iv] = count || 0;
@@ -184,14 +190,17 @@ export default function DashboardPage() {
       .eq("eligibility_status", "eligible");
     const { count: fScheduled } = await supabase
       .from("interviews")
-      .select("*", { count: "exact", head: true });
+      .select("id, candidates!inner(id)", { count: "exact", head: true })
+      .eq("candidates.is_deleted", false);
     const { count: fCompleted } = await supabase
       .from("interviews")
-      .select("*", { count: "exact", head: true })
-      .eq("interview_status", "completed");
+      .select("id, candidates!inner(id)", { count: "exact", head: true })
+      .eq("interview_status", "completed")
+      .eq("candidates.is_deleted", false);
     const { count: fDispatched } = await supabase
       .from("dispatch")
-      .select("*", { count: "exact", head: true });
+      .select("id, candidates!inner(id)", { count: "exact", head: true })
+      .eq("candidates.is_deleted", false);
     setFunnel({
       entries: fEntries || 0,
       eligible: fEligible || 0,
@@ -205,12 +214,52 @@ export default function DashboardPage() {
 
   const fetchRecentActivity = useCallback(async () => {
     setRecentLoading(true);
-    const { data } = await supabase
+    const { data: rows } = await supabase
       .from("activity_log")
-      .select("id, created_at, user_name, description")
+      .select("id, created_at, user_id, user_name, description")
       .order("created_at", { ascending: false })
       .limit(20);
-    setRecentActivity((data ?? []) as RecentActivityRow[]);
+
+    const raw = (rows ?? []) as {
+      id: string;
+      created_at: string;
+      user_id: string | null;
+      user_name: string | null;
+      description: string;
+    }[];
+
+    const userIds = [
+      ...new Set(
+        raw.map((r) => r.user_id).filter((id): id is string => Boolean(id)),
+      ),
+    ];
+
+    let fullNameByUserId: Record<string, string> = {};
+    if (userIds.length > 0) {
+      const { data: members } = await supabase
+        .from("team_members")
+        .select("user_id, full_name")
+        .in("user_id", userIds);
+      for (const m of members ?? []) {
+        const uid = m.user_id as string;
+        const fn = (m.full_name as string | null)?.trim();
+        if (uid && fn) fullNameByUserId[uid] = fn;
+      }
+    }
+
+    const enriched: RecentActivityRow[] = raw.map((r) => {
+      const fromTeam =
+        r.user_id && fullNameByUserId[r.user_id]
+          ? fullNameByUserId[r.user_id]
+          : null;
+      const fallback = r.user_name?.trim() || "Someone";
+      return {
+        ...r,
+        display_user_name: fromTeam ?? fallback,
+      };
+    });
+
+    setRecentActivity(enriched);
     setRecentLoading(false);
   }, [supabase]);
 
@@ -237,6 +286,22 @@ export default function DashboardPage() {
       void supabase.removeChannel(ch);
     };
   }, [supabase, fetchRecentActivity]);
+
+  useEffect(() => {
+    const ch = supabase
+      .channel("dashboard-candidates")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "candidates" },
+        () => {
+          void fetchStats();
+        },
+      )
+      .subscribe();
+    return () => {
+      void supabase.removeChannel(ch);
+    };
+  }, [supabase, fetchStats]);
 
   const funnelSteps = useMemo(
     () => [
@@ -391,7 +456,7 @@ export default function DashboardPage() {
               ) : (
                 <ul className="space-y-4">
                   {recentActivity.map((a) => {
-                    const uname = a.user_name?.trim() || "Someone";
+                    const uname = a.display_user_name;
                     return (
                       <li key={a.id} className="flex gap-3">
                         <div
