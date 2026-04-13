@@ -13,6 +13,7 @@ import {
 import { LogoOnDark, LogoOnLight } from "@/components/brand-logo";
 import {
   digitsOnly,
+  resolveFollowupLookupCard,
   resolveSupportStatus,
   type SupportDispatch,
   type SupportInterview,
@@ -24,7 +25,7 @@ const inputClass =
   "w-full rounded-xl border border-[#e5e5e5] px-4 py-3 text-sm text-[#1d1d1f] placeholder:text-[#aeaeb2] focus:border-[#3b82f6] focus:outline-none focus:ring-1 focus:ring-[#3b82f6]";
 
 const CANDIDATE_LOOKUP_SELECT =
-  "id, full_name, email, whatsapp_number, eligibility_status, interview_type, poc_assigned";
+  "id, full_name, email, whatsapp_number, eligibility_status, interview_type, poc_assigned, followup_status, followup_count, callback_datetime";
 
 const INTERVIEW_LOOKUP_SELECT =
   "interview_status, scheduled_date, interviewer, reschedule_reason, interview_type, reward_item";
@@ -38,6 +39,7 @@ function CandidateLookupResultCard({
   payload: SupportLookupPayload;
 }) {
   const status = resolveSupportStatus(payload);
+  const followupCard = resolveFollowupLookupCard(payload.candidate);
   const { candidate, interview, dispatch } = payload;
   const typeForBadge = interview?.interview_type ?? candidate.interview_type;
   const reward =
@@ -89,6 +91,13 @@ function CandidateLookupResultCard({
           </div>
         ) : null}
       </div>
+      {followupCard ? (
+        <div
+          className={`mt-4 rounded-xl border px-4 py-3 text-sm leading-snug ${followupCard.cardClass}`}
+        >
+          {followupCard.text}
+        </div>
+      ) : null}
       {candidate.poc_assigned?.trim() ? (
         <div className="mt-4 border-t border-[#e5e5e5] pt-4">
           <p className="text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">

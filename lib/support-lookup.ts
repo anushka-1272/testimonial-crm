@@ -18,7 +18,70 @@ export type SupportCandidate = {
   eligibility_status: EligibilityStatus;
   interview_type: InterviewType | null;
   poc_assigned: string | null;
+  followup_status: string;
+  followup_count: number;
+  callback_datetime: string | null;
 };
+
+/** Public lookup modal: colored follow-up notice after main status. */
+export type SupportFollowupLookupCard = {
+  text: string;
+  cardClass: string;
+};
+
+export function resolveFollowupLookupCard(
+  candidate: SupportCandidate,
+): SupportFollowupLookupCard | null {
+  const status = candidate.followup_status;
+  const count = Math.max(0, Number(candidate.followup_count ?? 0));
+
+  if (status === "no_answer" && count >= 3) {
+    return {
+      text: "We were unable to reach you after multiple attempts. Please contact us directly if you're still interested.",
+      cardClass:
+        "border-red-200 bg-red-50 text-red-950 ring-1 ring-red-200/80",
+    };
+  }
+
+  if (status === "callback") {
+    const when = formatSlot(candidate.callback_datetime);
+    const text = when
+      ? `📅 A callback has been scheduled for ${when}. Our team will reach out then.`
+      : "📅 A callback has been scheduled. Our team will reach out soon.";
+    return {
+      text,
+      cardClass:
+        "border-blue-200 bg-blue-50 text-blue-950 ring-1 ring-blue-200/80",
+    };
+  }
+
+  if (status === "not_interested") {
+    return {
+      text: "We've noted that you are not interested at this time. Feel free to reach out if you change your mind.",
+      cardClass:
+        "border-zinc-200 bg-zinc-100 text-zinc-800 ring-1 ring-zinc-200/80",
+    };
+  }
+
+  if (status === "wrong_number") {
+    return {
+      text: "📵 We were unable to reach you on the number provided. Please contact us to update your details.",
+      cardClass:
+        "border-orange-200 bg-orange-50 text-orange-950 ring-1 ring-orange-200/80",
+    };
+  }
+
+  if (status === "no_answer" && count > 0) {
+    const times = count === 1 ? "time" : "times";
+    return {
+      text: `📞 Our team tried reaching you ${count} ${times} but couldn't connect. We'll try again soon.`,
+      cardClass:
+        "border-amber-200 bg-amber-50 text-amber-950 ring-1 ring-amber-200/80",
+    };
+  }
+
+  return null;
+}
 
 export type SupportInterview = {
   interview_status: InterviewStatus;
