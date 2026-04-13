@@ -12,6 +12,18 @@ type Period = "total" | "monthly" | "weekly";
 
 const INTERVIEWERS = ["Harika", "Gargi", "Mudit", "Anushka"];
 
+/** 2×2 grid order + bar/avatar colors (hex). */
+const INTERVIEWER_GRID_ORDER = ["Anushka", "Harika", "Gargi", "Mudit"] as const;
+const INTERVIEWER_THEME: Record<
+  (typeof INTERVIEWER_GRID_ORDER)[number],
+  { bar: string; avatar: string }
+> = {
+  Anushka: { bar: "#2563eb", avatar: "#2563eb" },
+  Harika: { bar: "#7c3aed", avatar: "#7c3aed" },
+  Gargi: { bar: "#16a34a", avatar: "#16a34a" },
+  Mudit: { bar: "#d97706", avatar: "#d97706" },
+};
+
 function getDateRange(period: Period) {
   const now = new Date();
   if (period === "weekly") {
@@ -58,10 +70,51 @@ type RecentActivityRow = {
   created_at: string;
   user_id: string | null;
   user_name: string | null;
+  action_type: string;
   description: string;
   /** Resolved from team_members.full_name when available */
   display_user_name: string;
 };
+
+/** Strip redundant “Admin email …” / duplicate actor prefix from log description. */
+function activityActionText(actor: string, description: string): string {
+  let d = description.trim();
+  d = d.replace(/^Admin\s+\S+@\S+\s+/i, "");
+  d = d.replace(/^Admin\s+\S+\s+/i, "");
+  const a = actor.trim();
+  if (a.length > 0 && d.toLowerCase().startsWith(a.toLowerCase() + " ")) {
+    d = d.slice(a.length).trim();
+  }
+  if (d.length > 0 && /^[a-z]/.test(d)) {
+    d = d.charAt(0).toUpperCase() + d.slice(1);
+  }
+  return d.length > 0 ? d : description.trim();
+}
+
+function activityLeftBorderClass(actionType: string, description: string): string {
+  const d = description.toLowerCase();
+  if (
+    d.includes("deleted") ||
+    d.includes("delete candidate") ||
+    d.includes("delete project")
+  ) {
+    return "!border-l-red-500";
+  }
+  switch (actionType) {
+    case "eligibility":
+      return "!border-l-purple-500";
+    case "interviews":
+      return "!border-l-blue-500";
+    case "dispatch":
+      return "!border-l-orange-500";
+    case "settings":
+      return "!border-l-gray-400";
+    case "post_production":
+      return "!border-l-blue-500";
+    default:
+      return "!border-l-gray-300";
+  }
+}
 
 function avatarHue(s: string): string {
   let h = 0;
@@ -217,15 +270,16 @@ export default function DashboardPage() {
     setRecentLoading(true);
     const { data: rows } = await supabase
       .from("activity_log")
-      .select("id, created_at, user_id, user_name, description")
+      .select("id, created_at, user_id, user_name, action_type, description")
       .order("created_at", { ascending: false })
-      .limit(20);
+      .limit(12);
 
     const raw = (rows ?? []) as {
       id: string;
       created_at: string;
       user_id: string | null;
       user_name: string | null;
+      action_type: string;
       description: string;
     }[];
 
@@ -256,11 +310,12 @@ export default function DashboardPage() {
       const fallback = r.user_name?.trim() || "Someone";
       return {
         ...r,
+        action_type: r.action_type ?? "unknown",
         display_user_name: fromTeam ?? fallback,
       };
     });
 
-    setRecentActivity(enriched);
+    setRecentActivity(enriched.slice(0, 8));
     setRecentLoading(false);
   }, [supabase]);
 
@@ -315,10 +370,16 @@ export default function DashboardPage() {
     [funnel],
   );
 
-  const rankedInterviewers = useMemo(() => {
-    return [...INTERVIEWERS]
-      .map((name) => ({ name, count: interviewer[name] ?? 0 }))
-      .sort((a, b) => b.count - a.count);
+  const interviewerGrid = useMemo(() => {
+    return INTERVIEWER_GRID_ORDER.map((name) => ({
+      name,
+      count: interviewer[name] ?? 0,
+      theme: INTERVIEWER_THEME[name],
+    }));
+  }, [interviewer]);
+
+  const interviewerTeamTotal = useMemo(() => {
+    return INTERVIEWERS.reduce((s, n) => s + (interviewer[n] ?? 0), 0);
   }, [interviewer]);
 
   const statCards = useMemo(
@@ -331,11 +392,6 @@ export default function DashboardPage() {
     ],
     [stats],
   );
-
-  const ivMax = useMemo(() => {
-    const vals = rankedInterviewers.map((r) => r.count);
-    return Math.max(1, ...vals);
-  }, [rankedInterviewers]);
 
   const hour = new Date().getHours();
   const greeting = greetingForHour(hour);
@@ -359,7 +415,7 @@ export default function DashboardPage() {
       </header>
 
       <main className="flex-1 px-8 pb-12 pt-2">
-        <div className="mx-auto max-w-[1400px] space-y-8">
+        <div className="mx-auto max-w-[1400px] space-y-10">
           <div className="inline-flex rounded-full bg-white p-1 shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
             {(["total", "monthly", "weekly"] as Period[]).map((p) => (
               <button
@@ -394,112 +450,156 @@ export default function DashboardPage() {
             ))}
           </div>
 
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-            <div className="lg:col-span-2">
-              <section
-                className={`rounded-2xl bg-white p-6 transition-all duration-200 ease-in-out ${cardChrome}`}
-              >
-                <h2 className="mb-1 text-base font-semibold text-[#1d1d1f]">
-                  Interviewer performance
-                </h2>
-                <p className="mb-6 text-sm text-[#6e6e73]">
-                  Completed interviews by team member
-                </p>
-                <div>
-                  {rankedInterviewers.map((row, index) => {
+          <div className="border-t border-[#e8e8ed] pt-10">
+            <div className="grid grid-cols-1 gap-8 lg:grid-cols-5 lg:gap-10">
+              <div className="lg:col-span-3">
+                <div className="mb-5 border-l-4 border-blue-500 pl-3">
+                  <h2 className="text-base font-semibold text-gray-800">
+                    Interviewer performance
+                  </h2>
+                  <p className="mt-1 text-sm text-[#6e6e73]">
+                    Completed testimonial interviews · share of team total
+                  </p>
+                </div>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  {interviewerGrid.map((row) => {
                     const barPct =
-                      loading || ivMax <= 0
+                      loading || interviewerTeamTotal <= 0
                         ? 0
-                        : Math.min(100, Math.round((row.count / ivMax) * 100));
+                        : Math.round(
+                            (row.count / interviewerTeamTotal) * 100,
+                          );
                     return (
                       <div
                         key={row.name}
-                        className="flex items-center gap-4 border-b border-[#f5f5f5] py-3 last:border-0"
+                        className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm"
                       >
-                        <span className="w-4 shrink-0 text-sm text-[#aeaeb2]">
-                          {index + 1}
-                        </span>
-                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#1d1d1f] text-xs font-medium text-white">
-                          {initials(row.name)}
-                        </div>
-                        <span className="min-w-0 flex-1 text-sm font-medium text-[#1d1d1f]">
-                          {row.name}
-                        </span>
-                        <div className="hidden h-1 w-24 shrink-0 overflow-hidden rounded-full bg-[#f5f5f7] sm:block">
+                        <div className="flex items-start gap-3">
                           <div
-                            className="h-full rounded-full bg-[#3b82f6] transition-all duration-200 ease-in-out"
-                            style={{ width: `${barPct}%` }}
-                          />
+                            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white"
+                            style={{ backgroundColor: row.theme.avatar }}
+                          >
+                            {initials(row.name)}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="font-bold text-[#1d1d1f]">
+                              {row.name}
+                            </p>
+                            {loading ? (
+                              <p className="mt-1 text-3xl font-bold tabular-nums text-[#1d1d1f]">
+                                —
+                              </p>
+                            ) : row.count === 0 ? (
+                              <p className="mt-2 text-sm text-gray-400">
+                                No interviews yet
+                              </p>
+                            ) : (
+                              <>
+                                <p className="mt-1 text-3xl font-bold tabular-nums tracking-tight text-[#1d1d1f]">
+                                  {row.count}
+                                </p>
+                                <p className="mt-0.5 text-xs text-[#6e6e73]">
+                                  {barPct}% of team
+                                </p>
+                              </>
+                            )}
+                          </div>
                         </div>
-                        <span className="shrink-0 text-sm font-semibold tabular-nums text-[#1d1d1f]">
-                          {loading ? "—" : row.count}
-                        </span>
+                        {(loading || row.count > 0) && (
+                          <div className="mt-4 h-2 w-full overflow-hidden rounded-full bg-gray-100">
+                            <div
+                              className="h-full rounded-full transition-all duration-300"
+                              style={{
+                                width: loading ? "0%" : `${barPct}%`,
+                                backgroundColor: row.theme.bar,
+                              }}
+                            />
+                          </div>
+                        )}
                       </div>
                     );
                   })}
                 </div>
-              </section>
-            </div>
+              </div>
 
-            <section
-              className={`h-fit rounded-2xl bg-white p-6 transition-all duration-200 ease-in-out ${cardChrome} lg:col-span-1`}
-            >
-              <h2 className="mb-1 text-base font-semibold text-[#1d1d1f]">
-                Recent activity
-              </h2>
-              <p className="mb-6 text-sm text-[#6e6e73]">
-                Latest changes from your team
-              </p>
-              {recentLoading ? (
-                <p className="text-sm text-[#6e6e73]">Loading…</p>
-              ) : recentActivity.length === 0 ? (
-                <p className="text-sm text-[#6e6e73]">No activity yet</p>
-              ) : (
-                <ul className="space-y-4">
-                  {recentActivity.map((a) => {
-                    const uname = a.display_user_name;
-                    return (
-                      <li key={a.id} className="flex gap-3">
-                        <div
-                          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-medium text-white"
-                          style={{ backgroundColor: avatarHue(uname) }}
-                        >
-                          {initials(uname)}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm text-[#1d1d1f]">
-                            <span className="font-semibold">{uname}</span>{" "}
-                            {a.description}
-                          </p>
-                          <p className="mt-1 text-xs text-[#aeaeb2]">
-                            {formatDistanceToNow(parseISO(a.created_at), {
-                              addSuffix: true,
-                            })}
-                          </p>
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-              <Link
-                href="/dashboard/activity"
-                className="mt-6 inline-block text-sm font-medium text-[#3b82f6] transition-colors hover:text-[#2563eb]"
-              >
-                View all activity
-              </Link>
-            </section>
+              <div className="lg:col-span-2">
+                <div className="mb-5 border-l-4 border-violet-500 pl-3">
+                  <h2 className="text-base font-semibold text-gray-800">
+                    Recent activity
+                  </h2>
+                  <p className="mt-1 text-sm text-[#6e6e73]">
+                    Latest changes from your team
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
+                  {recentLoading ? (
+                    <p className="text-sm text-[#6e6e73]">Loading…</p>
+                  ) : recentActivity.length === 0 ? (
+                    <p className="text-sm text-[#6e6e73]">No activity yet</p>
+                  ) : (
+                    <ul className="space-y-3">
+                      {recentActivity.map((a) => {
+                        const actor = a.display_user_name;
+                        const actionText = activityActionText(
+                          actor,
+                          a.description,
+                        );
+                        const borderAccent = activityLeftBorderClass(
+                          a.action_type,
+                          a.description,
+                        );
+                        return (
+                          <li
+                            key={a.id}
+                            className={`flex items-start gap-3 rounded-xl border border-gray-100 border-l-4 border-l-transparent bg-[#fafafa]/80 py-3 pl-3 pr-3 ${borderAccent}`}
+                          >
+                            <div
+                              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-medium text-white"
+                              style={{ backgroundColor: avatarHue(actor) }}
+                            >
+                              {initials(actor)}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm leading-snug text-[#1d1d1f]">
+                                <span className="font-semibold">{actor}</span>{" "}
+                                {actionText}
+                              </p>
+                            </div>
+                            <time
+                              className="shrink-0 text-right text-xs text-gray-400"
+                              dateTime={a.created_at}
+                            >
+                              {formatDistanceToNow(parseISO(a.created_at), {
+                                addSuffix: true,
+                              })}
+                            </time>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                  <Link
+                    href="/dashboard/activity"
+                    className="mt-5 inline-flex text-sm font-medium text-[#3b82f6] transition-colors hover:text-[#2563eb]"
+                  >
+                    View all →
+                  </Link>
+                </div>
+              </div>
+            </div>
           </div>
 
           <section
             className={`rounded-2xl bg-white p-8 transition-all duration-200 ease-in-out ${cardChrome}`}
           >
-            <h2 className="text-base font-semibold text-[#1d1d1f]">
-              Conversion funnel
-            </h2>
-            <p className="mb-8 text-sm text-[#6e6e73]">
-              End-to-end candidate journey
-            </p>
+            <div className="mb-6 border-l-4 border-slate-500 pl-3">
+              <h2 className="text-base font-semibold text-gray-800">
+                Conversion funnel
+              </h2>
+              <p className="mt-1 text-sm text-[#6e6e73]">
+                End-to-end candidate journey
+              </p>
+            </div>
             <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-0">
               {funnelSteps.map((step, i) => (
                 <Fragment key={step.label}>
