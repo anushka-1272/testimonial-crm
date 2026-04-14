@@ -6,14 +6,13 @@ import { useEffect, useState } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { logActivity } from "@/lib/activity-logger";
+import { fetchTeamRosterNames } from "@/lib/team-roster";
 import { getUserSafe } from "@/lib/supabase-auth";
 
 import type {
   InterviewWithCandidate,
   ProjectInterviewWithProjectCandidate,
 } from "./types";
-
-const INTERVIEWERS = ["Harika", "Gargi", "Mudit", "Anushka"] as const;
 
 type AnyInterview = InterviewWithCandidate | ProjectInterviewWithProjectCandidate;
 
@@ -42,8 +41,8 @@ export function RescheduleInterviewModal({
 }: Props) {
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
-  const [interviewer, setInterviewer] =
-    useState<(typeof INTERVIEWERS)[number]>("Harika");
+  const [interviewerOptions, setInterviewerOptions] = useState<string[]>([]);
+  const [interviewer, setInterviewer] = useState("");
   const [reason, setReason] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -54,17 +53,26 @@ export function RescheduleInterviewModal({
     setDate(format(d, "yyyy-MM-dd"));
     setTime(format(d, "HH:mm"));
     const raw = interview.interviewer?.trim();
-    const iv = (
-      raw && INTERVIEWERS.includes(raw as (typeof INTERVIEWERS)[number])
-        ? raw
-        : "Harika"
-    ) as (typeof INTERVIEWERS)[number];
-    setInterviewer(iv);
+    setInterviewer(raw || "");
     setReason(
       mode === "from_rescheduled" ? (interview.reschedule_reason ?? "") : "",
     );
     setError(null);
   }, [open, interview?.id, interview?.scheduled_date, mode]);
+
+  useEffect(() => {
+    if (!open) return;
+    let active = true;
+    void (async () => {
+      const names = await fetchTeamRosterNames(supabase, "interviewer", true);
+      if (!active) return;
+      setInterviewerOptions(names);
+      setInterviewer((prev) => prev || names[0] || "");
+    })();
+    return () => {
+      active = false;
+    };
+  }, [open, supabase]);
 
   if (!open || !interview) return null;
 
@@ -73,6 +81,10 @@ export function RescheduleInterviewModal({
     setError(null);
     if (!date || !time) {
       setError("Date and time are required.");
+      return;
+    }
+    if (!interviewer.trim()) {
+      setError("Interviewer is required.");
       return;
     }
     if (mode === "from_scheduled" && !reason.trim()) {
@@ -239,15 +251,17 @@ export function RescheduleInterviewModal({
             <select
               className={inp}
               value={interviewer}
-              onChange={(e) =>
-                setInterviewer(e.target.value as (typeof INTERVIEWERS)[number])
-              }
+              onChange={(e) => setInterviewer(e.target.value)}
             >
-              {INTERVIEWERS.map((n) => (
-                <option key={n} value={n}>
-                  {n}
-                </option>
-              ))}
+              {interviewerOptions.length === 0 ? (
+                <option value="">No active interviewers</option>
+              ) : (
+                interviewerOptions.map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))
+              )}
             </select>
           </label>
 

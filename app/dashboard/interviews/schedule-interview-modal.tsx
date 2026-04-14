@@ -17,6 +17,7 @@ import {
   SLACK_DISHAN_EMAIL,
 } from "@/lib/slack-contacts";
 import { voidSlackNotify } from "@/lib/slack-client";
+import { fetchTeamRosterNames } from "@/lib/team-roster";
 
 export type ScheduleCandidate = {
   id: string;
@@ -34,8 +35,6 @@ export type ScheduleProjectCandidate = {
   project_title: string | null;
   poc_assigned: string | null;
 };
-
-const INTERVIEWERS = ["Harika", "Gargi", "Mudit", "Anushka"] as const;
 
 const SLACK_ANUSHKA_EMAIL = POC_INTERVIEWER_SLACK_EMAILS.Anushka;
 
@@ -71,8 +70,8 @@ export function ScheduleInterviewModal({
 }: Props) {
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
-  const [interviewer, setInterviewer] =
-    useState<(typeof INTERVIEWERS)[number]>("Harika");
+  const [interviewerOptions, setInterviewerOptions] = useState<string[]>([]);
+  const [interviewer, setInterviewer] = useState("");
   const [interviewType, setInterviewType] = useState<"testimonial" | "project">(
     "testimonial",
   );
@@ -110,6 +109,20 @@ export function ScheduleInterviewModal({
     projectCandidate?.poc_assigned,
   ]);
 
+  useEffect(() => {
+    if (!open) return;
+    let active = true;
+    void (async () => {
+      const names = await fetchTeamRosterNames(supabase, "interviewer", true);
+      if (!active) return;
+      setInterviewerOptions(names);
+      setInterviewer((prev) => prev || names[0] || "");
+    })();
+    return () => {
+      active = false;
+    };
+  }, [open, supabase]);
+
   if (!open || (!candidate && !projectCandidate)) return null;
 
   const isProject = !!projectCandidate;
@@ -119,6 +132,10 @@ export function ScheduleInterviewModal({
     setError(null);
     if (!date || !time) {
       setError("Date and time are required.");
+      return;
+    }
+    if ((isProject || interviewType === "project") && !interviewer.trim()) {
+      setError("Interviewer is required.");
       return;
     }
     const langSubmit = interviewLanguageForSubmit(langPreset, otherLanguageText);
@@ -367,15 +384,17 @@ export function ScheduleInterviewModal({
               <select
                 className={inp}
                 value={interviewer}
-                onChange={(e) =>
-                  setInterviewer(e.target.value as (typeof INTERVIEWERS)[number])
-                }
+                onChange={(e) => setInterviewer(e.target.value)}
               >
-                {INTERVIEWERS.map((n) => (
-                  <option key={n} value={n}>
-                    {n}
-                  </option>
-                ))}
+                {interviewerOptions.length === 0 ? (
+                  <option value="">No active interviewers</option>
+                ) : (
+                  interviewerOptions.map((n) => (
+                    <option key={n} value={n}>
+                      {n}
+                    </option>
+                  ))
+                )}
               </select>
             </label>
           ) : null}

@@ -12,13 +12,20 @@ export default function SettingsHomePage() {
         <p className="mt-1 text-sm text-[#6e6e73]">Configure CRM behavior and team access</p>
       </header>
       <main className="mx-auto max-w-5xl px-8 pb-12 pt-2">
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Link
             href="/dashboard/settings/team"
             className="rounded-2xl border border-[#f0f0f0] bg-white p-6 shadow-[0_4px_16px_rgba(0,0,0,0.08)] transition-colors hover:bg-[#fafafa]"
           >
             <h2 className="text-base font-semibold text-[#1d1d1f]">Team Management</h2>
             <p className="mt-1 text-sm text-[#6e6e73]">Invite and manage CRM access</p>
+          </Link>
+          <Link
+            href="/dashboard/settings/roster"
+            className="rounded-2xl border border-[#f0f0f0] bg-white p-6 shadow-[0_4px_16px_rgba(0,0,0,0.08)] transition-colors hover:bg-[#fafafa]"
+          >
+            <h2 className="text-base font-semibold text-[#1d1d1f]">Team Roster</h2>
+            <p className="mt-1 text-sm text-[#6e6e73]">Manage role-based member lists</p>
           </Link>
           <Link
             href="/dashboard/settings/criteria"

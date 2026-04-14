@@ -205,6 +205,12 @@ export default function CriteriaPage() {
               Criteria
             </Link>
             <Link
+              href="/dashboard/settings/roster"
+              className="text-sm font-medium text-[#6e6e73] transition-all hover:text-[#1d1d1f]"
+            >
+              Roster
+            </Link>
+            <Link
               href="/dashboard/settings/deleted-entries"
               className="text-sm font-medium text-[#6e6e73] transition-all hover:text-[#1d1d1f]"
             >

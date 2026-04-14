@@ -9,10 +9,12 @@ import { logActivity } from "@/lib/activity-logger";
 import { getUserSafe } from "@/lib/supabase-auth";
 import { slackEmailForTeamMember } from "@/lib/slack-contacts";
 import { voidSlackNotify } from "@/lib/slack-client";
+import {
+  fetchTeamRosterNames,
+  mergeRosterWithCurrent,
+} from "@/lib/team-roster";
 
 import type { InterviewWithCandidate } from "./types";
-
-const INTERVIEWERS = ["Harika", "Anushka", "Gargi", "Mudit"] as const;
 
 function formatSlot(iso: string | null | undefined): string {
   if (!iso) return "—";
@@ -38,15 +40,26 @@ export function AssignInterviewerModal({
   onClose,
   onSaved,
 }: Props) {
-  const [interviewer, setInterviewer] =
-    useState<(typeof INTERVIEWERS)[number]>("Harika");
+  const [interviewerOptions, setInterviewerOptions] = useState<string[]>([]);
+  const [interviewer, setInterviewer] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
-    setInterviewer("Harika");
     setError(null);
+    let active = true;
+    void (async () => {
+      const names = await fetchTeamRosterNames(supabase, "interviewer", true);
+      const current = interview?.interviewer?.trim() || null;
+      const options = mergeRosterWithCurrent(names, current);
+      if (!active) return;
+      setInterviewerOptions(options);
+      setInterviewer(current || options[0] || "");
+    })();
+    return () => {
+      active = false;
+    };
   }, [open, interview?.id]);
 
   if (!open || !interview) return null;
@@ -69,6 +82,10 @@ export function AssignInterviewerModal({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    if (!interviewer.trim()) {
+      setError("Please select an interviewer.");
+      return;
+    }
     setSubmitting(true);
     try {
       const assignedAt = new Date().toISOString();
@@ -103,7 +120,7 @@ export function AssignInterviewerModal({
       const formattedDateTime = interview.scheduled_date
         ? format(parseISO(interview.scheduled_date), "dd MMM yyyy, h:mm a")
         : "—";
-      const slackEmail = slackEmailForTeamMember(interviewer);
+      const slackEmail = await slackEmailForTeamMember(supabase, interviewer);
       if (slackEmail) {
         const slackMsg =
           `📅 You have been assigned to interview *${candName}*\n` +
@@ -158,15 +175,17 @@ export function AssignInterviewerModal({
             <select
               className={inp}
               value={interviewer}
-              onChange={(e) =>
-                setInterviewer(e.target.value as (typeof INTERVIEWERS)[number])
-              }
+              onChange={(e) => setInterviewer(e.target.value)}
             >
-              {INTERVIEWERS.map((n) => (
-                <option key={n} value={n}>
-                  {n}
-                </option>
-              ))}
+              {interviewerOptions.length === 0 ? (
+                <option value="">No active interviewers</option>
+              ) : (
+                interviewerOptions.map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))
+              )}
             </select>
           </label>
 

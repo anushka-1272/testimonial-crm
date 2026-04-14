@@ -232,6 +232,9 @@ export default function TeamSettingsPage() {
           <Link href="/dashboard/settings/team" className="font-medium text-[#1d1d1f]">
             Team
           </Link>
+          <Link href="/dashboard/settings/roster" className="text-[#6e6e73] hover:text-[#1d1d1f]">
+            Roster
+          </Link>
           <Link href="/dashboard/settings/criteria" className="text-[#6e6e73] hover:text-[#1d1d1f]">
             Criteria
           </Link>

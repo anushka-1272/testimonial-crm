@@ -136,7 +136,8 @@ export function AddZoomDetailsModal({
       const formattedDateTime = interview.scheduled_date
         ? format(parseISO(interview.scheduled_date), "dd MMM yyyy, h:mm a")
         : "";
-      const interviewerSlackEmail = slackEmailForTeamMember(
+      const interviewerSlackEmail = await slackEmailForTeamMember(
+        supabase,
         interview.interviewer,
       );
       if (interviewerSlackEmail) {

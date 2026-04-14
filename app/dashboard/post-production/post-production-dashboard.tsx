@@ -20,8 +20,10 @@ import { getUserSafe } from "@/lib/supabase-auth";
 import { SLACK_PRKHRVV_EMAIL } from "@/lib/slack-contacts";
 import { voidSlackNotify } from "@/lib/slack-client";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
-
-const TEAM = ["Harika", "Anushka", "Gargi", "Mudit"] as const;
+import {
+  fetchTeamRosterNames,
+  mergeRosterWithCurrent,
+} from "@/lib/team-roster";
 
 type YoutubeStatus = "private" | "unlisted" | "live";
 type ReviewState = "done" | "not_done";
@@ -274,7 +276,8 @@ export function PostProductionDashboard() {
     rowId: string;
     kind: "pre" | "post";
   } | null>(null);
-  const [reviewBy, setReviewBy] = useState<(typeof TEAM)[number]>("Harika");
+  const [postProductionTeam, setPostProductionTeam] = useState<string[]>([]);
+  const [reviewBy, setReviewBy] = useState("");
   const reviewRootRef = useRef<HTMLDivElement>(null);
 
   const loadRows = useCallback(async () => {
@@ -309,6 +312,13 @@ export function PostProductionDashboard() {
     setError(null);
   }, [supabase]);
 
+  const loadRoster = useCallback(async () => {
+    if (!supabase) return;
+    const names = await fetchTeamRosterNames(supabase, "post_production", true);
+    setPostProductionTeam(names);
+    setReviewBy((prev) => prev || names[0] || "");
+  }, [supabase]);
+
   useEffect(() => {
     if (!supabase) {
       setError("Supabase is not configured.");
@@ -321,6 +331,10 @@ export function PostProductionDashboard() {
       setLoading(false);
     })();
   }, [supabase, loadRows]);
+
+  useEffect(() => {
+    void loadRoster();
+  }, [loadRoster]);
 
   useEffect(() => {
     if (!supabase) return;
@@ -773,6 +787,10 @@ export function PostProductionDashboard() {
 
   const confirmReviewDone = async () => {
     if (!supabase || !reviewPopover) return;
+    if (!reviewBy.trim()) {
+      setError("No active post-production member available.");
+      return;
+    }
     const row = rows.find((r) => r.id === reviewPopover.rowId);
     if (!row) return;
     const name = row.candidate_name?.trim() || "Candidate";
@@ -1006,7 +1024,7 @@ export function PostProductionDashboard() {
             disabled={busy}
             className="text-left text-xs font-medium text-[#3b82f6] hover:underline disabled:opacity-50"
             onClick={() => {
-              setReviewBy("Harika");
+              setReviewBy(postProductionTeam[0] ?? "");
               setReviewPopover({ rowId: row.id, kind });
             }}
           >
@@ -1019,15 +1037,17 @@ export function PostProductionDashboard() {
             <select
               className="mt-2 w-full rounded-lg border border-[#e5e5e5] px-2 py-1.5 text-xs"
               value={reviewBy}
-              onChange={(e) =>
-                setReviewBy(e.target.value as (typeof TEAM)[number])
-              }
+              onChange={(e) => setReviewBy(e.target.value)}
             >
-              {TEAM.map((n) => (
-                <option key={n} value={n}>
-                  {n}
-                </option>
-              ))}
+              {postProductionTeam.length === 0 ? (
+                <option value="">No active members</option>
+              ) : (
+                postProductionTeam.map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))
+              )}
             </select>
             <div className="mt-2 flex justify-end gap-2">
               <button
@@ -1389,9 +1409,10 @@ export function PostProductionDashboard() {
                                     disabled={busy}
                                     className="max-w-[112px] rounded-lg border border-[#e5e5e5] px-2 py-1 text-xs disabled:opacity-50"
                                     value={
-                                      TEAM.includes(
-                                        row.edited_by as (typeof TEAM)[number],
-                                      )
+                                      mergeRosterWithCurrent(
+                                        postProductionTeam,
+                                        row.edited_by,
+                                      ).includes(row.edited_by ?? "")
                                         ? row.edited_by
                                         : "__custom__"
                                     }
@@ -1403,14 +1424,18 @@ export function PostProductionDashboard() {
                                       });
                                     }}
                                   >
-                                    {!TEAM.includes(
-                                      row.edited_by as (typeof TEAM)[number],
-                                    ) ? (
+                                    {!mergeRosterWithCurrent(
+                                      postProductionTeam,
+                                      row.edited_by,
+                                    ).includes(row.edited_by ?? "") ? (
                                       <option value="__custom__">
                                         {row.edited_by}
                                       </option>
                                     ) : null}
-                                    {TEAM.map((n) => (
+                                    {mergeRosterWithCurrent(
+                                      postProductionTeam,
+                                      row.edited_by,
+                                    ).map((n) => (
                                       <option key={n} value={n}>
                                         {n}
                                       </option>
@@ -1429,7 +1454,7 @@ export function PostProductionDashboard() {
                                   }}
                                 >
                                   <option value="">Assign…</option>
-                                  {TEAM.map((n) => (
+                                  {postProductionTeam.map((n) => (
                                     <option key={n} value={n}>
                                       {n}
                                     </option>

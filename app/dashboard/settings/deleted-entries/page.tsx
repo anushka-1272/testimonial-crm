@@ -192,6 +192,12 @@ export default function DeletedEntriesPage() {
             >
               Criteria
             </Link>
+            <Link
+              href="/dashboard/settings/roster"
+              className="text-sm font-medium text-[#6e6e73] transition-all hover:text-[#1d1d1f]"
+            >
+              Roster
+            </Link>
             <span className="text-sm font-medium text-[#1d1d1f]">
               Deleted Entries
             </span>

@@ -5,24 +5,26 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 
+import { fetchTeamRosterNames } from "@/lib/team-roster";
 import { getUserSafe } from "@/lib/supabase-auth";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 
 type Period = "total" | "monthly" | "weekly";
 
-const INTERVIEWERS = ["Harika", "Gargi", "Mudit", "Anushka"];
-
-/** 2×2 grid order + bar/avatar colors (hex). */
-const INTERVIEWER_GRID_ORDER = ["Anushka", "Harika", "Gargi", "Mudit"] as const;
-const INTERVIEWER_THEME: Record<
-  (typeof INTERVIEWER_GRID_ORDER)[number],
-  { bar: string; avatar: string }
-> = {
+const INTERVIEWER_THEME: Record<string, { bar: string; avatar: string }> = {
   Anushka: { bar: "#2563eb", avatar: "#2563eb" },
   Harika: { bar: "#7c3aed", avatar: "#7c3aed" },
   Gargi: { bar: "#16a34a", avatar: "#16a34a" },
   Mudit: { bar: "#d97706", avatar: "#d97706" },
 };
+const INTERVIEWER_THEME_FALLBACK = [
+  { bar: "#2563eb", avatar: "#2563eb" },
+  { bar: "#7c3aed", avatar: "#7c3aed" },
+  { bar: "#16a34a", avatar: "#16a34a" },
+  { bar: "#d97706", avatar: "#d97706" },
+  { bar: "#0ea5e9", avatar: "#0ea5e9" },
+  { bar: "#db2777", avatar: "#db2777" },
+];
 
 /** Rows fetched and stored in `recentActivity` for the dashboard preview only. */
 const DASHBOARD_RECENT_ACTIVITY_LIMIT = 3;
@@ -140,6 +142,7 @@ export default function DashboardPage() {
     calls: 0,
   });
   const [interviewer, setInterviewer] = useState<Record<string, number>>({});
+  const [interviewerNames, setInterviewerNames] = useState<string[]>([]);
   const [funnel, setFunnel] = useState({
     entries: 0,
     eligible: 0,
@@ -222,8 +225,10 @@ export default function DashboardPage() {
       calls: calls || 0,
     });
 
+    const ivNames = await fetchTeamRosterNames(supabase, "interviewer", true);
+    setInterviewerNames(ivNames);
     const ivStats: Record<string, number> = {};
-    for (const iv of INTERVIEWERS) {
+    for (const iv of ivNames) {
       let q = supabase
         .from("interviews")
         .select("id, candidates!inner(id)", { count: "exact", head: true })
@@ -374,16 +379,16 @@ export default function DashboardPage() {
   );
 
   const interviewerGrid = useMemo(() => {
-    return INTERVIEWER_GRID_ORDER.map((name) => ({
+    return interviewerNames.map((name, idx) => ({
       name,
       count: interviewer[name] ?? 0,
-      theme: INTERVIEWER_THEME[name],
+      theme: INTERVIEWER_THEME[name] ?? INTERVIEWER_THEME_FALLBACK[idx % INTERVIEWER_THEME_FALLBACK.length],
     }));
-  }, [interviewer]);
+  }, [interviewer, interviewerNames]);
 
   const interviewerTeamTotal = useMemo(() => {
-    return INTERVIEWERS.reduce((s, n) => s + (interviewer[n] ?? 0), 0);
-  }, [interviewer]);
+    return interviewerNames.reduce((s, n) => s + (interviewer[n] ?? 0), 0);
+  }, [interviewer, interviewerNames]);
 
   const statCards = useMemo(
     () => [

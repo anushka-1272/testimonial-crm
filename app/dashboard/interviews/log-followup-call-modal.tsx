@@ -244,7 +244,10 @@ export function LogFollowupCallModal({
         }
       }
 
-      const pocEmail = slackEmailForTeamMember(candidate.poc_assigned);
+      const pocEmail = await slackEmailForTeamMember(
+        supabase,
+        candidate.poc_assigned,
+      );
       if (pocEmail) {
         if (outcome === "no_answer") {
           if (newCount >= 3 && newStatus === "no_answer") {

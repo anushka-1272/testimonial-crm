@@ -9,6 +9,10 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { ProjectCandidateDetailModal } from "@/components/project-candidate-detail-modal";
 import { logActivity } from "@/lib/activity-logger";
 import { displayNameFromUser, getUserSafe } from "@/lib/supabase-auth";
+import {
+  fetchTeamRosterNames,
+  mergeRosterWithCurrent,
+} from "@/lib/team-roster";
 
 import type { ScheduleProjectCandidate } from "./schedule-interview-modal";
 import type {
@@ -17,7 +21,6 @@ import type {
 } from "./types";
 
 const PAGE_SIZE = 20;
-const TEAM_POC_MEMBERS = ["Harika", "Anushka", "Gargi", "Mudit"] as const;
 
 /** Interview rows only — join `project_candidates` client-side so a failed embed never blocks loading candidates. */
 const PROJECT_INTERVIEW_COLUMNS = `id, created_at, project_candidate_id, scheduled_date, previous_scheduled_date, reschedule_reason, completed_at, interviewer, zoom_link, language, invitation_sent, poc, remarks, reminder_count, interview_status, post_interview_eligible, reward_item, category, funnel, comments, interview_type`;
@@ -66,11 +69,8 @@ function matchesInterviewSearch(
   return matchesPendingSearch(pc, q);
 }
 
-function pocOptionsFor(pc: ProjectCandidateRow): string[] {
-  const current = pc.poc_assigned?.trim();
-  const roster = new Set<string>(TEAM_POC_MEMBERS);
-  if (current && !roster.has(current)) return [...TEAM_POC_MEMBERS, current];
-  return [...TEAM_POC_MEMBERS];
+function pocOptionsFor(pc: ProjectCandidateRow, pocRoster: string[]): string[] {
+  return mergeRosterWithCurrent(pocRoster, pc.poc_assigned);
 }
 
 function normalizeProjectInterviewRow(
@@ -170,6 +170,7 @@ export function ProjectInterviewsPanel({
   const [filters, setFilters] = useState(defaultFilters);
   const [pocSavingId, setPocSavingId] = useState<string | null>(null);
   const [pocEditingId, setPocEditingId] = useState<string | null>(null);
+  const [pocRoster, setPocRoster] = useState<string[]>([]);
   const [detail, setDetail] = useState<ProjectCandidateRow | null>(null);
   const [completedPopoverId, setCompletedPopoverId] = useState<string | null>(
     null,
@@ -254,6 +255,11 @@ export function ProjectInterviewsPanel({
     }
   }, [supabase, onError]);
 
+  const loadPocRoster = useCallback(async () => {
+    const names = await fetchTeamRosterNames(supabase, "poc", true);
+    setPocRoster(names);
+  }, [supabase]);
+
   useEffect(() => {
     void (async () => {
       setLoading(true);
@@ -261,6 +267,10 @@ export function ProjectInterviewsPanel({
       setLoading(false);
     })();
   }, [loadProjectData]);
+
+  useEffect(() => {
+    void loadPocRoster();
+  }, [loadPocRoster]);
 
   useEffect(() => {
     const ch = supabase
@@ -749,7 +759,7 @@ export function ProjectInterviewsPanel({
                                   }
                                 >
                                   <option value="">Assign POC...</option>
-                                  {pocOptionsFor(c).map((n) => (
+                                  {pocOptionsFor(c, pocRoster).map((n) => (
                                     <option key={n} value={n}>
                                       {n}
                                     </option>

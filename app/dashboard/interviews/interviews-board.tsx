@@ -24,6 +24,10 @@ import { getUserSafe } from "@/lib/supabase-auth";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 import { slackEmailForTeamMember } from "@/lib/slack-contacts";
 import { voidSlackNotify } from "@/lib/slack-client";
+import {
+  fetchTeamRosterNames,
+  mergeRosterWithCurrent,
+} from "@/lib/team-roster";
 
 import { PostInterviewDrawer } from "./post-interview-drawer";
 import { RescheduleInterviewModal } from "./reschedule-interview-modal";
@@ -45,8 +49,6 @@ import type {
 } from "./types";
 
 const PAGE_SIZE = 20;
-
-const TEAM_POC_MEMBERS = ["Harika", "Anushka", "Gargi", "Mudit"] as const;
 
 const INTERVIEW_SELECT = `id, candidate_id, scheduled_date, previous_scheduled_date, reschedule_reason, completed_at, interviewer, interviewer_assigned_at, zoom_link, zoom_account, language, interview_language, invitation_sent, poc, remarks, reminder_count, interview_status, post_interview_eligible, reward_item, category, funnel, comments, interview_type, candidates ( id, created_at, full_name, email, whatsapp_number, poc_assigned, is_deleted )`;
 
@@ -426,12 +428,11 @@ function escapeCsvCell(v: unknown): string {
   return s;
 }
 
-function pocOptionsFor(candidate: EligibleCandidate): string[] {
-  const current = candidate.poc_assigned?.trim();
-  const roster = new Set<string>(TEAM_POC_MEMBERS);
-  if (current && !roster.has(current))
-    return [...TEAM_POC_MEMBERS, current];
-  return [...TEAM_POC_MEMBERS];
+function pocOptionsFor(
+  candidate: EligibleCandidate,
+  pocRoster: string[],
+): string[] {
+  return mergeRosterWithCurrent(pocRoster, candidate.poc_assigned);
 }
 
 function normalizeFollowupStatus(v: unknown): FollowupStatus {
@@ -651,6 +652,8 @@ export function InterviewsBoard() {
   );
   const [liBusyId, setLiBusyId] = useState<string | null>(null);
   const [linkedInListPage, setLinkedInListPage] = useState(0);
+  const [pocRoster, setPocRoster] = useState<string[]>([]);
+  const [interviewerRoster, setInterviewerRoster] = useState<string[]>([]);
 
   const supabase = useMemo(() => {
     try {
@@ -733,6 +736,16 @@ export function InterviewsBoard() {
     setError(null);
   }, [supabase]);
 
+  const loadRoster = useCallback(async () => {
+    if (!supabase) return;
+    const [pocNames, interviewerNames] = await Promise.all([
+      fetchTeamRosterNames(supabase, "poc", true),
+      fetchTeamRosterNames(supabase, "interviewer", true),
+    ]);
+    setPocRoster(pocNames);
+    setInterviewerRoster(interviewerNames);
+  }, [supabase]);
+
   useEffect(() => {
     if (!supabase) {
       setError("Supabase is not configured.");
@@ -768,6 +781,10 @@ export function InterviewsBoard() {
       void supabase.removeChannel(ch);
     };
   }, [supabase, loadData]);
+
+  useEffect(() => {
+    void loadRoster();
+  }, [loadRoster]);
 
   useEffect(() => {
     if (activeTab !== "eligible") setPocEditingId(null);
@@ -1105,7 +1122,7 @@ export function InterviewsBoard() {
           description: `Assigned ${name} as POC for ${candDisplay}`,
         });
       }
-      const pocSlackEmail = slackEmailForTeamMember(name);
+      const pocSlackEmail = await slackEmailForTeamMember(supabase, name);
       if (pocSlackEmail) {
         const phone =
           candidate.whatsapp_number?.trim() || "—";
@@ -1650,7 +1667,7 @@ export function InterviewsBoard() {
                                         }
                                       >
                                         <option value="">Assign POC...</option>
-                                        {pocOptionsFor(c).map((n) => (
+                                        {pocOptionsFor(c, pocRoster).map((n) => (
                                           <option key={n} value={n}>
                                             {n}
                                           </option>
@@ -2499,7 +2516,7 @@ export function InterviewsBoard() {
                         }
                       >
                         <option value="all">All</option>
-                        {TEAM_POC_MEMBERS.map((n) => (
+                        {interviewerRoster.map((n) => (
                           <option key={n} value={n}>
                             {n}
                           </option>
