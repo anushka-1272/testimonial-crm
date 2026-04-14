@@ -490,7 +490,7 @@ export function PostInterviewDrawer({
         aria-label="Close"
         onClick={onClose}
       />
-      <aside className="relative flex h-full w-full max-w-md flex-col border-l border-[#f0f0f0] bg-white shadow-[0_4px_16px_rgba(0,0,0,0.08)]">
+      <aside className="relative flex h-full w-full max-w-none flex-col border-l border-[#f0f0f0] bg-white shadow-[0_4px_16px_rgba(0,0,0,0.08)] sm:max-w-md">
         <div className="flex items-start justify-between border-b border-[#f5f5f5] px-5 py-4">
           <div>
             <h2 className="text-lg font-semibold text-[#1d1d1f]">

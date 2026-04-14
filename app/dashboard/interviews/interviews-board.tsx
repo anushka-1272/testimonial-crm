@@ -33,6 +33,7 @@ import { PostInterviewDrawer } from "./post-interview-drawer";
 import { RescheduleInterviewModal } from "./reschedule-interview-modal";
 import { AddZoomDetailsModal } from "./add-zoom-details-modal";
 import { AssignInterviewerModal } from "./assign-interviewer-modal";
+import { EditInterviewDetailsModal } from "./edit-interview-details-modal";
 import { FollowupHistoryModal } from "./followup-history-modal";
 import { LogFollowupCallModal } from "./log-followup-call-modal";
 import {
@@ -619,6 +620,8 @@ export function InterviewsBoard() {
     null,
   );
   const [assignInterviewerFor, setAssignInterviewerFor] =
+    useState<InterviewWithCandidate | null>(null);
+  const [editInterviewFor, setEditInterviewFor] =
     useState<InterviewWithCandidate | null>(null);
   const [logFollowupFor, setLogFollowupFor] =
     useState<EligibleCandidate | null>(null);
@@ -1315,7 +1318,7 @@ export function InterviewsBoard() {
   const thLinkedInStatus = `${thBase} min-w-[140px] text-left`;
   const thPocAssigned = `${thBase} min-w-[160px] text-left`;
   const thFollowUp = `${thBase} min-w-[150px] text-left`;
-  const thActions = `${thBase} min-w-[220px] text-right`;
+  const thActions = `${thBase} min-w-[220px] text-right max-lg:min-w-[170px] max-lg:px-2 max-lg:py-2 max-lg:text-[10px]`;
 
   const tdName = `${tdBase} min-w-[180px] text-left`;
   const tdEmail = `${tdBase} min-w-[220px] text-left text-[#6e6e73]`;
@@ -1325,7 +1328,7 @@ export function InterviewsBoard() {
   const tdLinkedInStatus = `${tdBase} min-w-[140px] text-left align-top`;
   const tdPocAssigned = `${tdBase} min-w-[160px] text-left`;
   const tdFollowUp = `${tdBase} min-w-[150px] text-left align-top`;
-  const tdActions = `${tdBase} min-w-[220px] text-right`;
+  const tdActions = `${tdBase} min-w-[220px] text-right max-lg:min-w-[170px] max-lg:px-2 max-lg:py-2 max-lg:text-xs`;
 
   const thDateTime = `${thBase} min-w-[170px] text-left`;
   const tdDateTime = `${tdBase} min-w-[170px] text-left`;
@@ -1422,8 +1425,8 @@ export function InterviewsBoard() {
         </div>
       ) : null}
 
-      <header className="sticky top-0 z-30 bg-[#f5f5f7]/90 px-8 py-6 backdrop-blur-md">
-        <h1 className="text-2xl font-semibold tracking-tight text-[#1d1d1f]">
+      <header className="sticky top-14 z-30 bg-[#f5f5f7]/90 px-4 py-4 backdrop-blur-md sm:px-6 sm:py-5 lg:top-0 lg:px-8 lg:py-6">
+        <h1 className="text-xl font-semibold tracking-tight text-[#1d1d1f] sm:text-2xl">
           Testimonial Interviews
         </h1>
         <p className="mt-1 text-sm text-[#6e6e73]">
@@ -1436,7 +1439,7 @@ export function InterviewsBoard() {
         ) : null}
       </header>
 
-      <main className="mx-auto max-w-[1600px] px-8 pb-12 pt-2 text-sm text-[#1d1d1f]">
+      <main className="mx-auto max-w-[1600px] px-4 pb-10 pt-2 text-sm text-[#1d1d1f] sm:px-6 lg:px-8 lg:pb-12">
         {error && (
           <div className="mb-4 rounded-2xl border border-[#f0f0f0] bg-white px-4 py-3 text-sm text-[#1d1d1f] shadow-[0_4px_16px_rgba(0,0,0,0.08)]">
             {error}
@@ -1454,7 +1457,7 @@ export function InterviewsBoard() {
           <p className="text-sm text-[#6e6e73]">Loading…</p>
         ) : (
           <>
-            <section className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <section className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
               {(
                 [
                   {
@@ -1483,11 +1486,11 @@ export function InterviewsBoard() {
                   },
                 ] as const
               ).map((card) => (
-                <div key={card.key} className={`p-6 ${cardChrome}`}>
-                  <p className="mb-3 text-xs font-medium text-[#6e6e73]">
+                <div key={card.key} className={`p-4 sm:p-6 ${cardChrome}`}>
+                  <p className="mb-2 text-xs font-medium text-[#6e6e73] sm:mb-3">
                     {card.label}
                   </p>
-                  <p className="text-4xl font-bold tabular-nums tracking-tight text-[#1d1d1f]">
+                  <p className="text-2xl font-bold tabular-nums tracking-tight text-[#1d1d1f] sm:text-4xl">
                     {card.value}
                   </p>
                   <div className={`mt-4 h-0.5 w-8 rounded-full ${card.accent}`} />
@@ -1495,31 +1498,33 @@ export function InterviewsBoard() {
               ))}
             </section>
 
-            <div className="mb-6 flex flex-wrap gap-2 border-b border-[#e5e5e5] pb-1">
-              {(
-                [
-                  ["eligible", "Eligible", counts.eligible],
-                  ["scheduled", "Scheduled", counts.scheduled],
-                  ["rescheduled", "Rescheduled", counts.rescheduled],
-                  ["completed", "Completed", counts.completed],
-                ] as const
-              ).map(([id, label, n]) => (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() => setActiveTab(id)}
-                  className={
-                    activeTab === id
-                      ? "rounded-full bg-[#1d1d1f] px-4 py-2 text-sm font-medium text-white"
-                      : "rounded-full px-4 py-2 text-sm font-medium text-[#6e6e73] transition-colors hover:text-[#1d1d1f]"
-                  }
-                >
-                  {label}{" "}
-                  <span className={activeTab === id ? "text-white/80" : ""}>
-                    ({n})
-                  </span>
-                </button>
-              ))}
+            <div className="mb-6 -mx-1 border-b border-[#e5e5e5] pb-1">
+              <div className="flex gap-2 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] lg:flex-wrap lg:overflow-visible [&::-webkit-scrollbar]:hidden">
+                {(
+                  [
+                    ["eligible", "Eligible", counts.eligible],
+                    ["scheduled", "Scheduled", counts.scheduled],
+                    ["rescheduled", "Rescheduled", counts.rescheduled],
+                    ["completed", "Completed", counts.completed],
+                  ] as const
+                ).map(([id, label, n]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => setActiveTab(id)}
+                    className={`shrink-0 ${
+                      activeTab === id
+                        ? "rounded-full bg-[#1d1d1f] px-3 py-2 text-sm font-medium text-white sm:px-4"
+                        : "rounded-full px-3 py-2 text-sm font-medium text-[#6e6e73] transition-colors hover:text-[#1d1d1f] sm:px-4"
+                    }`}
+                  >
+                    {label}{" "}
+                    <span className={activeTab === id ? "text-white/80" : ""}>
+                      ({n})
+                    </span>
+                  </button>
+                ))}
+              </div>
             </div>
 
             {activeTab === "eligible" && (
@@ -2170,6 +2175,23 @@ export function InterviewsBoard() {
                                 </td>
                                 <td className={tdActions}>
                                   <div className="flex flex-wrap items-center justify-end gap-2">
+                                    <button
+                                      type="button"
+                                      disabled={!canEditScheduledTab}
+                                      title={
+                                        !canEditScheduledTab
+                                          ? "View only"
+                                          : undefined
+                                      }
+                                      className="rounded-lg border border-[#d4d4d8] bg-white px-3 py-1.5 text-xs font-medium text-[#1d1d1f] hover:bg-[#fafafa] disabled:cursor-not-allowed disabled:border-[#d1d5db] disabled:text-[#9ca3af]"
+                                      onClick={() =>
+                                        canEditScheduledTab
+                                          ? setEditInterviewFor(i)
+                                          : undefined
+                                      }
+                                    >
+                                      Edit
+                                    </button>
                                     {isDraftRow && !hasIv ? (
                                       <button
                                         type="button"
@@ -2693,7 +2715,7 @@ export function InterviewsBoard() {
                                     </button>
                                     {completedPopoverId === i.id ? (
                                       <div
-                                        className="absolute right-0 top-full z-50 mt-2 w-80 rounded-xl border border-[#f0f0f0] bg-white p-4 text-left shadow-[0_8px_24px_rgba(0,0,0,0.12)]"
+                                        className="absolute right-0 top-full z-50 mt-2 w-[min(20rem,calc(100vw-2rem))] max-w-sm rounded-xl border border-[#f0f0f0] bg-white p-4 text-left shadow-[0_8px_24px_rgba(0,0,0,0.12)]"
                                         onMouseDown={(e) =>
                                           e.stopPropagation()
                                         }
@@ -2844,6 +2866,15 @@ export function InterviewsBoard() {
         interview={assignInterviewerFor}
         supabase={supabase}
         onClose={() => setAssignInterviewerFor(null)}
+        onSaved={() => void loadData()}
+      />
+
+      <EditInterviewDetailsModal
+        key={editInterviewFor?.id ?? "edit-iv-closed"}
+        open={!!editInterviewFor}
+        interview={editInterviewFor}
+        supabase={supabase}
+        onClose={() => setEditInterviewFor(null)}
         onSaved={() => void loadData()}
       />
 

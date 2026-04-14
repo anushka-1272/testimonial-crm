@@ -5,13 +5,13 @@ import Link from "next/link";
 export default function SettingsHomePage() {
   return (
     <>
-      <header className="sticky top-0 z-30 bg-[#f5f5f7]/90 px-8 py-6 backdrop-blur-md">
+      <header className="sticky top-14 z-30 bg-[#f5f5f7]/90 px-4 py-4 backdrop-blur-md sm:px-6 sm:py-5 lg:top-0 lg:px-8 lg:py-6">
         <h1 className="text-2xl font-semibold tracking-tight text-[#1d1d1f]">
           Settings
         </h1>
         <p className="mt-1 text-sm text-[#6e6e73]">Configure CRM behavior and team access</p>
       </header>
-      <main className="mx-auto max-w-5xl px-8 pb-12 pt-2">
+      <main className="mx-auto max-w-5xl px-4 pb-10 pt-2 sm:px-6 lg:px-8 lg:pb-12">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Link
             href="/dashboard/settings/team"

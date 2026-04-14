@@ -406,10 +406,10 @@ export default function DashboardPage() {
 
   return (
     <>
-      <header className="sticky top-0 z-30 bg-[#f5f5f7]/90 px-8 py-6 backdrop-blur-md">
+      <header className="sticky top-14 z-30 bg-[#f5f5f7]/90 px-4 py-4 backdrop-blur-md sm:px-6 sm:py-5 lg:top-0 lg:px-8 lg:py-6">
         <div className="mx-auto flex max-w-[1400px] items-start justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight text-[#1d1d1f]">
+            <h1 className="text-xl font-semibold tracking-tight text-[#1d1d1f] sm:text-2xl">
               {greeting}, {greetName}{" "}
               <span className="font-normal" aria-hidden>
                 👋
@@ -422,7 +422,7 @@ export default function DashboardPage() {
         </div>
       </header>
 
-      <main className="flex-1 px-8 pb-12 pt-2">
+      <main className="flex-1 px-4 pb-10 pt-2 sm:px-6 lg:px-8 lg:pb-12">
         <div className="mx-auto max-w-[1400px] space-y-10">
           <div className="inline-flex rounded-full bg-white p-1 shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
             {(["total", "monthly", "weekly"] as Period[]).map((p) => (
@@ -441,16 +441,16 @@ export default function DashboardPage() {
             ))}
           </div>
 
-          <div className="flex gap-4 overflow-x-auto pb-1 snap-x snap-mandatory lg:grid lg:grid-cols-5 lg:overflow-visible lg:pb-0 lg:snap-none">
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-5 lg:gap-4">
             {statCards.map(({ label, value }) => (
               <div
                 key={label}
-                className={`min-w-[160px] flex-none snap-start rounded-2xl bg-white p-6 transition-transform duration-200 ease-in-out hover:scale-[1.01] lg:min-w-0 ${cardChrome} cursor-default`}
+                className={`rounded-2xl bg-white p-4 transition-transform duration-200 ease-in-out hover:scale-[1.01] sm:p-6 ${cardChrome} cursor-default`}
               >
                 <p className="mb-3 text-xs font-medium text-[#6e6e73]">
                   {label}
                 </p>
-                <p className="text-4xl font-bold tracking-tight text-[#1d1d1f] tabular-nums">
+                <p className="text-2xl font-bold tracking-tight text-[#1d1d1f] tabular-nums sm:text-4xl">
                   {loading ? "—" : value}
                 </p>
                 <div className="mt-4 h-0.5 w-8 rounded-full bg-[#3b82f6]" />
@@ -460,7 +460,7 @@ export default function DashboardPage() {
 
           <div className="border-t border-[#e8e8ed] pt-10">
             <div className="grid grid-cols-1 gap-8 lg:grid-cols-5 lg:gap-10">
-              <div className="lg:col-span-3">
+              <div className="w-full lg:col-span-3">
                 <div className="mb-5 border-l-4 border-blue-500 pl-3">
                   <h2 className="text-base font-semibold text-gray-800">
                     Interviewer performance
@@ -469,7 +469,7 @@ export default function DashboardPage() {
                     Completed testimonial interviews · share of team total
                   </p>
                 </div>
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   {interviewerGrid.map((row) => {
                     const barPct =
                       loading || interviewerTeamTotal <= 0
@@ -530,7 +530,7 @@ export default function DashboardPage() {
                 </div>
               </div>
 
-              <div className="lg:col-span-2">
+              <div className="w-full lg:col-span-2">
                 <div className="mb-5 border-l-4 border-violet-500 pl-3">
                   <h2 className="text-base font-semibold text-gray-800">
                     Recent activity

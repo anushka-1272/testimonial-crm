@@ -168,7 +168,7 @@ export default function DeletedEntriesPage() {
           {toast}
         </div>
       ) : null}
-      <header className="sticky top-0 z-30 bg-[#f5f5f7]/90 px-8 py-6 backdrop-blur-md">
+      <header className="sticky top-14 z-30 bg-[#f5f5f7]/90 px-4 py-4 backdrop-blur-md sm:px-6 sm:py-5 lg:top-0 lg:px-8 lg:py-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight text-[#1d1d1f]">
@@ -179,26 +179,26 @@ export default function DeletedEntriesPage() {
               views
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="-mx-1 flex flex-nowrap items-center gap-3 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] sm:flex-wrap sm:overflow-visible [&::-webkit-scrollbar]:hidden">
             <Link
               href="/dashboard/settings/team"
-              className="text-sm font-medium text-[#6e6e73] transition-all hover:text-[#1d1d1f]"
+              className="shrink-0 text-sm font-medium text-[#6e6e73] transition-all hover:text-[#1d1d1f]"
             >
               Team
             </Link>
             <Link
               href="/dashboard/settings/criteria"
-              className="text-sm font-medium text-[#6e6e73] transition-all hover:text-[#1d1d1f]"
+              className="shrink-0 text-sm font-medium text-[#6e6e73] transition-all hover:text-[#1d1d1f]"
             >
               Criteria
             </Link>
             <Link
               href="/dashboard/settings/roster"
-              className="text-sm font-medium text-[#6e6e73] transition-all hover:text-[#1d1d1f]"
+              className="shrink-0 text-sm font-medium text-[#6e6e73] transition-all hover:text-[#1d1d1f]"
             >
               Roster
             </Link>
-            <span className="text-sm font-medium text-[#1d1d1f]">
+            <span className="shrink-0 text-sm font-medium text-[#1d1d1f]">
               Deleted Entries
             </span>
             {showViewOnlyBadge ? (
@@ -210,7 +210,7 @@ export default function DeletedEntriesPage() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-6xl px-8 pb-12 pt-2">
+      <main className="mx-auto max-w-6xl px-4 pb-10 pt-2 sm:px-6 lg:px-8 lg:pb-12">
         {error ? (
           <p className="mb-4 rounded-xl border border-[#f0f0f0] bg-white px-4 py-2 text-sm text-[#dc2626]">
             {error}

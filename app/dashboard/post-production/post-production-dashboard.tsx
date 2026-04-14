@@ -10,6 +10,11 @@ import { ProjectCandidateDetailModal } from "@/components/project-candidate-deta
 import type { ProjectCandidateRow } from "@/app/dashboard/interviews/types";
 import { logActivity } from "@/lib/activity-logger";
 import {
+  modalOverlayZ75Class,
+  modalOverlayZ80Class,
+  modalPanelClass,
+} from "@/lib/modal-responsive";
+import {
   effectiveInterviewLanguage,
   formatInterviewLanguageLabel,
   interviewLanguageBadgeClass,
@@ -1099,10 +1104,10 @@ export function PostProductionDashboard() {
 
   return (
     <>
-      <header className="sticky top-0 z-30 bg-[#f5f5f7]/90 px-8 py-6 backdrop-blur-md">
+      <header className="sticky top-14 z-30 bg-[#f5f5f7]/90 px-4 py-4 backdrop-blur-md sm:px-6 sm:py-5 lg:top-0 lg:px-8 lg:py-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight text-[#1d1d1f]">
+            <h1 className="text-xl font-semibold tracking-tight text-[#1d1d1f] sm:text-2xl">
               Post Production
             </h1>
             <p className="mt-1 text-sm text-[#6e6e73]">
@@ -1115,19 +1120,19 @@ export function PostProductionDashboard() {
             ) : null}
           </div>
           {canEditCurrentPage ? (
-            <div className="flex items-center gap-3">
+            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:gap-3">
               <button
                 type="button"
                 onClick={exportCsv}
                 disabled={filtered.length === 0}
-                className="text-sm font-medium text-[#3b82f6] transition-all hover:text-[#2563eb] disabled:cursor-not-allowed disabled:opacity-40"
+                className="w-full py-2 text-center text-sm font-medium text-[#3b82f6] transition-all hover:text-[#2563eb] disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto sm:py-0 sm:text-left"
               >
                 Export CSV ({filtered.length} rows)
               </button>
               <button
                 type="button"
                 onClick={() => void openAddModal()}
-                className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-[#1d1d1f] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#2d2d2f]"
+                className="inline-flex w-full shrink-0 items-center justify-center gap-2 rounded-xl bg-[#1d1d1f] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#2d2d2f] sm:w-auto"
               >
                 <Plus className="h-4 w-4" />
                 Add to Post Production
@@ -1138,7 +1143,7 @@ export function PostProductionDashboard() {
               type="button"
               onClick={exportCsv}
               disabled={filtered.length === 0}
-              className="text-sm font-medium text-[#3b82f6] transition-all hover:text-[#2563eb] disabled:cursor-not-allowed disabled:opacity-40"
+              className="w-full py-2 text-sm font-medium text-[#3b82f6] transition-all hover:text-[#2563eb] disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto sm:py-0"
             >
               Export CSV ({filtered.length} rows)
             </button>
@@ -1146,7 +1151,7 @@ export function PostProductionDashboard() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-[1800px] px-8 pb-16 pt-2">
+      <main className="mx-auto max-w-[1800px] px-4 pb-12 pt-2 sm:px-6 lg:px-8 lg:pb-16">
         {error ? (
           <div className="mb-4 rounded-2xl border border-[#f0f0f0] bg-white px-4 py-3 text-sm shadow-sm">
             {error}
@@ -1184,7 +1189,7 @@ export function PostProductionDashboard() {
               ))}
             </section>
 
-            <div className="mb-4 flex flex-col gap-3 rounded-2xl border border-[#f0f0f0] bg-white p-4 shadow-sm">
+            <div className="mb-4 flex flex-col gap-4 rounded-2xl border border-[#f0f0f0] bg-white p-4 shadow-sm">
               <div className="flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-end">
                 <label className="flex min-w-[160px] flex-1 flex-col gap-1">
                   <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
@@ -1570,14 +1575,16 @@ export function PostProductionDashboard() {
       />
 
       {summaryModalText ? (
-        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
+        <div className={modalOverlayZ80Class}>
           <button
             type="button"
-            className="absolute inset-0 bg-[#1d1d1f]/40"
+            className="absolute inset-0"
             aria-label="Close"
             onClick={() => setSummaryModalText(null)}
           />
-          <div className="relative max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-[#f0f0f0] bg-white p-6 shadow-xl">
+          <div
+            className={`${modalPanelClass} max-h-[85vh] p-6 shadow-xl`}
+          >
             <h2 className="text-lg font-semibold text-[#1d1d1f]">Summary</h2>
             <p className="mt-4 whitespace-pre-wrap text-sm text-[#1d1d1f]">
               {summaryModalText}
@@ -1594,14 +1601,16 @@ export function PostProductionDashboard() {
       ) : null}
 
       {addOpen ? (
-        <div className="fixed inset-0 z-[75] flex items-center justify-center p-4">
+        <div className={modalOverlayZ75Class}>
           <button
             type="button"
-            className="absolute inset-0 bg-[#1d1d1f]/40"
+            className="absolute inset-0"
             aria-label="Close"
             onClick={() => setAddOpen(false)}
           />
-          <div className="relative w-full max-w-lg rounded-2xl border border-[#f0f0f0] bg-white p-6 shadow-xl">
+          <div
+            className={`${modalPanelClass} max-h-[min(90vh,100dvh-2rem)] p-6 shadow-xl`}
+          >
             <h2 className="text-lg font-semibold text-[#1d1d1f]">
               Add to Post Production
             </h2>

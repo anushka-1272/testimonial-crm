@@ -226,8 +226,8 @@ export default function ActivityPage() {
 
   return (
     <>
-      <header className="sticky top-0 z-30 bg-[#f5f5f7]/90 px-8 py-6 backdrop-blur-md">
-        <h1 className="text-2xl font-semibold tracking-tight text-[#1d1d1f]">
+      <header className="sticky top-14 z-30 bg-[#f5f5f7]/90 px-4 py-4 backdrop-blur-md sm:px-6 sm:py-5 lg:top-0 lg:px-8 lg:py-6">
+        <h1 className="text-xl font-semibold tracking-tight text-[#1d1d1f] sm:text-2xl">
           Activity log
         </h1>
         <p className="mt-1 text-sm text-[#6e6e73]">
@@ -235,7 +235,7 @@ export default function ActivityPage() {
         </p>
       </header>
 
-      <main className="mx-auto max-w-[1400px] px-8 pb-12 pt-2 text-sm text-[#1d1d1f]">
+      <main className="mx-auto max-w-[1400px] px-4 pb-10 pt-2 text-sm text-[#1d1d1f] sm:px-6 lg:px-8 lg:pb-12">
         {error ? (
           <div className={`mb-4 px-4 py-3 ${cardChrome}`}>
             <p className="text-[#dc2626]">{error}</p>

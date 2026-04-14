@@ -13,7 +13,7 @@ import {
 import { LogoOnDark, LogoOnLight } from "@/components/brand-logo";
 import {
   digitsOnly,
-  resolveFollowupLookupCard,
+  resolveFollowupStatusPublicDisplay,
   resolveSupportStatus,
   type SupportDispatch,
   type SupportInterview,
@@ -39,7 +39,7 @@ function CandidateLookupResultCard({
   payload: SupportLookupPayload;
 }) {
   const status = resolveSupportStatus(payload);
-  const followupCard = resolveFollowupLookupCard(payload);
+  const followupDisplay = resolveFollowupStatusPublicDisplay(payload.candidate);
   const { candidate, interview, dispatch } = payload;
   const typeForBadge = interview?.interview_type ?? candidate.interview_type;
   const reward =
@@ -91,20 +91,19 @@ function CandidateLookupResultCard({
           </div>
         ) : null}
       </div>
-      {followupCard ? (
+      {followupDisplay ? (
         <div className="mt-4 border-t border-[#e5e5e5] pt-4">
           <p className="mb-2 text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
-            Follow-up Notes (Internal)
+            Follow-up status
           </p>
-          <div
-            className={`rounded-xl border px-4 py-3 text-sm leading-snug ${followupCard.cardClass}`}
-          >
-            <div className="space-y-1.5">
-              {followupCard.lines.map((line, i) => (
-                <p key={i}>{line}</p>
-              ))}
-            </div>
-          </div>
+          <p className="text-sm font-medium text-[#1d1d1f]">
+            {followupDisplay.title}
+          </p>
+          {followupDisplay.subtitle ? (
+            <p className="mt-1 text-sm leading-snug text-[#6e6e73]">
+              {followupDisplay.subtitle}
+            </p>
+          ) : null}
         </div>
       ) : null}
       {candidate.poc_assigned?.trim() ? (
@@ -337,23 +336,10 @@ export default function LoginPage() {
 
       const dispatch = (dispRows?.[0] ?? null) as SupportDispatch | null;
 
-      const { data: followupLogRows } = await supabase
-        .from("followup_log")
-        .select("created_at")
-        .eq("candidate_id", candidate.id)
-        .eq("status", "no_answer")
-        .order("created_at", { ascending: false })
-        .limit(1);
-
-      const followup_last_attempt_at =
-        (followupLogRows?.[0] as { created_at?: string } | undefined)
-          ?.created_at ?? null;
-
       setLookupPayload({
         candidate,
         interview,
         dispatch,
-        followup_last_attempt_at,
       });
     } finally {
       setLookupLoading(false);
@@ -362,8 +348,8 @@ export default function LoginPage() {
 
   return (
     <div className="flex min-h-screen flex-col font-sans lg:flex-row">
-      {/* Left — 60% */}
-      <div className="relative flex min-h-[320px] flex-col items-center justify-center overflow-hidden bg-[#0f1729] px-8 py-14 lg:min-h-screen lg:w-3/5 lg:py-0">
+      {/* Left — 60% (desktop only) */}
+      <div className="relative hidden min-h-[320px] flex-col items-center justify-center overflow-hidden bg-[#0f1729] px-8 py-14 lg:flex lg:min-h-screen lg:w-3/5 lg:py-0">
         <div
           className="pointer-events-none absolute -left-24 top-1/4 h-72 w-72 rounded-full bg-[#3b82f6]/10 blur-3xl"
           aria-hidden
@@ -412,11 +398,11 @@ export default function LoginPage() {
 
       {/* Right — 40% */}
       <div
-        className={`flex flex-1 flex-col bg-white transition-opacity duration-500 ease-out lg:w-2/5 lg:flex-none ${
+        className={`flex min-h-screen w-full flex-1 flex-col bg-white transition-opacity duration-500 ease-out lg:w-2/5 lg:min-h-0 lg:flex-none ${
           rightVisible ? "opacity-100" : "opacity-0"
         }`}
       >
-        <div className="flex flex-1 flex-col justify-center px-8 py-12 sm:px-12 lg:px-14">
+        <div className="flex flex-1 flex-col justify-center px-5 py-10 sm:px-12 sm:py-12 lg:px-14">
           <div className="mx-auto w-full max-w-[360px]">
             <div className="flex justify-center">
               <LogoOnLight className="h-10 w-10" />
@@ -623,12 +609,12 @@ export default function LoginPage() {
 
       {lookupModalOpen ? (
         <div
-          className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+          className="fixed inset-0 z-[100] flex items-stretch justify-center p-0 sm:items-center sm:p-4"
           role="presentation"
         >
           <button
             type="button"
-            className="absolute inset-0 bg-[#0f1729]/65 backdrop-blur-[2px]"
+            className="absolute inset-0 bg-[#0f1729]/65 backdrop-blur-[2px] sm:bg-[#0f1729]/65"
             aria-label="Close dialog"
             onClick={closeLookupModal}
           />
@@ -636,7 +622,7 @@ export default function LoginPage() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="candidate-lookup-title"
-            className="relative z-10 flex max-h-[min(90vh,720px)] w-full max-w-md flex-col overflow-hidden rounded-2xl bg-white shadow-xl"
+            className="relative z-10 flex h-full min-h-[100dvh] w-full max-w-none flex-col overflow-hidden rounded-none bg-white shadow-xl sm:h-auto sm:min-h-0 sm:max-h-[min(90vh,720px)] sm:max-w-md sm:rounded-2xl"
           >
             <div className="flex shrink-0 items-start justify-between gap-4 border-b border-[#f0f0f0] px-6 pb-4 pt-5">
               <div className="min-w-0 pr-2">

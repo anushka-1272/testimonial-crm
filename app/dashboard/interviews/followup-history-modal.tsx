@@ -5,6 +5,8 @@ import { useCallback, useEffect, useState } from "react";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { modalOverlayClass, modalPanel3xlClass } from "@/lib/modal-responsive";
+
 import type { FollowupLogRow } from "./types";
 
 type Props = {
@@ -77,14 +79,16 @@ export function FollowupHistoryModal({
   const td = "border-b border-gray-100 px-3 py-2 text-sm text-[#1d1d1f] align-top";
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+    <div className={modalOverlayClass}>
       <button
         type="button"
-        className="absolute inset-0 bg-[#1d1d1f]/25 backdrop-blur-sm"
+        className="absolute inset-0"
         aria-label="Close"
         onClick={onClose}
       />
-      <div className="relative max-h-[85vh] w-full max-w-3xl overflow-hidden rounded-2xl border border-[#f0f0f0] bg-white shadow-[0_4px_16px_rgba(0,0,0,0.08)]">
+      <div
+        className={`${modalPanel3xlClass} shadow-[0_4px_16px_rgba(0,0,0,0.08)]`}
+      >
         <div className="flex items-start justify-between border-b border-[#f0f0f0] p-5">
           <div>
             <h2 className="text-lg font-semibold text-[#1d1d1f]">
@@ -108,7 +112,8 @@ export function FollowupHistoryModal({
           ) : rows.length === 0 ? (
             <p className="text-sm text-[#6e6e73]">No calls logged yet.</p>
           ) : (
-            <table className="w-full border-collapse">
+            <div className="overflow-x-auto">
+            <table className="w-full min-w-[640px] border-collapse">
               <thead>
                 <tr>
                   <th className={th}>Attempt #</th>
@@ -146,6 +151,7 @@ export function FollowupHistoryModal({
                 ))}
               </tbody>
             </table>
+            </div>
           )}
         </div>
       </div>

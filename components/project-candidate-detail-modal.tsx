@@ -3,6 +3,7 @@
 import { X } from "lucide-react";
 
 import type { ProjectCandidateRow } from "@/app/dashboard/interviews/types";
+import { modalPanelClass } from "@/lib/modal-responsive";
 
 function nameFromEmailPrefix(pc: ProjectCandidateRow): string {
   const fn = pc.full_name?.trim();
@@ -36,17 +37,17 @@ export function ProjectCandidateDetailModal({
   const demo = candidate.demo_link?.trim();
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[80] flex min-h-0 items-center justify-center bg-[#1d1d1f]/60 p-0 backdrop-blur-sm sm:p-4">
       <button
         type="button"
-        className="absolute inset-0 bg-[#1d1d1f]/50 backdrop-blur-sm"
+        className="absolute inset-0"
         aria-label="Close"
         onClick={onClose}
       />
       <div
         role="dialog"
         aria-modal="true"
-        className="relative max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-[#f0f0f0] bg-white shadow-[0_8px_32px_rgba(0,0,0,0.12)]"
+        className={`${modalPanelClass} shadow-[0_8px_32px_rgba(0,0,0,0.12)]`}
       >
         <div className="flex items-start justify-between border-b border-[#f5f5f5] px-6 py-4">
           <h2 className="pr-8 text-lg font-semibold text-[#1d1d1f]">

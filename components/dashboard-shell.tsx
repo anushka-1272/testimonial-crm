@@ -8,9 +8,11 @@ import {
   FolderKanban,
   History,
   LayoutDashboard,
+  Menu,
   Package,
   Settings,
   Users,
+  X,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -114,6 +116,35 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   const [userLabel, setUserLabel] = useState("");
   const [userEmail, setUserEmail] = useState<string | undefined>();
   const [role, setRole] = useState<TeamRole>("admin");
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+
+  const closeMobileNav = () => setMobileNavOpen(false);
+
+  useEffect(() => {
+    setMobileNavOpen(false);
+  }, [pathname]);
+
+  useEffect(() => {
+    if (!mobileNavOpen) return;
+    const onResize = () => {
+      if (typeof window !== "undefined" && window.innerWidth >= 1024) {
+        setMobileNavOpen(false);
+      }
+    };
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [mobileNavOpen]);
+
+  useEffect(() => {
+    if (mobileNavOpen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [mobileNavOpen]);
 
   function scopeFromPath(path: string): AccessScope {
     if (path.startsWith("/dashboard/analytics")) return "analytics";
@@ -202,15 +233,40 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
       value={{ role, canManageTeam, canEditCurrentPage, showViewOnlyBadge }}
     >
       <div className="flex min-h-screen bg-[#f5f5f7] font-sans">
-      <aside className="fixed left-0 top-0 z-40 flex h-screen w-64 flex-col bg-[#0a0a0f]">
+      {mobileNavOpen ? (
+        <button
+          type="button"
+          aria-label="Close menu"
+          className="fixed inset-0 z-[55] bg-black/60 lg:hidden"
+          onClick={closeMobileNav}
+        />
+      ) : null}
+
+      <aside
+        className={`fixed left-0 top-0 z-[60] flex h-screen w-64 flex-col bg-[#0a0a0f] transition-transform duration-200 ease-out ${
+          mobileNavOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
+        }`}
+      >
         <div className="px-4 py-5">
-          <div className="flex items-center gap-2.5">
-            <LogoOnDark className="h-8 w-8 shrink-0 rounded-lg" />
-            <span className="text-sm font-semibold text-white">Testimonial CRM</span>
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex min-w-0 items-center gap-2.5">
+              <LogoOnDark className="h-8 w-8 shrink-0 rounded-lg" />
+              <span className="truncate text-sm font-semibold text-white">
+                Testimonial CRM
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={closeMobileNav}
+              className="shrink-0 rounded-lg p-2 text-[#9ca3af] transition-colors hover:bg-white/10 hover:text-white lg:hidden"
+              aria-label="Close sidebar"
+            >
+              <X className="h-5 w-5" strokeWidth={2} />
+            </button>
           </div>
         </div>
 
-        <div className="flex flex-1 flex-col px-3 pt-1">
+        <div className="flex flex-1 flex-col overflow-y-auto px-3 pt-1">
           <p className="mb-2 px-3 text-[10px] font-medium uppercase tracking-widest text-[#4b5563]">
             Navigation
           </p>
@@ -221,6 +277,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
                 <Link
                   key={href}
                   href={href}
+                  onClick={closeMobileNav}
                   className={`flex items-center gap-3 rounded-lg py-1.5 pl-3 pr-3 text-sm transition-all duration-200 ease-in-out ${
                     active
                       ? "bg-[#1c1c2e] font-medium text-white"
@@ -260,8 +317,21 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
-      <div className="ml-64 flex min-h-screen flex-1 flex-col bg-[#f5f5f7]">
-        {children}
+      <div className="flex min-h-screen min-w-0 flex-1 flex-col bg-[#f5f5f7] lg:ml-64">
+        <div className="fixed left-0 right-0 top-0 z-[45] flex h-14 items-center gap-3 border-b border-[#e5e5e5] bg-[#f5f5f7]/95 px-4 backdrop-blur-md lg:hidden">
+          <button
+            type="button"
+            onClick={() => setMobileNavOpen(true)}
+            className="rounded-lg p-2 text-[#1d1d1f] transition-colors hover:bg-black/[0.06]"
+            aria-label="Open menu"
+          >
+            <Menu className="h-5 w-5" strokeWidth={2} />
+          </button>
+          <span className="truncate text-sm font-semibold text-[#1d1d1f]">
+            Testimonial CRM
+          </span>
+        </div>
+        <div className="min-h-0 flex-1 pt-14 lg:pt-0">{children}</div>
       </div>
       </div>
     </AccessControlProvider>

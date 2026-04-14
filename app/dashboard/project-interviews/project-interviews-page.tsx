@@ -155,8 +155,8 @@ export function ProjectInterviewsPage() {
         </div>
       ) : null}
 
-      <header className="sticky top-0 z-30 bg-[#f5f5f7]/90 px-8 py-6 backdrop-blur-md">
-        <h1 className="text-2xl font-semibold tracking-tight text-[#1d1d1f]">
+      <header className="sticky top-14 z-30 bg-[#f5f5f7]/90 px-4 py-4 backdrop-blur-md sm:px-6 sm:py-5 lg:top-0 lg:px-8 lg:py-6">
+        <h1 className="text-xl font-semibold tracking-tight text-[#1d1d1f] sm:text-2xl">
           Project Interviews
         </h1>
         <p className="mt-1 text-sm text-[#6e6e73]">
@@ -169,7 +169,7 @@ export function ProjectInterviewsPage() {
         ) : null}
       </header>
 
-      <main className="mx-auto max-w-[1600px] px-8 pb-12 pt-2 text-sm text-[#1d1d1f]">
+      <main className="mx-auto max-w-[1600px] px-4 pb-10 pt-2 text-sm text-[#1d1d1f] sm:px-6 lg:px-8 lg:pb-12">
         {error ? (
           <div className="mb-4 rounded-2xl border border-[#f0f0f0] bg-white px-4 py-3 text-sm text-[#1d1d1f] shadow-[0_4px_16px_rgba(0,0,0,0.08)]">
             {error}
@@ -183,7 +183,7 @@ export function ProjectInterviewsPage() {
           </div>
         ) : null}
 
-        <section className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <section className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
           {(
             [
               {
@@ -212,11 +212,11 @@ export function ProjectInterviewsPage() {
               },
             ] as const
           ).map((card) => (
-            <div key={card.key} className={`p-6 ${cardChrome}`}>
-              <p className="mb-3 text-xs font-medium text-[#6e6e73]">
+            <div key={card.key} className={`p-4 sm:p-6 ${cardChrome}`}>
+              <p className="mb-2 text-xs font-medium text-[#6e6e73] sm:mb-3">
                 {card.label}
               </p>
-              <p className="text-4xl font-bold tabular-nums tracking-tight text-[#1d1d1f]">
+              <p className="text-2xl font-bold tabular-nums tracking-tight text-[#1d1d1f] sm:text-4xl">
                 {card.value}
               </p>
               <div

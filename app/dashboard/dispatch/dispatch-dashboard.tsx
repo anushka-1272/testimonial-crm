@@ -16,6 +16,7 @@ import { CandidateDetailModal } from "@/components/candidate-detail-modal";
 import { logActivity } from "@/lib/activity-logger";
 import { getUserSafe } from "@/lib/supabase-auth";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
+import { modalOverlayClass, modalPanelMdClass } from "@/lib/modal-responsive";
 import { sendWatiNotification } from "@/lib/wati-client";
 
 type DispatchStatus = "pending" | "dispatched" | "delivered";
@@ -618,14 +619,14 @@ function UpdateDispatchModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+    <div className={modalOverlayClass}>
       <button
         type="button"
-        className="absolute inset-0 bg-[#1d1d1f]/25 backdrop-blur-sm"
+        className="absolute inset-0"
         aria-label="Close"
         onClick={onClose}
       />
-      <div className="relative max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl border border-[#f0f0f0] bg-white p-6 shadow-[0_4px_16px_rgba(0,0,0,0.08)]">
+      <div className={`${modalPanelMdClass} p-6 shadow-[0_4px_16px_rgba(0,0,0,0.08)]`}>
         <div className="mb-4 flex items-start justify-between">
           <div>
             <h2 className="text-lg font-semibold text-[#1d1d1f]">
@@ -959,10 +960,10 @@ export function DispatchDashboard() {
         </div>
       ) : null}
 
-      <header className="sticky top-0 z-30 bg-[#f5f5f7]/90 px-8 py-6 backdrop-blur-md">
+      <header className="sticky top-14 z-30 bg-[#f5f5f7]/90 px-4 py-4 backdrop-blur-md sm:px-6 sm:py-5 lg:top-0 lg:px-8 lg:py-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight text-[#1d1d1f]">
+            <h1 className="text-xl font-semibold tracking-tight text-[#1d1d1f] sm:text-2xl">
               Dispatch
             </h1>
             <p className="mt-1 text-sm text-[#6e6e73]">
@@ -989,7 +990,7 @@ export function DispatchDashboard() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-7xl px-8 pb-12 pt-2 text-sm text-[#1d1d1f]">
+      <main className="mx-auto max-w-7xl px-4 pb-10 pt-2 text-sm text-[#1d1d1f] sm:px-6 lg:px-8 lg:pb-12">
         {error && (
           <div className="mb-6 rounded-2xl border border-[#f0f0f0] bg-white px-4 py-3 text-sm text-[#1d1d1f] shadow-[0_4px_16px_rgba(0,0,0,0.08)]">
             {error}
@@ -1003,8 +1004,8 @@ export function DispatchDashboard() {
           </div>
         )}
 
-        <section className="mb-8 grid gap-4 sm:grid-cols-3">
-          <div className={`p-6 ${cardChrome}`}>
+        <section className="mb-8 grid grid-cols-1 gap-4 lg:grid-cols-3">
+          <div className={`p-4 sm:p-6 ${cardChrome}`}>
             <p className="mb-3 text-xs font-medium text-[#6e6e73]">
               Total pending dispatches
             </p>
@@ -1013,7 +1014,7 @@ export function DispatchDashboard() {
             </p>
             <div className="mt-4 h-0.5 w-8 rounded-full bg-[#3b82f6]" />
           </div>
-          <div className={`p-6 ${cardChrome}`}>
+          <div className={`p-4 sm:p-6 ${cardChrome}`}>
             <p className="mb-3 text-xs font-medium text-[#6e6e73]">
               Dispatched this week
             </p>
@@ -1023,7 +1024,7 @@ export function DispatchDashboard() {
             <p className="mt-1 text-sm text-[#6e6e73]">Mon–Sun · dispatch date</p>
             <div className="mt-4 h-0.5 w-8 rounded-full bg-[#3b82f6]" />
           </div>
-          <div className={`p-6 ${cardChrome}`}>
+          <div className={`p-4 sm:p-6 ${cardChrome}`}>
             <p className="mb-3 text-xs font-medium text-[#6e6e73]">
               Delivered this week
             </p>
@@ -1035,22 +1036,24 @@ export function DispatchDashboard() {
           </div>
         </section>
 
-        <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="inline-flex rounded-full bg-white p-1 shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
-            {tabs.map((t) => (
-              <button
-                key={t.id}
-                type="button"
-                onClick={() => setFilter(t.id)}
-                className={`rounded-full px-4 py-1.5 text-sm font-medium transition-all duration-200 ease-in-out ${
-                  filter === t.id
-                    ? "bg-[#1d1d1f] text-white"
-                    : "text-[#6e6e73] hover:text-[#1d1d1f]"
-                }`}
-              >
-                {t.label}
-              </button>
-            ))}
+        <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div className="-mx-1 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] md:mx-0 md:overflow-visible [&::-webkit-scrollbar]:hidden">
+            <div className="inline-flex min-w-min rounded-full bg-white p-1 shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
+              {tabs.map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => setFilter(t.id)}
+                  className={`shrink-0 rounded-full px-3 py-1.5 text-sm font-medium transition-all duration-200 ease-in-out sm:px-4 ${
+                    filter === t.id
+                      ? "bg-[#1d1d1f] text-white"
+                      : "text-[#6e6e73] hover:text-[#1d1d1f]"
+                  }`}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
           </div>
           <button
             type="button"
@@ -1064,7 +1067,7 @@ export function DispatchDashboard() {
 
         <div className={`overflow-hidden ${cardChrome}`}>
           <div className="w-full min-w-0 max-w-full overflow-x-auto">
-            <table className="min-w-full text-left text-sm">
+            <table className="min-w-[960px] text-left text-sm">
               <thead>
                 <tr className="border-b border-[#f5f5f5]">
                   <th className="px-3 py-3 text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">

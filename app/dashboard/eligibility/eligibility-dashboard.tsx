@@ -642,10 +642,10 @@ export function EligibilityDashboard() {
 
   return (
     <>
-      <header className="sticky top-0 z-30 bg-[#f5f5f7]/90 px-8 py-6 backdrop-blur-md">
+      <header className="sticky top-14 z-30 bg-[#f5f5f7]/90 px-4 py-4 backdrop-blur-md sm:px-6 sm:py-5 lg:top-0 lg:px-8 lg:py-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight text-[#1d1d1f]">
+            <h1 className="text-xl font-semibold tracking-tight text-[#1d1d1f] sm:text-2xl">
               Eligibility review
             </h1>
             <p className="mt-1 text-sm text-[#6e6e73]">
@@ -673,7 +673,7 @@ export function EligibilityDashboard() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-7xl px-8 pb-12 pt-2 text-sm text-[#1d1d1f]">
+      <main className="mx-auto max-w-7xl px-4 pb-10 pt-2 text-sm text-[#1d1d1f] sm:px-6 lg:px-8 lg:pb-12">
         {error && (
           <div
             className="mb-6 rounded-2xl border border-[#f0f0f0] bg-white px-4 py-3 text-sm text-[#1d1d1f] shadow-[0_4px_16px_rgba(0,0,0,0.08)]"
@@ -690,7 +690,7 @@ export function EligibilityDashboard() {
           </div>
         )}
 
-        <section className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <section className="mb-8 grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
           {[
             {
               label: "New this week",
@@ -713,11 +713,11 @@ export function EligibilityDashboard() {
               sub: "Declined",
             },
           ].map((card) => (
-            <div key={card.label} className={`p-6 ${cardChrome}`}>
-              <p className="mb-3 text-xs font-medium text-[#6e6e73]">
+            <div key={card.label} className={`p-4 sm:p-6 ${cardChrome}`}>
+              <p className="mb-2 text-xs font-medium text-[#6e6e73] sm:mb-3">
                 {card.label}
               </p>
-              <p className="text-4xl font-bold tabular-nums tracking-tight text-[#1d1d1f]">
+              <p className="text-2xl font-bold tabular-nums tracking-tight text-[#1d1d1f] sm:text-4xl">
                 {loading ? "…" : card.value}
               </p>
               <p className="mt-1 text-sm text-[#6e6e73]">{card.sub}</p>
@@ -726,8 +726,8 @@ export function EligibilityDashboard() {
           ))}
         </section>
 
-        <section className="mb-6 flex flex-col gap-4 rounded-2xl border border-[#f0f0f0] bg-white p-4 shadow-sm sm:flex-row sm:flex-wrap sm:items-end">
-          <label className="flex flex-col gap-1 text-sm">
+        <section className="mb-6 flex flex-col gap-4 rounded-2xl border border-[#f0f0f0] bg-white p-4 shadow-sm md:flex-row md:flex-wrap md:items-end">
+          <label className="flex w-full min-w-0 flex-col gap-1 text-sm md:w-auto md:min-w-[140px]">
             <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
               Status
             </span>
@@ -742,7 +742,7 @@ export function EligibilityDashboard() {
               <option value="not_eligible">Not eligible</option>
             </select>
           </label>
-          <label className="flex flex-col gap-1 text-sm">
+          <label className="flex w-full min-w-0 flex-col gap-1 text-sm md:w-auto md:min-w-[160px]">
             <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
               Industry / role
             </span>
@@ -759,7 +759,7 @@ export function EligibilityDashboard() {
               ))}
             </select>
           </label>
-          <label className="flex flex-col gap-1 text-sm">
+          <label className="flex w-full min-w-0 flex-col gap-1 text-sm md:w-auto">
             <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
               From
             </span>
@@ -770,7 +770,7 @@ export function EligibilityDashboard() {
               onChange={(e) => setDateFrom(e.target.value)}
             />
           </label>
-          <label className="flex flex-col gap-1 text-sm">
+          <label className="flex w-full min-w-0 flex-col gap-1 text-sm md:w-auto">
             <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
               To
             </span>
@@ -797,16 +797,16 @@ export function EligibilityDashboard() {
 
         {selected.size > 0 && (
           <div
-            className={`mb-6 flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between ${cardChrome}`}
+            className={`mb-6 flex flex-col gap-3 p-4 md:flex-row md:items-center md:justify-between ${cardChrome}`}
           >
             <p className="text-sm font-medium text-[#1d1d1f]">
               {selected.size} selected
             </p>
-            <div className="flex flex-wrap gap-3">
+            <div className="flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap sm:gap-3">
               <button
                 type="button"
                 disabled={bulkBusy}
-                className="rounded-xl bg-[#1d1d1f] px-4 py-2 text-sm font-medium text-white transition-all hover:bg-[#2d2d2f] disabled:opacity-50"
+                className="w-full rounded-xl bg-[#1d1d1f] px-4 py-2.5 text-sm font-medium text-white transition-all hover:bg-[#2d2d2f] disabled:opacity-50 sm:w-auto"
                 onClick={() => void bulkMarkEligible()}
               >
                 Bulk mark eligible
@@ -814,7 +814,7 @@ export function EligibilityDashboard() {
               <button
                 type="button"
                 disabled={bulkBusy}
-                className="rounded-xl border border-[#f0f0f0] bg-white px-4 py-2 text-sm font-medium text-[#ef4444] transition-all hover:bg-[#fafafa] disabled:opacity-50"
+                className="w-full rounded-xl border border-[#f0f0f0] bg-white px-4 py-2.5 text-sm font-medium text-[#ef4444] transition-all hover:bg-[#fafafa] disabled:opacity-50 sm:w-auto"
                 onClick={() => void bulkMarkNotEligible()}
               >
                 Bulk mark not eligible
@@ -822,7 +822,7 @@ export function EligibilityDashboard() {
               <button
                 type="button"
                 disabled={bulkBusy}
-                className="text-sm font-medium text-[#3b82f6] transition-all hover:text-[#2563eb] disabled:opacity-50"
+                className="w-full py-2 text-center text-sm font-medium text-[#3b82f6] transition-all hover:text-[#2563eb] disabled:opacity-50 sm:w-auto sm:py-0 sm:text-left"
                 onClick={() => void bulkRunAi()}
               >
                 Bulk run AI assessment
@@ -833,7 +833,7 @@ export function EligibilityDashboard() {
 
         <div className={`overflow-hidden ${cardChrome}`}>
           <div className="w-full min-w-0 max-w-full overflow-x-auto">
-            <table className="min-w-full text-left text-sm">
+            <table className="min-w-[920px] text-left text-sm">
               <thead>
                 <tr className="border-b border-[#f5f5f5]">
                   <th className="w-10 px-3 py-3">
@@ -1032,7 +1032,7 @@ export function EligibilityDashboard() {
       </main>
 
       {detailCandidate && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 flex min-h-0 items-center justify-center p-0 sm:p-4">
           <button
             type="button"
             className="absolute inset-0 bg-[#1d1d1f]/60 backdrop-blur-sm"
@@ -1040,7 +1040,7 @@ export function EligibilityDashboard() {
             onClick={() => setDetailCandidate(null)}
           />
           <div
-            className="relative flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-xl"
+            className="relative mx-4 flex max-h-[min(90vh,100dvh-2rem)] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-xl sm:mx-auto"
             role="dialog"
             aria-modal="true"
             aria-labelledby="candidate-detail-title"

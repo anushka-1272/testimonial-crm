@@ -7,6 +7,10 @@ import { useEffect, useMemo, useState } from "react";
 import { useAccessControl } from "@/components/access-control-context";
 import { roleLabel, type TeamRole } from "@/lib/access-control";
 import { getUserSafe } from "@/lib/supabase-auth";
+import {
+  modalOverlayZ70Class,
+  modalPanelClass,
+} from "@/lib/modal-responsive";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 
 type TeamMemberRow = {
@@ -203,7 +207,7 @@ export default function TeamSettingsPage() {
           {toast}
         </div>
       ) : null}
-      <header className="sticky top-0 z-30 bg-[#f5f5f7]/90 px-8 py-6 backdrop-blur-md">
+      <header className="sticky top-14 z-30 bg-[#f5f5f7]/90 px-4 py-4 backdrop-blur-md sm:px-6 sm:py-5 lg:top-0 lg:px-8 lg:py-6">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight text-[#1d1d1f]">
@@ -228,26 +232,35 @@ export default function TeamSettingsPage() {
             ) : null}
           </div>
         </div>
-        <div className="mt-3 flex flex-wrap items-center gap-4 text-sm">
-          <Link href="/dashboard/settings/team" className="font-medium text-[#1d1d1f]">
+        <div className="mt-3 flex flex-nowrap items-center gap-4 overflow-x-auto pb-1 text-sm [-ms-overflow-style:none] [scrollbar-width:none] sm:flex-wrap sm:overflow-visible [&::-webkit-scrollbar]:hidden">
+          <Link
+            href="/dashboard/settings/team"
+            className="shrink-0 font-medium text-[#1d1d1f]"
+          >
             Team
           </Link>
-          <Link href="/dashboard/settings/roster" className="text-[#6e6e73] hover:text-[#1d1d1f]">
+          <Link
+            href="/dashboard/settings/roster"
+            className="shrink-0 text-[#6e6e73] hover:text-[#1d1d1f]"
+          >
             Roster
           </Link>
-          <Link href="/dashboard/settings/criteria" className="text-[#6e6e73] hover:text-[#1d1d1f]">
+          <Link
+            href="/dashboard/settings/criteria"
+            className="shrink-0 text-[#6e6e73] hover:text-[#1d1d1f]"
+          >
             Criteria
           </Link>
           <Link
             href="/dashboard/settings/deleted-entries"
-            className="text-[#6e6e73] hover:text-[#1d1d1f]"
+            className="shrink-0 text-[#6e6e73] hover:text-[#1d1d1f]"
           >
             Deleted Entries
           </Link>
         </div>
       </header>
 
-      <main className="mx-auto max-w-7xl px-8 pb-12 pt-2">
+      <main className="mx-auto max-w-7xl px-4 pb-10 pt-2 sm:px-6 lg:px-8 lg:pb-12">
         {error ? (
           <p className="mb-3 rounded-xl border border-[#f0f0f0] bg-white px-4 py-2 text-sm text-[#dc2626]">
             {error}
@@ -343,9 +356,13 @@ export default function TeamSettingsPage() {
       </main>
 
       {inviteOpen ? (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
-          <button type="button" className="absolute inset-0 bg-[#1d1d1f]/25 backdrop-blur-sm" onClick={() => setInviteOpen(false)} />
-          <div className="relative w-full max-w-lg rounded-2xl border border-[#f0f0f0] bg-white p-6 shadow-[0_4px_16px_rgba(0,0,0,0.08)]">
+        <div className={modalOverlayZ70Class}>
+          <button
+            type="button"
+            className="absolute inset-0"
+            onClick={() => setInviteOpen(false)}
+          />
+          <div className={`${modalPanelClass} p-6 shadow-[0_4px_16px_rgba(0,0,0,0.08)]`}>
             <h2 className="text-lg font-semibold text-[#1d1d1f]">Invite Member</h2>
             <div className="mt-4 space-y-4">
               <label className="block text-sm">

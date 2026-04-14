@@ -604,18 +604,20 @@ export function AnalyticsDashboard() {
     <div className="space-y-8">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-gray-900">Analytics</h1>
+          <h1 className="text-xl font-semibold text-gray-900 sm:text-2xl">
+            Analytics
+          </h1>
           <p className="mt-1 text-sm text-gray-500">
             Testimonial CRM performance overview
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="-mx-1 flex flex-nowrap gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] sm:flex-wrap sm:overflow-visible [&::-webkit-scrollbar]:hidden">
           {(Object.keys(RANGE_LABELS) as DateRangePreset[]).map((k) => (
             <button
               key={k}
               type="button"
               onClick={() => setPreset(k)}
-              className={`rounded-full px-4 py-2 text-sm font-medium transition-colors ${
+              className={`shrink-0 rounded-full px-3 py-2 text-sm font-medium transition-colors sm:px-4 ${
                 preset === k
                   ? "bg-[#1d4ed8] text-white"
                   : "border border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
@@ -635,7 +637,7 @@ export function AnalyticsDashboard() {
 
       {loading ? (
         <div className="space-y-8">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
             {[1, 2, 3, 4].map((i) => (
               <StatSkeleton key={i} />
             ))}
@@ -654,12 +656,12 @@ export function AnalyticsDashboard() {
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
             <div className={cardClass}>
               <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
                 Total form entries
               </p>
-              <p className="mt-2 text-3xl font-bold tabular-nums text-gray-900">
+              <p className="mt-2 text-2xl font-bold tabular-nums text-gray-900 sm:text-3xl">
                 {overview.totalEntries}
               </p>
             </div>
@@ -667,7 +669,7 @@ export function AnalyticsDashboard() {
               <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
                 Eligible rate
               </p>
-              <p className="mt-2 text-3xl font-bold tabular-nums text-gray-900">
+              <p className="mt-2 text-2xl font-bold tabular-nums text-gray-900 sm:text-3xl">
                 {overview.totalEntries > 0 ? `${overview.eligibleRate}%` : "—"}
               </p>
               <p className="mt-1 text-xs text-gray-500">Eligible / total in range</p>
@@ -676,7 +678,7 @@ export function AnalyticsDashboard() {
               <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
                 Interviews completed
               </p>
-              <p className="mt-2 text-3xl font-bold tabular-nums text-gray-900">
+              <p className="mt-2 text-2xl font-bold tabular-nums text-gray-900 sm:text-3xl">
                 {overview.interviewsCompleted}
               </p>
               <p className="mt-1 text-xs text-gray-500">Testimonial interviews</p>
@@ -685,7 +687,7 @@ export function AnalyticsDashboard() {
               <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
                 Total dispatched
               </p>
-              <p className="mt-2 text-3xl font-bold tabular-nums text-gray-900">
+              <p className="mt-2 text-2xl font-bold tabular-nums text-gray-900 sm:text-3xl">
                 {overview.totalDispatched}
               </p>
             </div>

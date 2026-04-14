@@ -9,6 +9,7 @@ import { logActivity } from "@/lib/activity-logger";
 import { getUserSafe } from "@/lib/supabase-auth";
 import { slackEmailForTeamMember } from "@/lib/slack-contacts";
 import { voidSlackNotify } from "@/lib/slack-client";
+import { modalOverlayClass, modalPanelClass } from "@/lib/modal-responsive";
 import {
   fetchTeamRosterNames,
   mergeRosterWithCurrent,
@@ -139,14 +140,16 @@ export function AssignInterviewerModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+    <div className={modalOverlayClass}>
       <button
         type="button"
-        className="absolute inset-0 bg-[#1d1d1f]/25 backdrop-blur-sm"
+        className="absolute inset-0"
         aria-label="Close"
         onClick={onClose}
       />
-      <div className="relative max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-[#f0f0f0] bg-white p-6 shadow-[0_4px_16px_rgba(0,0,0,0.08)]">
+      <div
+        className={`${modalPanelClass} p-6 shadow-[0_4px_16px_rgba(0,0,0,0.08)]`}
+      >
         <div className="mb-4 flex items-start justify-between">
           <div>
             <h2 className="text-lg font-semibold text-[#1d1d1f]">

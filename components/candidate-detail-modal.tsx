@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { modalOverlayClass, modalPanelClass } from "@/lib/modal-responsive";
+
 export type CandidateDetailRecord = {
   full_name: string | null;
   email: string;
@@ -120,15 +122,15 @@ export function CandidateDetailModal({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+    <div className={modalOverlayClass}>
       <button
         type="button"
-        className="absolute inset-0 bg-[#1d1d1f]/25 backdrop-blur-sm"
+        className="absolute inset-0"
         aria-label="Close"
         onClick={onClose}
       />
       <div
-        className="relative max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-[#f0f0f0] bg-white shadow-[0_4px_16px_rgba(0,0,0,0.08)]"
+        className={`${modalPanelClass} shadow-[0_4px_16px_rgba(0,0,0,0.08)]`}
         role="dialog"
         aria-modal="true"
         aria-labelledby="candidate-detail-title"

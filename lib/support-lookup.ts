@@ -18,8 +18,8 @@ export type SupportCandidate = {
   eligibility_status: EligibilityStatus;
   interview_type: InterviewType | null;
   poc_assigned: string | null;
-  followup_status: string;
-  followup_count: number;
+  followup_status: string | null;
+  followup_count: number | null;
   callback_datetime: string | null;
   not_interested_reason: string | null;
 };
@@ -44,14 +44,12 @@ export type SupportLookupPayload = {
   candidate: SupportCandidate;
   interview: SupportInterview | null;
   dispatch: SupportDispatch | null;
-  /** Latest `followup_log.created_at` where `status` is `no_answer`, if any. */
-  followup_last_attempt_at: string | null;
 };
 
-/** Candidate lookup modal: internal follow-up notes for support (not candidate-facing). */
-export type SupportFollowupLookupCard = {
-  lines: string[];
-  cardClass: string;
+/** Candidate-facing follow-up line shown on the login lookup card. */
+export type SupportFollowupStatusDisplay = {
+  title: string;
+  subtitle: string | null;
 };
 
 export type SupportStatusKind =
@@ -93,67 +91,35 @@ function formatDateOnly(iso: string | null | undefined): string | null {
   }
 }
 
-export function resolveFollowupLookupCard(
-  payload: SupportLookupPayload,
-): SupportFollowupLookupCard | null {
-  const { candidate, followup_last_attempt_at } = payload;
-  const status = candidate.followup_status;
+/**
+ * Public copy for the candidate lookup modal. Callback and not_interested take
+ * precedence; otherwise any positive followup_count shows the no-answer attempts line.
+ */
+export function resolveFollowupStatusPublicDisplay(
+  candidate: SupportCandidate,
+): SupportFollowupStatusDisplay | null {
   const count = Math.max(0, Number(candidate.followup_count ?? 0));
-
-  if (status === "no_answer" && count >= 3) {
-    return {
-      lines: [
-        "Maximum follow-up attempts reached (3/3)",
-        "Candidate did not respond to any attempts",
-      ],
-      cardClass:
-        "border-red-200 bg-red-50 text-red-950 ring-1 ring-red-200/80",
-    };
-  }
+  const status = (candidate.followup_status ?? "").trim();
 
   if (status === "callback") {
     const when = formatSlot(candidate.callback_datetime);
     return {
-      lines: [
-        when
-          ? `Callback scheduled for ${when}`
-          : "Callback scheduled (no datetime on record)",
-      ],
-      cardClass:
-        "border-blue-200 bg-blue-50 text-blue-950 ring-1 ring-blue-200/80",
+      title: when
+        ? `Callback Scheduled — ${when}`
+        : "Callback Scheduled",
+      subtitle: null,
     };
   }
 
   if (status === "not_interested") {
-    const lines = ["Candidate marked as Not Interested"];
-    const reason = candidate.not_interested_reason?.trim();
-    if (reason) lines.push(`Reason: ${reason}`);
-    return {
-      lines,
-      cardClass:
-        "border-zinc-200 bg-zinc-100 text-zinc-800 ring-1 ring-zinc-200/80",
-    };
+    return { title: "Not Interested", subtitle: null };
   }
 
-  if (status === "wrong_number") {
+  if (count > 0) {
+    const attemptLabel = count === 1 ? "1 attempt" : `${count} attempts`;
     return {
-      lines: [
-        "Wrong number flagged",
-        "Unable to reach candidate on registered number",
-      ],
-      cardClass:
-        "border-orange-200 bg-orange-50 text-orange-950 ring-1 ring-orange-200/80",
-    };
-  }
-
-  if (status === "no_answer" && count > 0 && count < 3) {
-    const lines = [`No answer — ${count} of 3 attempts made`];
-    const last = formatSlot(followup_last_attempt_at);
-    if (last) lines.push(`Last attempt: ${last}`);
-    return {
-      lines,
-      cardClass:
-        "border-amber-200 bg-amber-50 text-amber-950 ring-1 ring-amber-200/80",
+      title: `Called — No Answer (${attemptLabel})`,
+      subtitle: "Our team will reach out again",
     };
   }
 

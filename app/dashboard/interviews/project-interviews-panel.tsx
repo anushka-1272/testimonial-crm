@@ -1182,7 +1182,7 @@ export function ProjectInterviewsPanel({
                               </button>
                               {completedPopoverId === i.id ? (
                                 <div
-                                  className="absolute right-0 top-full z-50 mt-2 w-80 rounded-xl border border-[#f0f0f0] bg-white p-4 text-left shadow-[0_8px_24px_rgba(0,0,0,0.12)]"
+                                  className="absolute right-0 top-full z-50 mt-2 w-[min(20rem,calc(100vw-2rem))] max-w-sm rounded-xl border border-[#f0f0f0] bg-white p-4 text-left shadow-[0_8px_24px_rgba(0,0,0,0.12)]"
                                   onMouseDown={(e) => e.stopPropagation()}
                                   role="dialog"
                                   aria-label="Post-interview details"

@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { useAccessControl } from "@/components/access-control-context";
 import { logActivity } from "@/lib/activity-logger";
 import { getUserSafe } from "@/lib/supabase-auth";
+import { modalOverlayClass, modalPanelClass } from "@/lib/modal-responsive";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 
 const cardChrome =
@@ -181,7 +182,7 @@ export default function CriteriaPage() {
 
   return (
     <>
-      <header className="sticky top-0 z-30 bg-[#f5f5f7]/90 px-8 py-6 backdrop-blur-md">
+      <header className="sticky top-14 z-30 bg-[#f5f5f7]/90 px-4 py-4 backdrop-blur-md sm:px-6 sm:py-5 lg:top-0 lg:px-8 lg:py-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight text-[#1d1d1f]">
@@ -191,28 +192,28 @@ export default function CriteriaPage() {
               Manage AI evaluation rules for candidates
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="-mx-1 flex flex-nowrap items-center gap-3 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] sm:flex-wrap sm:overflow-visible [&::-webkit-scrollbar]:hidden">
             <Link
               href="/dashboard/settings/team"
-              className="text-sm font-medium text-[#6e6e73] transition-all hover:text-[#1d1d1f]"
+              className="shrink-0 text-sm font-medium text-[#6e6e73] transition-all hover:text-[#1d1d1f]"
             >
               Team
             </Link>
             <Link
               href="/dashboard/settings/criteria"
-              className="text-sm font-medium text-[#1d1d1f]"
+              className="shrink-0 text-sm font-medium text-[#1d1d1f]"
             >
               Criteria
             </Link>
             <Link
               href="/dashboard/settings/roster"
-              className="text-sm font-medium text-[#6e6e73] transition-all hover:text-[#1d1d1f]"
+              className="shrink-0 text-sm font-medium text-[#6e6e73] transition-all hover:text-[#1d1d1f]"
             >
               Roster
             </Link>
             <Link
               href="/dashboard/settings/deleted-entries"
-              className="text-sm font-medium text-[#6e6e73] transition-all hover:text-[#1d1d1f]"
+              className="shrink-0 text-sm font-medium text-[#6e6e73] transition-all hover:text-[#1d1d1f]"
             >
               Deleted Entries
             </Link>
@@ -240,7 +241,7 @@ export default function CriteriaPage() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-6xl px-8 pb-12 pt-2 text-sm text-[#1d1d1f]">
+      <main className="mx-auto max-w-6xl px-4 pb-10 pt-2 text-sm text-[#1d1d1f] sm:px-6 lg:px-8 lg:pb-12">
         <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
           <div>
             <h2 className="text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
@@ -390,8 +391,16 @@ export default function CriteriaPage() {
         </div>
 
         {showForm && canEditCurrentPage && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#1d1d1f]/25 p-4 backdrop-blur-[1px]">
-            <div className="w-full max-w-lg rounded-2xl border border-[#f0f0f0] bg-white p-6 shadow-[0_4px_16px_rgba(0,0,0,0.08)]">
+          <div className={modalOverlayClass}>
+            <button
+              type="button"
+              className="absolute inset-0"
+              aria-label="Close form"
+              onClick={() => setShowForm(false)}
+            />
+            <div
+              className={`${modalPanelClass} p-6 shadow-[0_4px_16px_rgba(0,0,0,0.08)]`}
+            >
               <h2 className="text-lg font-semibold text-[#1d1d1f]">
                 {editingId ? "Edit criteria" : "Add criteria"}
               </h2>
