@@ -12,7 +12,18 @@ import { modalOverlayClass, modalPanelClass } from "@/lib/modal-responsive";
 import { voidSlackNotify } from "@/lib/slack-client";
 import { sendWatiNotification } from "@/lib/wati-client";
 
-import type { InterviewWithCandidate } from "./types";
+import type {
+  InterviewWithCandidate,
+  ProjectInterviewWithProjectCandidate,
+} from "./types";
+
+type AnyInterview = InterviewWithCandidate | ProjectInterviewWithProjectCandidate;
+
+function isProjectIv(
+  i: AnyInterview | null,
+): i is ProjectInterviewWithProjectCandidate {
+  return i != null && "project_candidate_id" in i && Boolean(i.project_candidate_id);
+}
 
 function actorLabel(
   user: {
@@ -38,7 +49,7 @@ function formatSlot(iso: string | null | undefined): string {
 
 type Props = {
   open: boolean;
-  interview: InterviewWithCandidate | null;
+  interview: AnyInterview | null;
   supabase: SupabaseClient;
   onClose: () => void;
   onSaved: () => void;
@@ -67,10 +78,14 @@ export function AddZoomDetailsModal({
 
   if (!open || !interview) return null;
 
-  const candName =
-    interview.candidates?.full_name?.trim() ||
-    interview.candidates?.email ||
-    "Candidate";
+  const isProject = isProjectIv(interview);
+  const candName = isProject
+    ? interview.project_candidates?.project_title?.trim() ||
+      interview.project_candidates?.email ||
+      "Candidate"
+    : interview.candidates?.full_name?.trim() ||
+      interview.candidates?.email ||
+      "Candidate";
   const ivLabel = interview.interviewer?.trim() || "—";
   const subtitle = `${candName} · ${formatSlot(interview.scheduled_date)} · Interviewer: ${ivLabel}`;
 
@@ -91,7 +106,7 @@ export function AddZoomDetailsModal({
       setError("Zoom link must start with https://");
       return;
     }
-    if (!account) {
+    if (!isProject && !account) {
       setError("Zoom account is required.");
       return;
     }
@@ -105,13 +120,17 @@ export function AddZoomDetailsModal({
 
     setSubmitting(true);
     try {
+      const table = isProject ? "project_interviews" : "interviews";
+      const patch: Record<string, string> = {
+        zoom_link: link,
+        interview_status: "scheduled",
+      };
+      if (!isProject) {
+        patch.zoom_account = account;
+      }
       const { error: upErr } = await supabase
-        .from("interviews")
-        .update({
-          zoom_link: link,
-          zoom_account: account,
-          interview_status: "scheduled",
-        })
+        .from(table)
+        .update(patch)
         .eq("id", interview.id);
 
       if (upErr) {
@@ -147,31 +166,37 @@ export function AddZoomDetailsModal({
           `*Candidate:* ${candName}\n` +
           `*Date & Time:* ${formattedDateTime || "—"}\n` +
           `*Zoom Link:* ${link}\n` +
-          `*Zoom Account:* ${account}`;
+          `${isProject ? "" : `*Zoom Account:* ${account}`}`;
         voidSlackNotify(supabase, interviewerSlackEmail, slackMsg);
       }
-      const waPhone = interview.candidates?.whatsapp_number?.trim();
-      const watiName =
-        interview.candidates?.full_name?.trim() ||
-        interview.candidates?.email ||
-        candName;
-      void (async () => {
-        if (!waPhone) return;
-        try {
-          const ok = await sendWatiNotification(supabase, waPhone, "interview_", [
-            { name: "1", value: watiName },
-            { name: "2", value: formattedDateTime },
-            { name: "3", value: link },
-          ]);
-          if (!ok) onToast("WhatsApp notification failed to send");
-        } catch (err) {
-          console.error("WATI:", err);
-          onToast("WhatsApp notification failed to send");
-        }
-      })();
+      if (!isProject) {
+        const waPhone = interview.candidates?.whatsapp_number?.trim();
+        const watiName =
+          interview.candidates?.full_name?.trim() ||
+          interview.candidates?.email ||
+          candName;
+        void (async () => {
+          if (!waPhone) return;
+          try {
+            const ok = await sendWatiNotification(supabase, waPhone, "interview_", [
+              { name: "1", value: watiName },
+              { name: "2", value: formattedDateTime },
+              { name: "3", value: link },
+            ]);
+            if (!ok) onToast("WhatsApp notification failed to send");
+          } catch (err) {
+            console.error("WATI:", err);
+            onToast("WhatsApp notification failed to send");
+          }
+        })();
+      }
 
-      const toEmail = interview.candidates?.email;
-      const toName = interview.candidates?.full_name;
+      const toEmail = isProject
+        ? interview.project_candidates?.email
+        : interview.candidates?.email;
+      const toName = isProject
+        ? interview.project_candidates?.project_title
+        : interview.candidates?.full_name;
       let emailFailed = false;
       if (toEmail && dateLabel && timeLabel) {
         try {
@@ -190,7 +215,7 @@ export function AddZoomDetailsModal({
 
           if (emailRes.ok) {
             await supabase
-              .from("interviews")
+              .from(table)
               .update({ invitation_sent: true })
               .eq("id", interview.id);
           } else {
@@ -269,18 +294,20 @@ export function AddZoomDetailsModal({
             />
           </label>
 
-          <label className="block text-sm">
-            <span className={lab}>Zoom account (internal reference)</span>
-            <input
-              type="text"
-              required
-              className={inp}
-              placeholder="e.g. be10x@gmail.com or Be10x Main"
-              value={zoomAccount}
-              onChange={(e) => setZoomAccount(e.target.value)}
-              autoComplete="off"
-            />
-          </label>
+          {!isProject ? (
+            <label className="block text-sm">
+              <span className={lab}>Zoom account (internal reference)</span>
+              <input
+                type="text"
+                required
+                className={inp}
+                placeholder="e.g. be10x@gmail.com or Be10x Main"
+                value={zoomAccount}
+                onChange={(e) => setZoomAccount(e.target.value)}
+                autoComplete="off"
+              />
+            </label>
+          ) : null}
 
           <div className="flex justify-end gap-2 pt-2">
             <button

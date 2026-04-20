@@ -47,6 +47,7 @@ async function loadProjectPipelineStats(
     interviews
       .filter(
         (r) =>
+          r.interview_status === "draft" ||
           r.interview_status === "scheduled" ||
           r.interview_status === "rescheduled",
       )
@@ -63,8 +64,9 @@ async function loadProjectPipelineStats(
     if (qualifiesPending) pending++;
   }
 
-  const scheduled = interviews.filter((r) => r.interview_status === "scheduled")
-    .length;
+  const scheduled = interviews.filter(
+    (r) => r.interview_status === "scheduled" || r.interview_status === "draft",
+  ).length;
   const rescheduled = interviews.filter(
     (r) => r.interview_status === "rescheduled",
   ).length;

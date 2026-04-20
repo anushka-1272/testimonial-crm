@@ -7,6 +7,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { logActivity } from "@/lib/activity-logger";
 import { modalOverlayClass, modalPanelClass } from "@/lib/modal-responsive";
+import { POC_INTERVIEWER_SLACK_EMAILS, SLACK_DISHAN_EMAIL } from "@/lib/slack-contacts";
+import { voidSlackNotify } from "@/lib/slack-client";
 import { fetchTeamRosterNames } from "@/lib/team-roster";
 import { getUserSafe } from "@/lib/supabase-auth";
 
@@ -88,7 +90,7 @@ export function RescheduleInterviewModal({
       setError("Interviewer is required.");
       return;
     }
-    if (mode === "from_scheduled" && !reason.trim()) {
+    if (!reason.trim()) {
       setError("Reschedule reason is required.");
       return;
     }
@@ -97,81 +99,70 @@ export function RescheduleInterviewModal({
     setSubmitting(true);
 
     const table = isProjectIv(interview) ? "project_interviews" : "interviews";
+    const reasonText = reason.trim();
+    const formattedDateTime = format(parseISO(localIso), "dd MMM yyyy, h:mm a");
+    const candDisplay = isProjectIv(interview)
+      ? interview.project_candidates?.project_title?.trim() ||
+        interview.project_candidates?.email ||
+        "Candidate"
+      : interview.candidates?.full_name?.trim() ||
+        interview.candidates?.email ||
+        "Candidate";
 
     try {
-      if (mode === "from_scheduled") {
-        const { error: upErr } = await supabase
-          .from(table)
-          .update({
-            previous_scheduled_date: interview.scheduled_date,
-            reschedule_reason: reason.trim(),
-            scheduled_date: localIso,
-            interviewer,
-            interview_status: "rescheduled",
-          })
-          .eq("id", interview.id);
-        if (upErr) {
-          setError(upErr.message);
-          setSubmitting(false);
-          return;
-        }
-        const candDisplay = isProjectIv(interview)
-          ? interview.project_candidates?.project_title?.trim() ||
-            interview.project_candidates?.email ||
-            "Candidate"
-          : interview.candidates?.full_name?.trim() ||
-            interview.candidates?.email ||
-            "Candidate";
-        const reasonText = reason.trim();
-        const authRe = await getUserSafe(supabase);
-        if (authRe) {
-          await logActivity({
-            supabase,
-            user: authRe,
-            action_type: "interviews",
-            entity_type: "interview",
-            entity_id: interview.id,
-            candidate_name: candDisplay,
-            description: `Rescheduled interview for ${candDisplay} — Reason: ${reasonText || "—"}`,
-          });
-        }
-      } else {
-        const patch: Record<string, unknown> = {
-          scheduled_date: localIso,
-          interviewer,
-        };
-        if (reason.trim()) patch.reschedule_reason = reason.trim();
-        const { error: upErr } = await supabase
-          .from(table)
-          .update(patch)
-          .eq("id", interview.id);
-        if (upErr) {
-          setError(upErr.message);
-          setSubmitting(false);
-          return;
-        }
-        const candDisplay = isProjectIv(interview)
-          ? interview.project_candidates?.project_title?.trim() ||
-            interview.project_candidates?.email ||
-            "Candidate"
-          : interview.candidates?.full_name?.trim() ||
-            interview.candidates?.email ||
-            "Candidate";
-        const reasonText =
-          reason.trim() || interview.reschedule_reason?.trim() || "—";
-        const authRe2 = await getUserSafe(supabase);
-        if (authRe2) {
-          await logActivity({
-            supabase,
-            user: authRe2,
-            action_type: "interviews",
-            entity_type: "interview",
-            entity_id: interview.id,
-            candidate_name: candDisplay,
-            description: `Rescheduled interview for ${candDisplay} — Reason: ${reasonText}`,
-          });
-        }
+      const patch: Record<string, unknown> = {
+        previous_scheduled_date: interview.scheduled_date,
+        reschedule_reason: reasonText,
+        scheduled_date: localIso,
+        interviewer,
+        interview_status: "draft",
+        zoom_link: null,
+        invitation_sent: false,
+      };
+      if (!isProjectIv(interview)) {
+        patch.zoom_account = null;
+        patch.interviewer_assigned_at = null;
       }
+      const { error: upErr } = await supabase
+        .from(table)
+        .update(patch)
+        .eq("id", interview.id);
+      if (upErr) {
+        setError(upErr.message);
+        setSubmitting(false);
+        return;
+      }
+
+      const authRe = await getUserSafe(supabase);
+      if (authRe) {
+        await logActivity({
+          supabase,
+          user: authRe,
+          action_type: "interviews",
+          entity_type: "interview",
+          entity_id: interview.id,
+          candidate_name: candDisplay,
+          description: `Rescheduled interview for ${candDisplay} — moved to Draft (Awaiting Zoom). Reason: ${reasonText}`,
+        });
+      }
+
+      if (!isProjectIv(interview)) {
+        const anushkaMsg =
+          `🔄 Interview rescheduled for *${candDisplay}*\n` +
+          `New Date & Time: ${formattedDateTime}\n` +
+          `Interviewer: ${interviewer}\n` +
+          `Reason: ${reasonText}\n` +
+          `Please confirm interviewer assignment.`;
+        voidSlackNotify(supabase, POC_INTERVIEWER_SLACK_EMAILS.Anushka, anushkaMsg);
+      }
+
+      const dishanMsg =
+        `🔄 Rescheduled interview needs new Zoom details!\n` +
+        `*Candidate:* ${candDisplay}\n` +
+        `*New Date & Time:* ${formattedDateTime}\n` +
+        `*Interviewer:* ${interviewer}\n` +
+        `Please add new Zoom link in the CRM.`;
+      voidSlackNotify(supabase, SLACK_DISHAN_EMAIL, dishanMsg);
 
       setDate("");
       setTime("");
@@ -187,8 +178,7 @@ export function RescheduleInterviewModal({
   const inp =
     "mt-1 w-full rounded-xl border border-[#e5e5e5] px-3 py-2.5 text-sm text-[#1d1d1f] focus:border-[#3b82f6] focus:outline-none focus:ring-0";
   const lab = "text-xs font-medium uppercase tracking-widest text-[#aeaeb2]";
-  const title =
-    mode === "from_scheduled" ? "Reschedule interview" : "Schedule again";
+  const title = mode === "from_scheduled" ? "Reschedule interview" : "Schedule again";
 
   return (
     <div className={modalOverlayClass}>
@@ -270,21 +260,15 @@ export function RescheduleInterviewModal({
 
           <label className="block text-sm">
             <span className={lab}>
-              {mode === "from_scheduled"
-                ? "Reschedule reason"
-                : "Reason / note (optional)"}
+              Reschedule reason
             </span>
             <textarea
               rows={3}
               className={inp}
-              required={mode === "from_scheduled"}
+              required
               value={reason}
               onChange={(e) => setReason(e.target.value)}
-              placeholder={
-                mode === "from_scheduled"
-                  ? "Why is this being moved?"
-                  : "Update reason if needed"
-              }
+              placeholder="Why is this being moved?"
             />
           </label>
 

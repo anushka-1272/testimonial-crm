@@ -2160,7 +2160,14 @@ export function InterviewsBoard() {
                                   </div>
                                 </td>
                                 <td className={tdDateTime}>
-                                  {formatDateTime(i.scheduled_date)}
+                                  <div className="flex flex-col items-start gap-2">
+                                    <span>{formatDateTime(i.scheduled_date)}</span>
+                                    {i.previous_scheduled_date ? (
+                                      <span className="inline-flex rounded-full bg-[#fff7ed] px-2.5 py-1 text-xs font-medium text-[#c2410c]">
+                                        Rescheduled
+                                      </span>
+                                    ) : null}
+                                  </div>
                                 </td>
                                 <td className={tdInterviewer}>
                                   {i.interviewer?.trim() || "—"}

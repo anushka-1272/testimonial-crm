@@ -14,6 +14,7 @@ import {
   mergeRosterWithCurrent,
 } from "@/lib/team-roster";
 
+import { AddZoomDetailsModal } from "./add-zoom-details-modal";
 import type { ScheduleProjectCandidate } from "./schedule-interview-modal";
 import type {
   ProjectCandidateRow,
@@ -177,6 +178,8 @@ export function ProjectInterviewsPanel({
   );
   const [sheetSyncBusy, setSheetSyncBusy] = useState(false);
   const [deleteBusyId, setDeleteBusyId] = useState<string | null>(null);
+  const [addZoomFor, setAddZoomFor] =
+    useState<ProjectInterviewWithProjectCandidate | null>(null);
 
   const loadProjectData = useCallback(async () => {
     const { data: pc, error: eCandidates } = await supabase
@@ -320,6 +323,7 @@ export function ProjectInterviewsPanel({
     };
     for (const i of interviews) {
       switch (i.interview_status) {
+        case "draft":
         case "scheduled":
           m.scheduled.push(i);
           break;
@@ -350,7 +354,8 @@ export function ProjectInterviewsPanel({
           .filter(
             (i) =>
               i.interview_status === "scheduled" ||
-              i.interview_status === "rescheduled",
+              i.interview_status === "rescheduled" ||
+              i.interview_status === "draft",
           )
           .map((i) => i.project_candidate_id),
       ),
@@ -884,6 +889,7 @@ export function ProjectInterviewsPanel({
                     <th className={thProjTitle}>Project title</th>
                     <th className={thDateTime}>Date &amp; time</th>
                     <th className={thInterviewer}>Interviewer</th>
+                    <th className={thReason}>Zoom status</th>
                     <th className={thPoc}>POC</th>
                     <th className={thActions}>Actions</th>
                   </tr>
@@ -891,7 +897,7 @@ export function ProjectInterviewsPanel({
                 <tbody>
                   {scheduledPage.slice.length === 0 ? (
                     <tr>
-                      <td className={tdBase} colSpan={7}>
+                      <td className={tdBase} colSpan={8}>
                         {emptyState}
                       </td>
                     </tr>
@@ -899,6 +905,10 @@ export function ProjectInterviewsPanel({
                     scheduledPage.slice.map((i) => {
                       const pc = i.project_candidates;
                       if (!pc) return null;
+                      const isDraftRow = i.interview_status === "draft";
+                      const isScheduledRow = i.interview_status === "scheduled";
+                      const awaitingZoom = isDraftRow;
+                      const zoomAdded = isScheduledRow && Boolean(i.zoom_link?.trim());
                       return (
                         <tr key={i.id}>
                           <td className={tdName}>
@@ -917,9 +927,29 @@ export function ProjectInterviewsPanel({
                             {pc.project_title?.trim() || "—"}
                           </td>
                           <td className={tdDateTime}>
-                            {formatDateTime(i.scheduled_date)}
+                            <div className="flex flex-col items-start gap-2">
+                              <span>{formatDateTime(i.scheduled_date)}</span>
+                              {i.previous_scheduled_date ? (
+                                <span className="inline-flex rounded-full bg-[#fff7ed] px-2.5 py-1 text-xs font-medium text-[#c2410c]">
+                                  Rescheduled
+                                </span>
+                              ) : null}
+                            </div>
                           </td>
                           <td className={tdInterviewer}>{i.interviewer}</td>
+                          <td className={tdReason}>
+                            {awaitingZoom ? (
+                              <span className="inline-flex rounded-full bg-[#fff7ed] px-2.5 py-1 text-xs font-medium text-[#c2410c]">
+                                Awaiting Zoom
+                              </span>
+                            ) : zoomAdded ? (
+                              <span className="inline-flex rounded-full bg-[#f0fdf4] px-2.5 py-1 text-xs font-medium text-[#15803d]">
+                                Zoom Added
+                              </span>
+                            ) : (
+                              <span className="text-[#6e6e73]">—</span>
+                            )}
+                          </td>
                           <td className={tdPoc}>
                             {i.poc?.trim() ||
                               pc.poc_assigned?.trim() ||
@@ -927,6 +957,15 @@ export function ProjectInterviewsPanel({
                           </td>
                           <td className={tdActions}>
                             <div className="flex flex-wrap items-center justify-end gap-2">
+                              {isDraftRow ? (
+                                <button
+                                  type="button"
+                                  className="rounded-lg border border-[#1d1d1f] bg-white px-3 py-1.5 text-xs font-medium text-[#1d1d1f] hover:bg-[#fafafa]"
+                                  onClick={() => setAddZoomFor(i)}
+                                >
+                                  Add Zoom Details
+                                </button>
+                              ) : null}
                               <button
                                 type="button"
                                 className="rounded-lg bg-[#ea580c] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#c2410c]"
@@ -936,6 +975,7 @@ export function ProjectInterviewsPanel({
                                     "from_scheduled",
                                   )
                                 }
+                                disabled={!isScheduledRow}
                               >
                                 Reschedule
                               </button>
@@ -943,6 +983,7 @@ export function ProjectInterviewsPanel({
                                 type="button"
                                 className="rounded-lg bg-[#16a34a] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#15803d]"
                                 onClick={() => onPostProjectInterview(i)}
+                                disabled={!isScheduledRow}
                               >
                                 Mark completed
                               </button>
@@ -1270,6 +1311,20 @@ export function ProjectInterviewsPanel({
         open={!!detail}
         candidate={detail}
         onClose={() => setDetail(null)}
+      />
+
+      <AddZoomDetailsModal
+        key={addZoomFor?.id ?? "project-add-zoom-closed"}
+        open={!!addZoomFor}
+        interview={addZoomFor}
+        supabase={supabase}
+        onClose={() => setAddZoomFor(null)}
+        onSaved={() => {
+          setAddZoomFor(null);
+          void loadProjectData();
+          onPipelineChanged();
+        }}
+        onToast={() => {}}
       />
     </>
   );
