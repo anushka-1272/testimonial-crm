@@ -535,18 +535,6 @@ function followupStatusBadge(c: EligibleCandidate) {
   return null;
 }
 
-function compareInterviewByCandidateCreatedDesc(
-  a: InterviewWithCandidate,
-  b: InterviewWithCandidate,
-): number {
-  const ta = a.candidates?.created_at ?? "";
-  const tb = b.candidates?.created_at ?? "";
-  if (ta !== tb) return tb.localeCompare(ta);
-  const sa = a.scheduled_date ?? "";
-  const sb = b.scheduled_date ?? "";
-  return sb.localeCompare(sa);
-}
-
 function normalizeInterviewRow(
   row: Record<string, unknown>,
 ): InterviewWithCandidate {
@@ -677,7 +665,7 @@ export function InterviewsBoard() {
           )
           .eq("is_deleted", false)
           .eq("eligibility_status", "eligible")
-          .order("created_at", { ascending: false }),
+          .order("created_at", { ascending: true }),
         supabase.from("interviews").select(INTERVIEW_SELECT),
       ]);
 
@@ -692,8 +680,7 @@ export function InterviewsBoard() {
         const c = i.candidates;
         const one = c == null ? null : Array.isArray(c) ? c[0] ?? null : c;
         return one != null && !one.is_deleted;
-      })
-      .sort(compareInterviewByCandidateCreatedDesc);
+      });
     const busy = new Set(
       list
         .filter(
@@ -945,7 +932,13 @@ export function InterviewsBoard() {
   );
 
   const eligibleFiltered = useMemo(
-    () => filterEligible(eligibleQueue, filters.eligible),
+    () =>
+      [...filterEligible(eligibleQueue, filters.eligible)].sort((a, b) => {
+        const dateA = new Date(a.created_at || 0).getTime();
+        const dateB = new Date(b.created_at || 0).getTime();
+        const cmp = dateA - dateB;
+        return cmp !== 0 ? cmp : a.id.localeCompare(b.id);
+      }),
     [eligibleQueue, filters.eligible, filterEligible],
   );
 
@@ -980,12 +973,28 @@ export function InterviewsBoard() {
   ]);
 
   const scheduledFiltered = useMemo(
-    () => filterInterviews(byStatus.scheduled, filters.scheduled),
+    () =>
+      [...filterInterviews(byStatus.scheduled, filters.scheduled)].sort(
+        (a, b) => {
+          const dateA = new Date(a.scheduled_date || 0).getTime();
+          const dateB = new Date(b.scheduled_date || 0).getTime();
+          const cmp = dateA - dateB;
+          return cmp !== 0 ? cmp : a.id.localeCompare(b.id);
+        },
+      ),
     [byStatus.scheduled, filters.scheduled, filterInterviews],
   );
 
   const rescheduledFiltered = useMemo(
-    () => filterInterviews(byStatus.rescheduled, filters.rescheduled),
+    () =>
+      [...filterInterviews(byStatus.rescheduled, filters.rescheduled)].sort(
+        (a, b) => {
+          const dateA = new Date(a.scheduled_date || 0).getTime();
+          const dateB = new Date(b.scheduled_date || 0).getTime();
+          const cmp = dateA - dateB;
+          return cmp !== 0 ? cmp : a.id.localeCompare(b.id);
+        },
+      ),
     [byStatus.rescheduled, filters.rescheduled, filterInterviews],
   );
 
@@ -1000,7 +1009,15 @@ export function InterviewsBoard() {
   }, [byStatus.completed]);
 
   const completedFiltered = useMemo(
-    () => filterCompletedInterviews(byStatus.completed, completedFilters),
+    () =>
+      [...filterCompletedInterviews(byStatus.completed, completedFilters)].sort(
+        (a, b) => {
+          const dateA = new Date(a.completed_at || 0).getTime();
+          const dateB = new Date(b.completed_at || 0).getTime();
+          const cmp = dateB - dateA;
+          return cmp !== 0 ? cmp : a.id.localeCompare(b.id);
+        },
+      ),
     [byStatus.completed, completedFilters],
   );
 

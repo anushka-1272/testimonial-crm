@@ -71,6 +71,42 @@ function matchesInterviewSearch(
   return matchesPendingSearch(pc, q);
 }
 
+function compareProjectCandidateCreatedAsc(
+  a: ProjectCandidateRow,
+  b: ProjectCandidateRow,
+): number {
+  const sa = a.created_at ?? "";
+  const sb = b.created_at ?? "";
+  const c = sa.localeCompare(sb);
+  return c !== 0 ? c : a.id.localeCompare(b.id);
+}
+
+function compareProjectInterviewScheduledAsc(
+  a: ProjectInterviewWithProjectCandidate,
+  b: ProjectInterviewWithProjectCandidate,
+): number {
+  const sa = a.scheduled_date ?? "";
+  const sb = b.scheduled_date ?? "";
+  if (!sa && !sb) return a.id.localeCompare(b.id);
+  if (!sa) return 1;
+  if (!sb) return -1;
+  const c = sa.localeCompare(sb);
+  return c !== 0 ? c : a.id.localeCompare(b.id);
+}
+
+function compareProjectInterviewCompletedDesc(
+  a: ProjectInterviewWithProjectCandidate,
+  b: ProjectInterviewWithProjectCandidate,
+): number {
+  const sa = a.completed_at ?? "";
+  const sb = b.completed_at ?? "";
+  if (!sa && !sb) return a.id.localeCompare(b.id);
+  if (!sa) return 1;
+  if (!sb) return -1;
+  const c = sb.localeCompare(sa);
+  return c !== 0 ? c : a.id.localeCompare(b.id);
+}
+
 function pocOptionsFor(pc: ProjectCandidateRow, pocRoster: string[]): string[] {
   return mergeRosterWithCurrent(pocRoster, pc.poc_assigned);
 }
@@ -202,7 +238,7 @@ export function ProjectInterviewsPanel({
         "id, created_at, email, full_name, whatsapp_number, project_title, problem_statement, target_user, ai_usage, demo_link, status, poc_assigned, poc_assigned_at, interview_type",
       )
       .eq("is_deleted", false)
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: true });
 
     let candidateList: ProjectCandidateRow[] = [];
     if (eCandidates) {
@@ -226,7 +262,7 @@ export function ProjectInterviewsPanel({
     const { data: pi, error: eInterviews } = await supabase
       .from("project_interviews")
       .select(PROJECT_INTERVIEW_COLUMNS)
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: true });
 
     if (eInterviews) {
       console.log(
@@ -248,12 +284,6 @@ export function ProjectInterviewsPanel({
           });
         })
         .filter((i) => i.project_candidates != null);
-      merged.sort((a, b) => {
-        const ca = a.project_candidates?.created_at ?? "";
-        const cb = b.project_candidates?.created_at ?? "";
-        if (ca !== cb) return cb.localeCompare(ca);
-        return (b.created_at ?? "").localeCompare(a.created_at ?? "");
-      });
       setInterviews(merged);
     }
 
@@ -378,7 +408,7 @@ export function ProjectInterviewsPanel({
 
   const pendingQueue = useMemo(() => {
     const q = filters.pending.search;
-    return candidates.filter((c) => {
+    const rows = candidates.filter((c) => {
       if (activePipelineCandidateIds.has(c.id)) return false;
       const statusNorm = (c.status ?? "pending").trim() || "pending";
       const hasInterview = candidateIdsWithInterview.has(c.id);
@@ -386,6 +416,7 @@ export function ProjectInterviewsPanel({
         statusNorm === "pending" || !hasInterview;
       return qualifiesPending && matchesPendingSearch(c, q);
     });
+    return [...rows].sort(compareProjectCandidateCreatedAsc);
   }, [
     candidates,
     candidateIdsWithInterview,
@@ -395,25 +426,25 @@ export function ProjectInterviewsPanel({
 
   const scheduledFiltered = useMemo(
     () =>
-      byStatus.scheduled.filter((i) =>
+      [...byStatus.scheduled.filter((i) =>
         matchesInterviewSearch(i, filters.scheduled.search),
-      ),
+      )].sort(compareProjectInterviewScheduledAsc),
     [byStatus.scheduled, filters.scheduled.search],
   );
 
   const rescheduledFiltered = useMemo(
     () =>
-      byStatus.rescheduled.filter((i) =>
+      [...byStatus.rescheduled.filter((i) =>
         matchesInterviewSearch(i, filters.rescheduled.search),
-      ),
+      )].sort(compareProjectInterviewScheduledAsc),
     [byStatus.rescheduled, filters.rescheduled.search],
   );
 
   const completedFiltered = useMemo(
     () =>
-      byStatus.completed.filter((i) =>
+      [...byStatus.completed.filter((i) =>
         matchesInterviewSearch(i, filters.completed.search),
-      ),
+      )].sort(compareProjectInterviewCompletedDesc),
     [byStatus.completed, filters.completed.search],
   );
 

@@ -33,7 +33,8 @@ async function loadProjectPipelineStats(
     supabase
       .from("project_candidates")
       .select("id, status")
-      .eq("is_deleted", false),
+      .eq("is_deleted", false)
+      .order("created_at", { ascending: true }),
     supabase
       .from("project_interviews")
       .select("project_candidate_id, interview_status"),
