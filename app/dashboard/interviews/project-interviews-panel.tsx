@@ -924,10 +924,13 @@ export function ProjectInterviewsPanel({
                       const isDraftRow = i.interview_status === "draft";
                       const isScheduledRow = i.interview_status === "scheduled";
                       const hasIv = hasAssignedProjectInterviewer(i);
+                      const hasZoom = Boolean(i.zoom_link?.trim());
                       const awaitingIv = isDraftRow && !hasIv;
-                      const awaitingZoom = isDraftRow && hasIv;
-                      const zoomAdded =
-                        isScheduledRow && Boolean(i.zoom_link?.trim());
+                      const awaitingZoom =
+                        !hasZoom &&
+                        ((isDraftRow && hasIv) || isScheduledRow);
+                      const zoomAdded = isScheduledRow && hasZoom;
+                      const needsZoom = !hasZoom;
                       const zoomLink = i.zoom_link?.trim();
                       return (
                         <tr key={i.id}>
@@ -1000,18 +1003,21 @@ export function ProjectInterviewsPanel({
                                   Assign Interviewer
                                 </button>
                               ) : null}
-                              {isDraftRow ? (
+                              {needsZoom &&
+                              (isDraftRow || isScheduledRow) ? (
                                 <button
                                   type="button"
-                                  disabled={!hasIv}
+                                  disabled={isDraftRow && !hasIv}
                                   title={
-                                    !hasIv
+                                    isDraftRow && !hasIv
                                       ? "Assign interviewer first"
                                       : undefined
                                   }
                                   className="rounded-lg border border-[#1d1d1f] bg-white px-3 py-1.5 text-xs font-medium text-[#1d1d1f] hover:bg-[#fafafa] disabled:cursor-not-allowed disabled:border-[#d1d5db] disabled:text-[#9ca3af]"
                                   onClick={() =>
-                                    hasIv ? setAddZoomFor(i) : undefined
+                                    !isDraftRow || hasIv
+                                      ? setAddZoomFor(i)
+                                      : undefined
                                   }
                                 >
                                   Add Zoom Details
