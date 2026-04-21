@@ -106,7 +106,7 @@ export function AddZoomDetailsModal({
       setError("Zoom link must start with https://");
       return;
     }
-    if (!isProject && !account) {
+    if (!account) {
       setError("Zoom account is required.");
       return;
     }
@@ -123,11 +123,9 @@ export function AddZoomDetailsModal({
       const table = isProject ? "project_interviews" : "interviews";
       const patch: Record<string, string> = {
         zoom_link: link,
+        zoom_account: account,
         interview_status: "scheduled",
       };
-      if (!isProject) {
-        patch.zoom_account = account;
-      }
       const { error: upErr } = await supabase
         .from(table)
         .update(patch)
@@ -166,30 +164,33 @@ export function AddZoomDetailsModal({
           `*Candidate:* ${candName}\n` +
           `*Date & Time:* ${formattedDateTime || "—"}\n` +
           `*Zoom Link:* ${link}\n` +
-          `${isProject ? "" : `*Zoom Account:* ${account}`}`;
+          `*Zoom Account:* ${account}`;
         voidSlackNotify(supabase, interviewerSlackEmail, slackMsg);
       }
-      if (!isProject) {
-        const waPhone = interview.candidates?.whatsapp_number?.trim();
-        const watiName =
-          interview.candidates?.full_name?.trim() ||
+      const waPhone = isProject
+        ? interview.project_candidates?.whatsapp_number?.trim()
+        : interview.candidates?.whatsapp_number?.trim();
+      const watiName = isProject
+        ? interview.project_candidates?.full_name?.trim() ||
+          interview.project_candidates?.email ||
+          candName
+        : interview.candidates?.full_name?.trim() ||
           interview.candidates?.email ||
           candName;
-        void (async () => {
-          if (!waPhone) return;
-          try {
-            const ok = await sendWatiNotification(supabase, waPhone, "interview_", [
-              { name: "1", value: watiName },
-              { name: "2", value: formattedDateTime },
-              { name: "3", value: link },
-            ]);
-            if (!ok) onToast("WhatsApp notification failed to send");
-          } catch (err) {
-            console.error("WATI:", err);
-            onToast("WhatsApp notification failed to send");
-          }
-        })();
-      }
+      void (async () => {
+        if (!waPhone) return;
+        try {
+          const ok = await sendWatiNotification(supabase, waPhone, "interview_", [
+            { name: "1", value: watiName },
+            { name: "2", value: formattedDateTime },
+            { name: "3", value: link },
+          ]);
+          if (!ok) onToast("WhatsApp notification failed to send");
+        } catch (err) {
+          console.error("WATI:", err);
+          onToast("WhatsApp notification failed to send");
+        }
+      })();
 
       const toEmail = isProject
         ? interview.project_candidates?.email
@@ -294,20 +295,18 @@ export function AddZoomDetailsModal({
             />
           </label>
 
-          {!isProject ? (
-            <label className="block text-sm">
-              <span className={lab}>Zoom account (internal reference)</span>
-              <input
-                type="text"
-                required
-                className={inp}
-                placeholder="e.g. be10x@gmail.com or Be10x Main"
-                value={zoomAccount}
-                onChange={(e) => setZoomAccount(e.target.value)}
-                autoComplete="off"
-              />
-            </label>
-          ) : null}
+          <label className="block text-sm">
+            <span className={lab}>Zoom account (internal reference)</span>
+            <input
+              type="text"
+              required
+              className={inp}
+              placeholder="e.g. be10x@gmail.com or Be10x Main"
+              value={zoomAccount}
+              onChange={(e) => setZoomAccount(e.target.value)}
+              autoComplete="off"
+            />
+          </label>
 
           <div className="flex justify-end gap-2 pt-2">
             <button

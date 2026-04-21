@@ -122,8 +122,10 @@ export type ProjectInterviewWithProjectCandidate = {
   previous_scheduled_date: string | null;
   reschedule_reason: string | null;
   completed_at: string | null;
-  interviewer: string;
+  interviewer: string | null;
+  interviewer_assigned_at: string | null;
   zoom_link: string | null;
+  zoom_account: string | null;
   language: string | null;
   invitation_sent: boolean | null;
   poc: string | null;

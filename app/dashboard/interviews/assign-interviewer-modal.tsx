@@ -7,7 +7,10 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { logActivity } from "@/lib/activity-logger";
 import { getUserSafe } from "@/lib/supabase-auth";
-import { slackEmailForTeamMember } from "@/lib/slack-contacts";
+import {
+  POC_INTERVIEWER_SLACK_EMAILS,
+  slackEmailForTeamMember,
+} from "@/lib/slack-contacts";
 import { voidSlackNotify } from "@/lib/slack-client";
 import { modalOverlayClass, modalPanelClass } from "@/lib/modal-responsive";
 import {
@@ -15,7 +18,20 @@ import {
   mergeRosterWithCurrent,
 } from "@/lib/team-roster";
 
-import type { InterviewWithCandidate } from "./types";
+import type {
+  InterviewWithCandidate,
+  ProjectInterviewWithProjectCandidate,
+} from "./types";
+
+type AssignableInterview =
+  | InterviewWithCandidate
+  | ProjectInterviewWithProjectCandidate;
+
+function isProjectAssignInterview(
+  i: AssignableInterview,
+): i is ProjectInterviewWithProjectCandidate {
+  return "project_candidate_id" in i && Boolean(i.project_candidate_id);
+}
 
 function formatSlot(iso: string | null | undefined): string {
   if (!iso) return "—";
@@ -28,7 +44,7 @@ function formatSlot(iso: string | null | undefined): string {
 
 type Props = {
   open: boolean;
-  interview: InterviewWithCandidate | null;
+  interview: AssignableInterview | null;
   supabase: SupabaseClient;
   onClose: () => void;
   onSaved: () => void;
@@ -61,24 +77,31 @@ export function AssignInterviewerModal({
     return () => {
       active = false;
     };
-  }, [open, interview?.id]);
+  }, [open, interview?.id, interview?.interviewer]);
 
   if (!open || !interview) return null;
 
-  const candName =
-    interview.candidates?.full_name?.trim() ||
-    interview.candidates?.email ||
-    "Candidate";
+  const isProject = isProjectAssignInterview(interview);
+  const candName = isProject
+    ? interview.project_candidates?.project_title?.trim() ||
+      interview.project_candidates?.email ||
+      "Candidate"
+    : interview.candidates?.full_name?.trim() ||
+      interview.candidates?.email ||
+      "Candidate";
   const subtitle = `${candName} · ${formatSlot(interview.scheduled_date)}`;
 
   const inp =
     "mt-1 w-full rounded-xl border border-[#e5e5e5] px-3 py-2.5 text-sm text-[#1d1d1f] focus:border-[#3b82f6] focus:outline-none focus:ring-0";
   const lab = "text-xs font-medium uppercase tracking-widest text-[#aeaeb2]";
 
-  const pocName =
-    interview.poc?.trim() ||
-    interview.candidates?.poc_assigned?.trim() ||
-    "—";
+  const pocName = isProject
+    ? interview.poc?.trim() ||
+      interview.project_candidates?.poc_assigned?.trim() ||
+      "—"
+    : interview.poc?.trim() ||
+      interview.candidates?.poc_assigned?.trim() ||
+      "—";
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -90,8 +113,9 @@ export function AssignInterviewerModal({
     setSubmitting(true);
     try {
       const assignedAt = new Date().toISOString();
+      const table = isProject ? "project_interviews" : "interviews";
       const { error: upErr } = await supabase
-        .from("interviews")
+        .from(table)
         .update({
           interviewer,
           interviewer_assigned_at: assignedAt,
@@ -113,7 +137,9 @@ export function AssignInterviewerModal({
           entity_type: "interview",
           entity_id: interview.id,
           candidate_name: candName,
-          description: `Assigned ${interviewer} to interview ${candName}`,
+          description: isProject
+            ? `Assigned ${interviewer} to project interview for ${candName}`
+            : `Assigned ${interviewer} to interview ${candName}`,
           metadata: {},
         });
       }
@@ -123,12 +149,27 @@ export function AssignInterviewerModal({
         : "—";
       const slackEmail = await slackEmailForTeamMember(supabase, interviewer);
       if (slackEmail) {
+        const pipelineNote = isProject ? " (project interview)" : "";
         const slackMsg =
-          `📅 You have been assigned to interview *${candName}*\n` +
+          `📅 You have been assigned to interview *${candName}*${pipelineNote}\n` +
           `Date & Time: ${formattedDateTime}\n` +
           `POC: ${pocName}\n` +
           `Please be ready. Zoom details will be shared soon.`;
         voidSlackNotify(supabase, slackEmail, slackMsg);
+      }
+
+      if (isProject) {
+        const anushkaMsg =
+          `✅ Interviewer assigned (project pipeline)\n` +
+          `*Interviewer:* ${interviewer}\n` +
+          `*Project / candidate:* ${candName}\n` +
+          `*Date & Time:* ${formattedDateTime}\n` +
+          `*POC:* ${pocName}`;
+        voidSlackNotify(
+          supabase,
+          POC_INTERVIEWER_SLACK_EMAILS.Anushka,
+          anushkaMsg,
+        );
       }
 
       onSaved();

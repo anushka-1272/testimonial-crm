@@ -135,7 +135,7 @@ export function ScheduleInterviewModal({
       setError("Date and time are required.");
       return;
     }
-    if ((isProject || interviewType === "project") && !interviewer.trim()) {
+    if (!isProject && interviewType === "project" && !interviewer.trim()) {
       setError("Interviewer is required.");
       return;
     }
@@ -159,13 +159,14 @@ export function ScheduleInterviewModal({
         ? {
             project_candidate_id: projectCandidate!.id,
             scheduled_date: localIso,
-            interviewer,
-            zoom_link: zoomLink.trim() || null,
+            interviewer: null,
+            interviewer_assigned_at: null,
+            zoom_link: null,
             language: languageDisplay,
             poc: poc.trim() || null,
             remarks: remarks.trim() || null,
             interview_type: "project" as const,
-            interview_status: "scheduled" as const,
+            interview_status: "draft" as const,
             invitation_sent: false,
           }
         : {
@@ -222,7 +223,7 @@ export function ScheduleInterviewModal({
             entity_type: "interview",
             entity_id: row.id,
             candidate_name: candDisplay,
-            description: `Scheduled ${typeWord} interview for ${candDisplay} with ${interviewer} on ${dateLabel}`,
+            description: `Drafted ${typeWord} interview for ${candDisplay} on ${dateLabel}`,
             metadata: { time: timeLabel, project: true },
           });
         } else {
@@ -267,43 +268,23 @@ export function ScheduleInterviewModal({
         return;
       }
 
-      const toEmail = projectCandidate!.email;
-      const toName = projectCandidate!.project_title;
+      const anushkaProjectMsg =
+        `👋 New *project* interview draft needs an interviewer!\n` +
+        `*Project / candidate:* ${candDisplay}\n` +
+        `*Date & Time:* ${dateLabel} at ${timeLabel}\n` +
+        `*POC:* ${actorName}\n` +
+        `Please assign an interviewer in the CRM (Project Interviews → Scheduled).`;
+      voidSlackNotify(supabase, SLACK_ANUSHKA_EMAIL, anushkaProjectMsg);
 
-      const emailRes = await fetch("/api/send-email", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          type: "interview_confirmation",
-          to: toEmail,
-          name: toName,
-          date: dateLabel,
-          time: timeLabel,
-          zoom_link: zoomLink.trim() || "TBD",
-        }),
-      });
-
-      if (!emailRes.ok) {
-        const j = (await emailRes.json().catch(() => ({}))) as {
-          error?: string;
-        };
-        setError(j.error ?? "Interview saved but confirmation email failed.");
-        setSubmitting(false);
-        setLangPreset("english");
-        setOtherLanguageText("");
-        onCreated();
-        onClose();
-        return;
-      }
-
-      await supabase
-        .from(table)
-        .update({ invitation_sent: true })
-        .eq("id", row.id);
+      const dishProjectMsg =
+        `🗓️ New project interview draft created!\n` +
+        `*Project / candidate:* ${candDisplay}\n` +
+        `*Date & Time:* ${dateLabel} at ${timeLabel}\n` +
+        `Please wait for Anushka to assign an interviewer before adding Zoom details.`;
+      voidSlackNotify(supabase, SLACK_DISHAN_EMAIL, dishProjectMsg);
 
       setDate("");
       setTime("");
-      setZoomLink("");
       setPoc("");
       setRemarks("");
       setLangPreset("english");
@@ -381,7 +362,7 @@ export function ScheduleInterviewModal({
             </label>
           </div>
 
-          {(isProject || interviewType === "project") ? (
+          {!isProject && interviewType === "project" ? (
             <label className="block text-sm">
               <span className={lab}>Interviewer</span>
               <select
@@ -456,19 +437,6 @@ export function ScheduleInterviewModal({
             ) : null}
           </div>
 
-          {isProject ? (
-            <label className="block text-sm">
-              <span className={lab}>Zoom link</span>
-              <input
-                type="url"
-                className={inp}
-                placeholder="https://..."
-                value={zoomLink}
-                onChange={(e) => setZoomLink(e.target.value)}
-              />
-            </label>
-          ) : null}
-
           <label className="block text-sm">
             <span className={lab}>POC (assigned)</span>
             <div className="mt-1 rounded-xl border border-[#e5e5e5] bg-[#f5f5f7] px-3 py-2.5 text-sm text-[#6e6e73]">
@@ -499,11 +467,7 @@ export function ScheduleInterviewModal({
               disabled={submitting}
               className="rounded-xl bg-[#1d1d1f] px-4 py-2 text-sm font-medium text-white transition-all hover:bg-[#2d2d2f] disabled:opacity-50"
             >
-              {submitting
-                ? "Saving…"
-                : isProject
-                  ? "Create & send confirmation"
-                  : "Save as Draft"}
+              {submitting ? "Saving…" : "Save as Draft"}
             </button>
           </div>
         </form>

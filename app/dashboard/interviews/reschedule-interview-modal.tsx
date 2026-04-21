@@ -117,12 +117,10 @@ export function RescheduleInterviewModal({
         interviewer,
         interview_status: "draft",
         zoom_link: null,
+        zoom_account: null,
+        interviewer_assigned_at: null,
         invitation_sent: false,
       };
-      if (!isProjectIv(interview)) {
-        patch.zoom_account = null;
-        patch.interviewer_assigned_at = null;
-      }
       const { error: upErr } = await supabase
         .from(table)
         .update(patch)

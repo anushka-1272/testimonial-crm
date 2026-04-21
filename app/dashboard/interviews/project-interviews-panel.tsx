@@ -15,6 +15,7 @@ import {
 } from "@/lib/team-roster";
 
 import { AddZoomDetailsModal } from "./add-zoom-details-modal";
+import { AssignInterviewerModal } from "./assign-interviewer-modal";
 import type { ScheduleProjectCandidate } from "./schedule-interview-modal";
 import type {
   ProjectCandidateRow,
@@ -24,7 +25,7 @@ import type {
 const PAGE_SIZE = 20;
 
 /** Interview rows only — join `project_candidates` client-side so a failed embed never blocks loading candidates. */
-const PROJECT_INTERVIEW_COLUMNS = `id, created_at, project_candidate_id, scheduled_date, previous_scheduled_date, reschedule_reason, completed_at, interviewer, zoom_link, language, invitation_sent, poc, remarks, reminder_count, interview_status, post_interview_eligible, reward_item, category, funnel, comments, interview_type`;
+const PROJECT_INTERVIEW_COLUMNS = `id, created_at, project_candidate_id, scheduled_date, previous_scheduled_date, reschedule_reason, completed_at, interviewer, interviewer_assigned_at, zoom_link, zoom_account, language, invitation_sent, poc, remarks, reminder_count, interview_status, post_interview_eligible, reward_item, category, funnel, comments, interview_type`;
 
 type ProjectSubTab = "pending" | "scheduled" | "rescheduled" | "completed";
 
@@ -88,6 +89,9 @@ function normalizeProjectInterviewRow(
       (r.previous_scheduled_date as string | null) ?? null,
     reschedule_reason: (r.reschedule_reason as string | null) ?? null,
     completed_at: (r.completed_at as string | null) ?? null,
+    interviewer_assigned_at:
+      (r.interviewer_assigned_at as string | null) ?? null,
+    zoom_account: (r.zoom_account as string | null) ?? null,
     reward_item: (r.reward_item as string | null) ?? null,
     category: (r.category as string | null) ?? null,
     funnel: (r.funnel as string | null) ?? null,
@@ -138,6 +142,7 @@ type Props = {
   isAdmin: boolean;
   onError: (msg: string | null) => void;
   onPipelineChanged: () => void;
+  onToast?: (message: string) => void;
   onScheduleProject: (c: ScheduleProjectCandidate) => void;
   onPostProjectInterview: (i: ProjectInterviewWithProjectCandidate) => void;
   onRescheduleProjectInterview: (
@@ -153,11 +158,18 @@ const defaultFilters = (): Record<ProjectSubTab, TabFilters> => ({
   completed: { search: "", page: 0 },
 });
 
+function hasAssignedProjectInterviewer(
+  i: ProjectInterviewWithProjectCandidate,
+): boolean {
+  return Boolean(i.interviewer?.trim());
+}
+
 export function ProjectInterviewsPanel({
   supabase,
   isAdmin,
   onError,
   onPipelineChanged,
+  onToast,
   onScheduleProject,
   onPostProjectInterview,
   onRescheduleProjectInterview,
@@ -179,6 +191,8 @@ export function ProjectInterviewsPanel({
   const [sheetSyncBusy, setSheetSyncBusy] = useState(false);
   const [deleteBusyId, setDeleteBusyId] = useState<string | null>(null);
   const [addZoomFor, setAddZoomFor] =
+    useState<ProjectInterviewWithProjectCandidate | null>(null);
+  const [assignInterviewerFor, setAssignInterviewerFor] =
     useState<ProjectInterviewWithProjectCandidate | null>(null);
 
   const loadProjectData = useCallback(async () => {
@@ -591,6 +605,8 @@ export function ProjectInterviewsPanel({
   const tdInterviewer = `${tdBase} min-w-[120px] text-left`;
   const thReason = `${thBase} min-w-[180px] text-left`;
   const tdReason = `${tdBase} min-w-[180px] text-left text-[#6e6e73]`;
+  const thZoomStatus = `${thBase} min-w-[150px] text-left`;
+  const tdZoomStatus = `${tdBase} min-w-[150px] text-left align-top`;
   const thCompletedOn = `${thBase} min-w-[170px] text-left`;
   const tdCompletedOn = `${tdBase} min-w-[170px] text-left`;
   const thPostInterview = `${thBase} min-w-[160px] text-left`;
@@ -889,7 +905,7 @@ export function ProjectInterviewsPanel({
                     <th className={thProjTitle}>Project title</th>
                     <th className={thDateTime}>Date &amp; time</th>
                     <th className={thInterviewer}>Interviewer</th>
-                    <th className={thReason}>Zoom status</th>
+                    <th className={thZoomStatus}>Zoom status</th>
                     <th className={thPoc}>POC</th>
                     <th className={thActions}>Actions</th>
                   </tr>
@@ -907,8 +923,12 @@ export function ProjectInterviewsPanel({
                       if (!pc) return null;
                       const isDraftRow = i.interview_status === "draft";
                       const isScheduledRow = i.interview_status === "scheduled";
-                      const awaitingZoom = isDraftRow;
-                      const zoomAdded = isScheduledRow && Boolean(i.zoom_link?.trim());
+                      const hasIv = hasAssignedProjectInterviewer(i);
+                      const awaitingIv = isDraftRow && !hasIv;
+                      const awaitingZoom = isDraftRow && hasIv;
+                      const zoomAdded =
+                        isScheduledRow && Boolean(i.zoom_link?.trim());
+                      const zoomLink = i.zoom_link?.trim();
                       return (
                         <tr key={i.id}>
                           <td className={tdName}>
@@ -936,19 +956,33 @@ export function ProjectInterviewsPanel({
                               ) : null}
                             </div>
                           </td>
-                          <td className={tdInterviewer}>{i.interviewer}</td>
-                          <td className={tdReason}>
-                            {awaitingZoom ? (
-                              <span className="inline-flex rounded-full bg-[#fff7ed] px-2.5 py-1 text-xs font-medium text-[#c2410c]">
-                                Awaiting Zoom
-                              </span>
-                            ) : zoomAdded ? (
-                              <span className="inline-flex rounded-full bg-[#f0fdf4] px-2.5 py-1 text-xs font-medium text-[#15803d]">
-                                Zoom Added
-                              </span>
-                            ) : (
-                              <span className="text-[#6e6e73]">—</span>
-                            )}
+                          <td className={tdInterviewer}>
+                            {i.interviewer?.trim() || "—"}
+                          </td>
+                          <td className={tdZoomStatus}>
+                            <div className="flex flex-col items-start gap-2">
+                              {awaitingIv ? (
+                                <span className="inline-flex rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-600">
+                                  Awaiting Interviewer
+                                </span>
+                              ) : awaitingZoom ? (
+                                <span className="inline-flex rounded-full bg-[#fff7ed] px-2.5 py-1 text-xs font-medium text-[#c2410c]">
+                                  Awaiting Zoom
+                                </span>
+                              ) : zoomAdded ? (
+                                <span className="inline-flex rounded-full bg-[#f0fdf4] px-2.5 py-1 text-xs font-medium text-[#15803d]">
+                                  Zoom Added
+                                </span>
+                              ) : (
+                                <span className="text-[#6e6e73]">—</span>
+                              )}
+                              {isScheduledRow &&
+                              i.zoom_account?.trim() ? (
+                                <p className="text-xs text-[#6e6e73]">
+                                  Account: {i.zoom_account.trim()}
+                                </p>
+                              ) : null}
+                            </div>
                           </td>
                           <td className={tdPoc}>
                             {i.poc?.trim() ||
@@ -957,18 +991,45 @@ export function ProjectInterviewsPanel({
                           </td>
                           <td className={tdActions}>
                             <div className="flex flex-wrap items-center justify-end gap-2">
+                              {isDraftRow && !hasIv ? (
+                                <button
+                                  type="button"
+                                  className="rounded-lg bg-[#2563eb] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#1d4ed8]"
+                                  onClick={() => setAssignInterviewerFor(i)}
+                                >
+                                  Assign Interviewer
+                                </button>
+                              ) : null}
                               {isDraftRow ? (
                                 <button
                                   type="button"
-                                  className="rounded-lg border border-[#1d1d1f] bg-white px-3 py-1.5 text-xs font-medium text-[#1d1d1f] hover:bg-[#fafafa]"
-                                  onClick={() => setAddZoomFor(i)}
+                                  disabled={!hasIv}
+                                  title={
+                                    !hasIv
+                                      ? "Assign interviewer first"
+                                      : undefined
+                                  }
+                                  className="rounded-lg border border-[#1d1d1f] bg-white px-3 py-1.5 text-xs font-medium text-[#1d1d1f] hover:bg-[#fafafa] disabled:cursor-not-allowed disabled:border-[#d1d5db] disabled:text-[#9ca3af]"
+                                  onClick={() =>
+                                    hasIv ? setAddZoomFor(i) : undefined
+                                  }
                                 >
                                   Add Zoom Details
                                 </button>
                               ) : null}
+                              {isScheduledRow && zoomLink ? (
+                                <a
+                                  href={zoomLink}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex rounded-lg border border-[#e5e5e5] bg-white px-3 py-1.5 text-xs font-medium text-[#1d1d1f] transition-colors hover:bg-[#f5f5f7]"
+                                >
+                                  Join
+                                </a>
+                              ) : null}
                               <button
                                 type="button"
-                                className="rounded-lg bg-[#ea580c] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#c2410c]"
+                                className="rounded-lg bg-[#ea580c] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#c2410c] disabled:cursor-not-allowed disabled:bg-[#d1d5db] disabled:text-[#6b7280]"
                                 onClick={() =>
                                   onRescheduleProjectInterview(
                                     i,
@@ -976,14 +1037,24 @@ export function ProjectInterviewsPanel({
                                   )
                                 }
                                 disabled={!isScheduledRow}
+                                title={
+                                  !isScheduledRow
+                                    ? "Disabled until Zoom is added"
+                                    : undefined
+                                }
                               >
                                 Reschedule
                               </button>
                               <button
                                 type="button"
-                                className="rounded-lg bg-[#16a34a] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#15803d]"
+                                className="rounded-lg bg-[#16a34a] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#15803d] disabled:cursor-not-allowed disabled:bg-[#d1d5db] disabled:text-[#6b7280]"
                                 onClick={() => onPostProjectInterview(i)}
                                 disabled={!isScheduledRow}
+                                title={
+                                  !isScheduledRow
+                                    ? "Disabled until Zoom is added"
+                                    : undefined
+                                }
                               >
                                 Mark completed
                               </button>
@@ -1313,6 +1384,19 @@ export function ProjectInterviewsPanel({
         onClose={() => setDetail(null)}
       />
 
+      <AssignInterviewerModal
+        key={assignInterviewerFor?.id ?? "project-assign-iv-closed"}
+        open={!!assignInterviewerFor}
+        interview={assignInterviewerFor}
+        supabase={supabase}
+        onClose={() => setAssignInterviewerFor(null)}
+        onSaved={() => {
+          setAssignInterviewerFor(null);
+          void loadProjectData();
+          onPipelineChanged();
+        }}
+      />
+
       <AddZoomDetailsModal
         key={addZoomFor?.id ?? "project-add-zoom-closed"}
         open={!!addZoomFor}
@@ -1324,7 +1408,10 @@ export function ProjectInterviewsPanel({
           void loadProjectData();
           onPipelineChanged();
         }}
-        onToast={() => {}}
+        onToast={(msg) => {
+          if (onToast) onToast(msg);
+          else onError(msg);
+        }}
       />
     </>
   );

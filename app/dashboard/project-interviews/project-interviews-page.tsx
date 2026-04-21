@@ -233,6 +233,7 @@ export function ProjectInterviewsPage() {
           isAdmin={role === "admin"}
           onError={setError}
           onPipelineChanged={refreshStats}
+          onToast={(msg) => setToastMessage(msg)}
           onScheduleProject={(c) => {
             setScheduleProjectFor(c);
           }}
