@@ -22,7 +22,11 @@ import {
   mergeRosterWithCurrent,
 } from "@/lib/team-roster";
 
-import type { InterviewWithCandidate } from "./types";
+import {
+  isProjectInterviewRow,
+  type InterviewWithCandidate,
+  type ProjectInterviewWithProjectCandidate,
+} from "./types";
 
 const LANG_CARD_ORDER: { key: InterviewLangPreset | "other"; label: string }[] =
   [
@@ -37,6 +41,10 @@ const LANG_CARD_ORDER: { key: InterviewLangPreset | "other"; label: string }[] =
 
 type LangCardKey = (typeof LANG_CARD_ORDER)[number]["key"];
 
+export type EditableInterviewDetails =
+  | InterviewWithCandidate
+  | ProjectInterviewWithProjectCandidate;
+
 function scheduledToParts(iso: string | null | undefined): {
   date: string;
   time: string;
@@ -50,13 +58,51 @@ function scheduledToParts(iso: string | null | undefined): {
   }
 }
 
+function activityCandidateName(interview: EditableInterviewDetails): string {
+  if (isProjectInterviewRow(interview)) {
+    const pc = interview.project_candidates;
+    if (!pc) return "Candidate";
+    const fn = pc.full_name?.trim();
+    if (fn) return fn;
+    const title = pc.project_title?.trim();
+    if (title) return title;
+    const e = pc.email?.trim();
+    if (e) return e;
+    return "Candidate";
+  }
+  return (
+    interview.candidates?.full_name?.trim() ||
+    interview.candidates?.email ||
+    "Candidate"
+  );
+}
+
+function slackCandidateLabel(interview: EditableInterviewDetails): string {
+  if (isProjectInterviewRow(interview)) {
+    return (
+      interview.project_candidates?.project_title?.trim() ||
+      interview.project_candidates?.email ||
+      "Candidate"
+    );
+  }
+  return (
+    interview.candidates?.full_name?.trim() ||
+    interview.candidates?.email ||
+    "Candidate"
+  );
+}
+
 type Props = {
   open: boolean;
-  interview: InterviewWithCandidate | null;
+  interview: EditableInterviewDetails | null;
   supabase: SupabaseClient;
   onClose: () => void;
   onSaved: () => void;
+  /** Shown after a successful save (e.g. testimonial / project interviews board toast). */
+  onToast?: (message: string) => void;
 };
+
+const SAVE_SUCCESS_TOAST = "Interview details saved.";
 
 export function EditInterviewDetailsModal({
   open,
@@ -64,11 +110,15 @@ export function EditInterviewDetailsModal({
   supabase,
   onClose,
   onSaved,
+  onToast,
 }: Props) {
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
   const [interviewerOptions, setInterviewerOptions] = useState<string[]>([]);
   const [interviewer, setInterviewer] = useState("");
+  const [pocOptions, setPocOptions] = useState<string[]>([]);
+  const [poc, setPoc] = useState("");
+  const [remarks, setRemarks] = useState("");
   const [langPreset, setLangPreset] = useState<LangCardKey>("english");
   const [otherLanguageText, setOtherLanguageText] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -91,38 +141,49 @@ export function EditInterviewDetailsModal({
       setOtherLanguageText("");
     }
 
+    const initialPoc =
+      interview.poc?.trim() ||
+      (isProjectInterviewRow(interview)
+        ? interview.project_candidates?.poc_assigned?.trim()
+        : interview.candidates?.poc_assigned?.trim()) ||
+      "";
+    setPoc(initialPoc);
+    setRemarks(interview.remarks?.trim() ?? "");
+
     let active = true;
     void (async () => {
-      const names = await fetchTeamRosterNames(supabase, "interviewer", true);
-      const current = interview.interviewer?.trim() || null;
-      const options = mergeRosterWithCurrent(names, current);
+      const [ivNames, pocNames] = await Promise.all([
+        fetchTeamRosterNames(supabase, "interviewer", true),
+        fetchTeamRosterNames(supabase, "poc", true),
+      ]);
+      const currentIv = interview.interviewer?.trim() || null;
+      const ivOpts = mergeRosterWithCurrent(ivNames, currentIv);
+      const pocOpts = mergeRosterWithCurrent(pocNames, initialPoc || null);
       if (!active) return;
-      setInterviewerOptions(options);
-      setInterviewer(current ?? "");
+      setInterviewerOptions(ivOpts);
+      setInterviewer(currentIv ?? "");
+      setPocOptions(pocOpts);
     })();
     return () => {
       active = false;
     };
   }, [
     open,
-    interview?.id,
-    interview?.scheduled_date,
-    interview?.interviewer,
-    interview?.interview_language,
-    interview?.language,
+    interview,
     supabase,
   ]);
 
   if (!open || !interview) return null;
 
-  const candName =
-    interview.candidates?.full_name?.trim() ||
-    interview.candidates?.email ||
-    "Candidate";
+  const isProject = isProjectInterviewRow(interview);
+  const candName = activityCandidateName(interview);
+  const slackCand = slackCandidateLabel(interview);
 
   const pocName =
     interview.poc?.trim() ||
-    interview.candidates?.poc_assigned?.trim() ||
+    (isProject
+      ? interview.project_candidates?.poc_assigned?.trim()
+      : interview.candidates?.poc_assigned?.trim()) ||
     "—";
 
   const isScheduledStatus = interview.interview_status === "scheduled";
@@ -156,15 +217,25 @@ export function EditInterviewDetailsModal({
       otherLanguageText,
     );
     const localIso = new Date(`${date}T${time}`).toISOString();
+    const nextPoc = poc.trim();
+    const nextRemarks = remarks.trim();
 
     setSubmitting(true);
     try {
+      const table = isProject ? "project_interviews" : "interviews";
       const patch: Record<string, string | null> = {
         scheduled_date: localIso,
-        interview_language: langSubmit.value,
-        language: languageDisplay,
         interviewer: nextIv || null,
+        poc: nextPoc || null,
+        remarks: nextRemarks || null,
       };
+
+      if (!isProject) {
+        patch.interview_language = langSubmit.value;
+        patch.language = languageDisplay;
+      } else {
+        patch.language = languageDisplay;
+      }
 
       if (nextIv !== prevIv) {
         patch.interviewer_assigned_at = nextIv
@@ -173,7 +244,7 @@ export function EditInterviewDetailsModal({
       }
 
       const { error: upErr } = await supabase
-        .from("interviews")
+        .from(table)
         .update(patch)
         .eq("id", interview.id);
 
@@ -194,9 +265,12 @@ export function EditInterviewDetailsModal({
           candidate_name: candName,
           description: `Updated interview details for ${candName}`,
           metadata: {
+            pipeline: isProject ? "project" : "testimonial",
             scheduled_date: localIso,
             interviewer: nextIv || null,
             interview_language: langSubmit.value,
+            poc: nextPoc || null,
+            remarks: nextRemarks || null,
           },
         });
       }
@@ -208,10 +282,12 @@ export function EditInterviewDetailsModal({
         );
         const slackEmail = await slackEmailForTeamMember(supabase, nextIv);
         if (slackEmail) {
+          const pipelineNote = isProject ? " (project interview)" : "";
+          const slackPocDisplay = nextPoc || pocName;
           const slackMsg =
-            `📅 Interview details updated — you are assigned to interview *${candName}*\n` +
+            `📅 Interview details updated — you are assigned to interview *${slackCand}*${pipelineNote}\n` +
             `Date & Time: ${formattedDateTime}\n` +
-            `POC: ${pocName}\n` +
+            `POC: ${slackPocDisplay}\n` +
             `Please check the CRM for Zoom details.`;
           voidSlackNotify(supabase, slackEmail, slackMsg);
         }
@@ -219,6 +295,7 @@ export function EditInterviewDetailsModal({
 
       onSaved();
       onClose();
+      onToast?.(SAVE_SUCCESS_TOAST);
     } catch {
       setError("Something went wrong.");
     }
@@ -298,6 +375,33 @@ export function EditInterviewDetailsModal({
                 </option>
               ))}
             </select>
+          </label>
+
+          <label className="block text-sm">
+            <span className={lab}>POC</span>
+            <select
+              className={inp}
+              value={poc}
+              onChange={(e) => setPoc(e.target.value)}
+            >
+              <option value="">— Not set —</option>
+              {pocOptions.map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="block text-sm">
+            <span className={lab}>Remarks</span>
+            <textarea
+              className={`${inp} min-h-[88px] resize-y`}
+              value={remarks}
+              onChange={(e) => setRemarks(e.target.value)}
+              rows={3}
+              placeholder="Optional notes…"
+            />
           </label>
 
           <div className="block text-sm">

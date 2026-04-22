@@ -9,6 +9,7 @@ import { logActivity } from "@/lib/activity-logger";
 import { getUserSafe } from "@/lib/supabase-auth";
 import {
   POC_INTERVIEWER_SLACK_EMAILS,
+  SLACK_DISHAN_EMAIL,
   slackEmailForTeamMember,
 } from "@/lib/slack-contacts";
 import { voidSlackNotify } from "@/lib/slack-client";
@@ -18,20 +19,21 @@ import {
   mergeRosterWithCurrent,
 } from "@/lib/team-roster";
 
+import {
+  isPostRescheduleDraftRow,
+  rescheduleCandidateDisplayName,
+  rescheduleKindFromInterview,
+  slackStep2InterviewerAssignedDishan,
+} from "./interview-reschedule-workflow";
 import type {
   InterviewWithCandidate,
   ProjectInterviewWithProjectCandidate,
 } from "./types";
+import { isProjectInterviewRow } from "./types";
 
 type AssignableInterview =
   | InterviewWithCandidate
   | ProjectInterviewWithProjectCandidate;
-
-function isProjectAssignInterview(
-  i: AssignableInterview,
-): i is ProjectInterviewWithProjectCandidate {
-  return "project_candidate_id" in i && Boolean(i.project_candidate_id);
-}
 
 function formatSlot(iso: string | null | undefined): string {
   if (!iso) return "—";
@@ -81,14 +83,10 @@ export function AssignInterviewerModal({
 
   if (!open || !interview) return null;
 
-  const isProject = isProjectAssignInterview(interview);
-  const candName = isProject
-    ? interview.project_candidates?.project_title?.trim() ||
-      interview.project_candidates?.email ||
-      "Candidate"
-    : interview.candidates?.full_name?.trim() ||
-      interview.candidates?.email ||
-      "Candidate";
+  const kind = rescheduleKindFromInterview(interview);
+  const isProject = isProjectInterviewRow(interview);
+  const candName = rescheduleCandidateDisplayName(interview, kind);
+  const postRescheduleDraft = isPostRescheduleDraftRow(interview);
   const subtitle = `${candName} · ${formatSlot(interview.scheduled_date)}`;
 
   const inp =
@@ -130,6 +128,11 @@ export function AssignInterviewerModal({
 
       const authUser = await getUserSafe(supabase);
       if (authUser) {
+        const description = postRescheduleDraft
+          ? `Interviewer assigned after reschedule for ${candName}`
+          : isProject
+            ? `Assigned ${interviewer} to project interview for ${candName}`
+            : `Assigned ${interviewer} to interview ${candName}`;
         await logActivity({
           supabase,
           user: authUser,
@@ -137,9 +140,7 @@ export function AssignInterviewerModal({
           entity_type: "interview",
           entity_id: interview.id,
           candidate_name: candName,
-          description: isProject
-            ? `Assigned ${interviewer} to project interview for ${candName}`
-            : `Assigned ${interviewer} to interview ${candName}`,
+          description,
           metadata: {},
         });
       }
@@ -158,7 +159,13 @@ export function AssignInterviewerModal({
         voidSlackNotify(supabase, slackEmail, slackMsg);
       }
 
-      if (isProject) {
+      if (postRescheduleDraft) {
+        voidSlackNotify(
+          supabase,
+          SLACK_DISHAN_EMAIL,
+          slackStep2InterviewerAssignedDishan(candName, kind),
+        );
+      } else if (isProject) {
         const anushkaMsg =
           `✅ Interviewer assigned (project pipeline)\n` +
           `*Interviewer:* ${interviewer}\n` +

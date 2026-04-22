@@ -5,25 +5,19 @@ import { useEffect, useState } from "react";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { logActivity } from "@/lib/activity-logger";
 import { modalOverlayClass, modalPanelClass } from "@/lib/modal-responsive";
-import { POC_INTERVIEWER_SLACK_EMAILS, SLACK_DISHAN_EMAIL } from "@/lib/slack-contacts";
-import { voidSlackNotify } from "@/lib/slack-client";
-import { fetchTeamRosterNames } from "@/lib/team-roster";
-import { getUserSafe } from "@/lib/supabase-auth";
 
+import {
+  handleReschedule,
+  rescheduleKindFromInterview,
+} from "./interview-reschedule-workflow";
 import type {
   InterviewWithCandidate,
   ProjectInterviewWithProjectCandidate,
 } from "./types";
+import { isProjectInterviewRow } from "./types";
 
 type AnyInterview = InterviewWithCandidate | ProjectInterviewWithProjectCandidate;
-
-function isProjectIv(
-  i: AnyInterview | null,
-): i is ProjectInterviewWithProjectCandidate {
-  return i != null && "project_candidate_id" in i && Boolean(i.project_candidate_id);
-}
 
 type Props = {
   open: boolean;
@@ -44,8 +38,6 @@ export function RescheduleInterviewModal({
 }: Props) {
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
-  const [interviewerOptions, setInterviewerOptions] = useState<string[]>([]);
-  const [interviewer, setInterviewer] = useState("");
   const [reason, setReason] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -55,27 +47,11 @@ export function RescheduleInterviewModal({
     const d = parseISO(interview.scheduled_date);
     setDate(format(d, "yyyy-MM-dd"));
     setTime(format(d, "HH:mm"));
-    const raw = interview.interviewer?.trim();
-    setInterviewer(raw || "");
     setReason(
       mode === "from_rescheduled" ? (interview.reschedule_reason ?? "") : "",
     );
     setError(null);
   }, [open, interview?.id, interview?.scheduled_date, mode]);
-
-  useEffect(() => {
-    if (!open) return;
-    let active = true;
-    void (async () => {
-      const names = await fetchTeamRosterNames(supabase, "interviewer", true);
-      if (!active) return;
-      setInterviewerOptions(names);
-      setInterviewer((prev) => prev || names[0] || "");
-    })();
-    return () => {
-      active = false;
-    };
-  }, [open, supabase]);
 
   if (!open || !interview) return null;
 
@@ -86,10 +62,6 @@ export function RescheduleInterviewModal({
       setError("Date and time are required.");
       return;
     }
-    if (!interviewer.trim()) {
-      setError("Interviewer is required.");
-      return;
-    }
     if (!reason.trim()) {
       setError("Reschedule reason is required.");
       return;
@@ -98,69 +70,19 @@ export function RescheduleInterviewModal({
     const localIso = new Date(`${date}T${time}`).toISOString();
     setSubmitting(true);
 
-    const table = isProjectIv(interview) ? "project_interviews" : "interviews";
     const reasonText = reason.trim();
-    const formattedDateTime = format(parseISO(localIso), "dd MMM yyyy, h:mm a");
-    const candDisplay = isProjectIv(interview)
-      ? interview.project_candidates?.project_title?.trim() ||
-        interview.project_candidates?.email ||
-        "Candidate"
-      : interview.candidates?.full_name?.trim() ||
-        interview.candidates?.email ||
-        "Candidate";
+    const type = rescheduleKindFromInterview(interview);
 
     try {
-      const patch: Record<string, unknown> = {
-        previous_scheduled_date: interview.scheduled_date,
-        reschedule_reason: reasonText,
-        scheduled_date: localIso,
-        interviewer,
-        interview_status: "draft",
-        zoom_link: null,
-        zoom_account: null,
-        interviewer_assigned_at: null,
-        invitation_sent: false,
-      };
-      const { error: upErr } = await supabase
-        .from(table)
-        .update(patch)
-        .eq("id", interview.id);
-      if (upErr) {
-        setError(upErr.message);
+      const result = await handleReschedule(supabase, interview, type, {
+        scheduledDateIso: localIso,
+        reasonText,
+      });
+      if (!result.ok) {
+        setError(result.error);
         setSubmitting(false);
         return;
       }
-
-      const authRe = await getUserSafe(supabase);
-      if (authRe) {
-        await logActivity({
-          supabase,
-          user: authRe,
-          action_type: "interviews",
-          entity_type: "interview",
-          entity_id: interview.id,
-          candidate_name: candDisplay,
-          description: `Rescheduled interview for ${candDisplay} — moved to Draft (Awaiting Zoom). Reason: ${reasonText}`,
-        });
-      }
-
-      if (!isProjectIv(interview)) {
-        const anushkaMsg =
-          `🔄 Interview rescheduled for *${candDisplay}*\n` +
-          `New Date & Time: ${formattedDateTime}\n` +
-          `Interviewer: ${interviewer}\n` +
-          `Reason: ${reasonText}\n` +
-          `Please confirm interviewer assignment.`;
-        voidSlackNotify(supabase, POC_INTERVIEWER_SLACK_EMAILS.Anushka, anushkaMsg);
-      }
-
-      const dishanMsg =
-        `🔄 Rescheduled interview needs new Zoom details!\n` +
-        `*Candidate:* ${candDisplay}\n` +
-        `*New Date & Time:* ${formattedDateTime}\n` +
-        `*Interviewer:* ${interviewer}\n` +
-        `Please add new Zoom link in the CRM.`;
-      voidSlackNotify(supabase, SLACK_DISHAN_EMAIL, dishanMsg);
 
       setDate("");
       setTime("");
@@ -193,7 +115,7 @@ export function RescheduleInterviewModal({
           <div>
             <h2 className="text-lg font-semibold text-[#1d1d1f]">{title}</h2>
             <p className="text-sm text-[#6e6e73]">
-              {isProjectIv(interview)
+              {isProjectInterviewRow(interview)
                 ? `${interview.project_candidates?.project_title?.trim() || "Project"} · ${interview.project_candidates?.email ?? ""}`
                 : `${interview.candidates?.full_name ?? "Candidate"} · ${interview.candidates?.email}`}
             </p>
@@ -236,25 +158,6 @@ export function RescheduleInterviewModal({
               />
             </label>
           </div>
-
-          <label className="block text-sm">
-            <span className={lab}>Interviewer</span>
-            <select
-              className={inp}
-              value={interviewer}
-              onChange={(e) => setInterviewer(e.target.value)}
-            >
-              {interviewerOptions.length === 0 ? (
-                <option value="">No active interviewers</option>
-              ) : (
-                interviewerOptions.map((n) => (
-                  <option key={n} value={n}>
-                    {n}
-                  </option>
-                ))
-              )}
-            </select>
-          </label>
 
           <label className="block text-sm">
             <span className={lab}>

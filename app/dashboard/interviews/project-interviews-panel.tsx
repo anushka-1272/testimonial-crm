@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { useAccessControl } from "@/components/access-control-context";
 import { ProjectCandidateDetailModal } from "@/components/project-candidate-detail-modal";
 import { logActivity } from "@/lib/activity-logger";
 import { displayNameFromUser, getUserSafe } from "@/lib/supabase-auth";
@@ -20,6 +21,7 @@ import {
 
 import { AddZoomDetailsModal } from "./add-zoom-details-modal";
 import { AssignInterviewerModal } from "./assign-interviewer-modal";
+import { EditInterviewDetailsModal } from "./edit-interview-details-modal";
 import type { ScheduleProjectCandidate } from "./schedule-interview-modal";
 import type {
   ProjectCandidateRow,
@@ -255,6 +257,13 @@ export function ProjectInterviewsPanel({
     useState<ProjectInterviewWithProjectCandidate | null>(null);
   const [assignInterviewerFor, setAssignInterviewerFor] =
     useState<ProjectInterviewWithProjectCandidate | null>(null);
+  const [editInterviewFor, setEditInterviewFor] =
+    useState<ProjectInterviewWithProjectCandidate | null>(null);
+
+  const { role, canEditCurrentPage } = useAccessControl();
+  const canEditScheduledTab =
+    canEditCurrentPage &&
+    (role === "admin" || role === "interviewer" || role === "operations");
 
   const loadProjectData = useCallback(async () => {
     const { data: pc, error: eCandidates } = await supabase
@@ -1097,6 +1106,23 @@ export function ProjectInterviewsPanel({
                           </td>
                           <td className={tdActions}>
                             <div className="flex flex-wrap items-center justify-end gap-2">
+                              <button
+                                type="button"
+                                disabled={!canEditScheduledTab}
+                                title={
+                                  !canEditScheduledTab
+                                    ? "View only"
+                                    : undefined
+                                }
+                                className="rounded-lg border border-[#d4d4d8] bg-white px-3 py-1.5 text-xs font-medium text-[#1d1d1f] hover:bg-[#fafafa] disabled:cursor-not-allowed disabled:border-[#d1d5db] disabled:text-[#9ca3af]"
+                                onClick={() =>
+                                  canEditScheduledTab
+                                    ? setEditInterviewFor(i)
+                                    : undefined
+                                }
+                              >
+                                Edit
+                              </button>
                               {isDraftRow && !hasIv ? (
                                 <button
                                   type="button"
@@ -1556,6 +1582,25 @@ export function ProjectInterviewsPanel({
           if (onToast) onToast(msg);
           else onError(msg);
         }}
+      />
+
+      <EditInterviewDetailsModal
+        key={editInterviewFor?.id ?? "project-edit-iv-closed"}
+        open={!!editInterviewFor}
+        interview={editInterviewFor}
+        supabase={supabase}
+        onClose={() => setEditInterviewFor(null)}
+        onSaved={() => {
+          void loadProjectData();
+          onPipelineChanged();
+        }}
+        onToast={
+          onToast
+            ? (msg) => {
+                onToast(msg);
+              }
+            : undefined
+        }
       />
     </>
   );

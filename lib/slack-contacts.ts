@@ -4,6 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 export const POC_INTERVIEWER_SLACK_EMAILS: Record<string, string> = {
   Harika: "harika.pydi@houseofedtech.in",
   Anushka: "anushka@houseofedtech.in",
+  "Anushka Roy": "anushka.roy.ost@houseofedtech.in",
   Gargi: "gargi.rani.pathak@houseofedtech.in",
   Mudit: "mudit.saxena@houseofedtech.in",
 };

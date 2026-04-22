@@ -3005,6 +3005,7 @@ export function InterviewsBoard() {
         supabase={supabase}
         onClose={() => setEditInterviewFor(null)}
         onSaved={() => void loadData()}
+        onToast={(msg) => setToastMessage(msg)}
       />
 
       <CandidateDetailModal

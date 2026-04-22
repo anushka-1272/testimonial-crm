@@ -12,31 +12,17 @@ import { modalOverlayClass, modalPanelClass } from "@/lib/modal-responsive";
 import { voidSlackNotify } from "@/lib/slack-client";
 import { sendWatiNotification } from "@/lib/wati-client";
 
+import {
+  rescheduleCandidateDisplayName,
+  rescheduleKindFromInterview,
+} from "./interview-reschedule-workflow";
 import type {
   InterviewWithCandidate,
   ProjectInterviewWithProjectCandidate,
 } from "./types";
+import { isProjectInterviewRow } from "./types";
 
 type AnyInterview = InterviewWithCandidate | ProjectInterviewWithProjectCandidate;
-
-function isProjectIv(
-  i: AnyInterview | null,
-): i is ProjectInterviewWithProjectCandidate {
-  return i != null && "project_candidate_id" in i && Boolean(i.project_candidate_id);
-}
-
-function actorLabel(
-  user: {
-    user_metadata?: { name?: string };
-    email?: string;
-  } | null,
-): string {
-  if (!user) return "User";
-  const n = user.user_metadata?.name;
-  if (typeof n === "string" && n.trim()) return n.trim();
-  if (user.email) return user.email;
-  return "User";
-}
 
 function formatSlot(iso: string | null | undefined): string {
   if (!iso) return "—";
@@ -78,14 +64,9 @@ export function AddZoomDetailsModal({
 
   if (!open || !interview) return null;
 
-  const isProject = isProjectIv(interview);
-  const candName = isProject
-    ? interview.project_candidates?.project_title?.trim() ||
-      interview.project_candidates?.email ||
-      "Candidate"
-    : interview.candidates?.full_name?.trim() ||
-      interview.candidates?.email ||
-      "Candidate";
+  const kind = rescheduleKindFromInterview(interview);
+  const isProject = isProjectInterviewRow(interview);
+  const candName = rescheduleCandidateDisplayName(interview, kind);
   const ivLabel = interview.interviewer?.trim() || "—";
   const subtitle = `${candName} · ${formatSlot(interview.scheduled_date)} · Interviewer: ${ivLabel}`;
 
@@ -146,7 +127,7 @@ export function AddZoomDetailsModal({
           entity_type: "interview",
           entity_id: interview.id,
           candidate_name: candName,
-          description: `Zoom details added for ${candName} by ${actorLabel(authUser)}`,
+          description: `Zoom link added for ${candName}`,
           metadata: {},
         });
       }
