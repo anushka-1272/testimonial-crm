@@ -5,6 +5,11 @@ import { useEffect, useState } from "react";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import {
+  buildInterviewerSelectOptions,
+  normalizeStoredInterviewerValue,
+  type InterviewerSelectOption,
+} from "@/lib/interviewer-enum";
 import { logActivity } from "@/lib/activity-logger";
 import { getUserSafe } from "@/lib/supabase-auth";
 import {
@@ -14,10 +19,7 @@ import {
 } from "@/lib/slack-contacts";
 import { voidSlackNotify } from "@/lib/slack-client";
 import { modalOverlayClass, modalPanelClass } from "@/lib/modal-responsive";
-import {
-  fetchTeamRosterNames,
-  mergeRosterWithCurrent,
-} from "@/lib/team-roster";
+import { fetchTeamRosterNames } from "@/lib/team-roster";
 
 import {
   isPostRescheduleDraftRow,
@@ -59,7 +61,9 @@ export function AssignInterviewerModal({
   onClose,
   onSaved,
 }: Props) {
-  const [interviewerOptions, setInterviewerOptions] = useState<string[]>([]);
+  const [interviewerOptions, setInterviewerOptions] = useState<
+    InterviewerSelectOption[]
+  >([]);
   const [interviewer, setInterviewer] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -71,10 +75,17 @@ export function AssignInterviewerModal({
     void (async () => {
       const names = await fetchTeamRosterNames(supabase, "interviewer", true);
       const current = interview?.interviewer?.trim() || null;
-      const options = mergeRosterWithCurrent(names, current);
+      const options = buildInterviewerSelectOptions(names, current);
       if (!active) return;
       setInterviewerOptions(options);
-      setInterviewer(current || options[0] || "");
+      const enumFromDb = normalizeStoredInterviewerValue(current);
+      const initial =
+        (enumFromDb && options.some((o) => o.value === enumFromDb)
+          ? enumFromDb
+          : null) ??
+        options[0]?.value ??
+        "";
+      setInterviewer(initial);
     })();
     return () => {
       active = false;
@@ -126,13 +137,17 @@ export function AssignInterviewerModal({
         return;
       }
 
+      const ivLabel =
+        interviewerOptions.find((o) => o.value === interviewer)?.label ??
+        interviewer;
+
       const authUser = await getUserSafe(supabase);
       if (authUser) {
         const description = postRescheduleDraft
           ? `Interviewer assigned after reschedule for ${candName}`
           : isProject
-            ? `Assigned ${interviewer} to project interview for ${candName}`
-            : `Assigned ${interviewer} to interview ${candName}`;
+            ? `Assigned ${ivLabel} to project interview for ${candName}`
+            : `Assigned ${ivLabel} to interview ${candName}`;
         await logActivity({
           supabase,
           user: authUser,
@@ -168,7 +183,7 @@ export function AssignInterviewerModal({
       } else if (isProject) {
         const anushkaMsg =
           `✅ Interviewer assigned (project pipeline)\n` +
-          `*Interviewer:* ${interviewer}\n` +
+          `*Interviewer:* ${ivLabel}\n` +
           `*Project / candidate:* ${candName}\n` +
           `*Date & Time:* ${formattedDateTime}\n` +
           `*POC:* ${pocName}`;
@@ -231,9 +246,9 @@ export function AssignInterviewerModal({
               {interviewerOptions.length === 0 ? (
                 <option value="">No active interviewers</option>
               ) : (
-                interviewerOptions.map((n) => (
-                  <option key={n} value={n}>
-                    {n}
+                interviewerOptions.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
                   </option>
                 ))
               )}

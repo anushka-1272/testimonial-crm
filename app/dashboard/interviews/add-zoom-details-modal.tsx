@@ -12,6 +12,8 @@ import { modalOverlayClass, modalPanelClass } from "@/lib/modal-responsive";
 import { voidSlackNotify } from "@/lib/slack-client";
 import { sendWatiNotification } from "@/lib/wati-client";
 
+import { formatInterviewerStoredForUi } from "@/lib/interviewer-enum";
+
 import {
   rescheduleCandidateDisplayName,
   rescheduleKindFromInterview,
@@ -67,7 +69,7 @@ export function AddZoomDetailsModal({
   const kind = rescheduleKindFromInterview(interview);
   const isProject = isProjectInterviewRow(interview);
   const candName = rescheduleCandidateDisplayName(interview, kind);
-  const ivLabel = interview.interviewer?.trim() || "—";
+  const ivLabel = formatInterviewerStoredForUi(interview.interviewer);
   const subtitle = `${candName} · ${formatSlot(interview.scheduled_date)} · Interviewer: ${ivLabel}`;
 
   const inp =

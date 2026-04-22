@@ -5,6 +5,11 @@ import { useEffect, useState } from "react";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import {
+  buildInterviewerSelectOptions,
+  normalizeStoredInterviewerValue,
+  type InterviewerSelectOption,
+} from "@/lib/interviewer-enum";
 import { logActivity } from "@/lib/activity-logger";
 import {
   effectiveInterviewLanguage,
@@ -17,10 +22,7 @@ import { modalOverlayClass, modalPanelClass } from "@/lib/modal-responsive";
 import { getUserSafe } from "@/lib/supabase-auth";
 import { slackEmailForTeamMember } from "@/lib/slack-contacts";
 import { voidSlackNotify } from "@/lib/slack-client";
-import {
-  fetchTeamRosterNames,
-  mergeRosterWithCurrent,
-} from "@/lib/team-roster";
+import { fetchTeamRosterNames, mergeRosterWithCurrent } from "@/lib/team-roster";
 
 import {
   isProjectInterviewRow,
@@ -114,7 +116,9 @@ export function EditInterviewDetailsModal({
 }: Props) {
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
-  const [interviewerOptions, setInterviewerOptions] = useState<string[]>([]);
+  const [interviewerOptions, setInterviewerOptions] = useState<
+    InterviewerSelectOption[]
+  >([]);
   const [interviewer, setInterviewer] = useState("");
   const [pocOptions, setPocOptions] = useState<string[]>([]);
   const [poc, setPoc] = useState("");
@@ -157,11 +161,19 @@ export function EditInterviewDetailsModal({
         fetchTeamRosterNames(supabase, "poc", true),
       ]);
       const currentIv = interview.interviewer?.trim() || null;
-      const ivOpts = mergeRosterWithCurrent(ivNames, currentIv);
+      const ivOpts = buildInterviewerSelectOptions(ivNames, currentIv);
       const pocOpts = mergeRosterWithCurrent(pocNames, initialPoc || null);
       if (!active) return;
       setInterviewerOptions(ivOpts);
-      setInterviewer(currentIv ?? "");
+      const enumFromDb = normalizeStoredInterviewerValue(currentIv);
+      const scheduled = interview.interview_status === "scheduled";
+      const inList =
+        enumFromDb && ivOpts.some((o) => o.value === enumFromDb)
+          ? enumFromDb
+          : "";
+      setInterviewer(
+        inList || (scheduled ? (ivOpts[0]?.value ?? "") : ""),
+      );
       setPocOptions(pocOpts);
     })();
     return () => {
@@ -369,9 +381,9 @@ export function EditInterviewDetailsModal({
               {!isScheduledStatus ? (
                 <option value="">— Not assigned —</option>
               ) : null}
-              {interviewerOptions.map((n) => (
-                <option key={n} value={n}>
-                  {n}
+              {interviewerOptions.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
                 </option>
               ))}
             </select>

@@ -10,6 +10,7 @@ import { useAccessControl } from "@/components/access-control-context";
 import { ProjectCandidateDetailModal } from "@/components/project-candidate-detail-modal";
 import { logActivity } from "@/lib/activity-logger";
 import { displayNameFromUser, getUserSafe } from "@/lib/supabase-auth";
+import { formatInterviewerStoredForUi } from "@/lib/interviewer-enum";
 import {
   canMoveToPostProduction,
   POST_PRODUCTION_ELIGIBILITY_TOOLTIP,
@@ -1072,7 +1073,7 @@ export function ProjectInterviewsPanel({
                             </div>
                           </td>
                           <td className={tdInterviewer}>
-                            {i.interviewer?.trim() || "—"}
+                            {formatInterviewerStoredForUi(i.interviewer)}
                           </td>
                           <td className={tdZoomStatus}>
                             <div className="flex flex-col items-start gap-2">
@@ -1282,7 +1283,9 @@ export function ProjectInterviewsPanel({
                           <td className={tdDateTime}>
                             {formatDateTime(i.scheduled_date)}
                           </td>
-                          <td className={tdInterviewer}>{i.interviewer}</td>
+                          <td className={tdInterviewer}>
+                            {formatInterviewerStoredForUi(i.interviewer)}
+                          </td>
                           <td className={tdActions}>
                             <div className="flex flex-wrap items-center justify-end gap-2">
                               <button
@@ -1394,7 +1397,9 @@ export function ProjectInterviewsPanel({
                           <td className={tdProjTitle}>
                             {pc.project_title?.trim() || "—"}
                           </td>
-                          <td className={tdInterviewer}>{i.interviewer}</td>
+                          <td className={tdInterviewer}>
+                            {formatInterviewerStoredForUi(i.interviewer)}
+                          </td>
                           <td className={tdCompletedOn}>
                             {formatDateTime(i.completed_at)}
                           </td>

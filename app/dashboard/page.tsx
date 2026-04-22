@@ -5,6 +5,10 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 
+import {
+  buildInterviewerSelectOptions,
+  type InterviewerSelectOption,
+} from "@/lib/interviewer-enum";
 import { fetchTeamRosterNames } from "@/lib/team-roster";
 import { getUserSafe } from "@/lib/supabase-auth";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
@@ -13,6 +17,7 @@ type Period = "total" | "monthly" | "weekly";
 
 const INTERVIEWER_THEME: Record<string, { bar: string; avatar: string }> = {
   Anushka: { bar: "#2563eb", avatar: "#2563eb" },
+  "Anushka Roy": { bar: "#2563eb", avatar: "#2563eb" },
   Harika: { bar: "#7c3aed", avatar: "#7c3aed" },
   Gargi: { bar: "#16a34a", avatar: "#16a34a" },
   Mudit: { bar: "#d97706", avatar: "#d97706" },
@@ -142,7 +147,9 @@ export default function DashboardPage() {
     calls: 0,
   });
   const [interviewer, setInterviewer] = useState<Record<string, number>>({});
-  const [interviewerNames, setInterviewerNames] = useState<string[]>([]);
+  const [interviewerOpts, setInterviewerOpts] = useState<
+    InterviewerSelectOption[]
+  >([]);
   const [funnel, setFunnel] = useState({
     entries: 0,
     eligible: 0,
@@ -226,18 +233,19 @@ export default function DashboardPage() {
     });
 
     const ivNames = await fetchTeamRosterNames(supabase, "interviewer", true);
-    setInterviewerNames(ivNames);
+    const ivOptions = buildInterviewerSelectOptions(ivNames, null);
+    setInterviewerOpts(ivOptions);
     const ivStats: Record<string, number> = {};
-    for (const iv of ivNames) {
+    for (const opt of ivOptions) {
       let q = supabase
         .from("interviews")
         .select("id, candidates!inner(id)", { count: "exact", head: true })
-        .eq("interviewer", iv)
+        .eq("interviewer", opt.value)
         .eq("interview_status", "completed")
         .eq("candidates.is_deleted", false);
       if (from) q = q.gte("created_at", from);
       const { count } = await q;
-      ivStats[iv] = count || 0;
+      ivStats[opt.value] = count || 0;
     }
     setInterviewer(ivStats);
 
@@ -379,16 +387,22 @@ export default function DashboardPage() {
   );
 
   const interviewerGrid = useMemo(() => {
-    return interviewerNames.map((name, idx) => ({
-      name,
-      count: interviewer[name] ?? 0,
-      theme: INTERVIEWER_THEME[name] ?? INTERVIEWER_THEME_FALLBACK[idx % INTERVIEWER_THEME_FALLBACK.length],
+    return interviewerOpts.map((opt, idx) => ({
+      value: opt.value,
+      name: opt.label,
+      count: interviewer[opt.value] ?? 0,
+      theme:
+        INTERVIEWER_THEME[opt.value] ??
+        INTERVIEWER_THEME_FALLBACK[idx % INTERVIEWER_THEME_FALLBACK.length],
     }));
-  }, [interviewer, interviewerNames]);
+  }, [interviewer, interviewerOpts]);
 
   const interviewerTeamTotal = useMemo(() => {
-    return interviewerNames.reduce((s, n) => s + (interviewer[n] ?? 0), 0);
-  }, [interviewer, interviewerNames]);
+    return interviewerOpts.reduce(
+      (s, opt) => s + (interviewer[opt.value] ?? 0),
+      0,
+    );
+  }, [interviewer, interviewerOpts]);
 
   const statCards = useMemo(
     () => [
@@ -479,7 +493,7 @@ export default function DashboardPage() {
                           );
                     return (
                       <div
-                        key={row.name}
+                        key={row.value}
                         className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm"
                       >
                         <div className="flex items-start gap-3">

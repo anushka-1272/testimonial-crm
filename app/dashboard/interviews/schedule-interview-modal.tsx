@@ -5,6 +5,10 @@ import { useEffect, useState } from "react";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import {
+  buildInterviewerSelectOptions,
+  type InterviewerSelectOption,
+} from "@/lib/interviewer-enum";
 import { logActivity } from "@/lib/activity-logger";
 import {
   interviewLanguageDisplayString,
@@ -71,7 +75,9 @@ export function ScheduleInterviewModal({
 }: Props) {
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
-  const [interviewerOptions, setInterviewerOptions] = useState<string[]>([]);
+  const [interviewerOptions, setInterviewerOptions] = useState<
+    InterviewerSelectOption[]
+  >([]);
   const [interviewer, setInterviewer] = useState("");
   const [interviewType, setInterviewType] = useState<"testimonial" | "project">(
     "testimonial",
@@ -116,8 +122,13 @@ export function ScheduleInterviewModal({
     void (async () => {
       const names = await fetchTeamRosterNames(supabase, "interviewer", true);
       if (!active) return;
-      setInterviewerOptions(names);
-      setInterviewer((prev) => prev || names[0] || "");
+      const options = buildInterviewerSelectOptions(names, null);
+      setInterviewerOptions(options);
+      setInterviewer((prev) =>
+        prev && options.some((o) => o.value === prev)
+          ? prev
+          : (options[0]?.value ?? ""),
+      );
     })();
     return () => {
       active = false;
@@ -373,9 +384,9 @@ export function ScheduleInterviewModal({
                 {interviewerOptions.length === 0 ? (
                   <option value="">No active interviewers</option>
                 ) : (
-                  interviewerOptions.map((n) => (
-                    <option key={n} value={n}>
-                      {n}
+                  interviewerOptions.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
                     </option>
                   ))
                 )}

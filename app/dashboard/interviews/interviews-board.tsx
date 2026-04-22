@@ -14,6 +14,12 @@ import { useAccessControl } from "@/components/access-control-context";
 import { CandidateDetailModal } from "@/components/candidate-detail-modal";
 import { logActivity } from "@/lib/activity-logger";
 import {
+  buildInterviewerSelectOptions,
+  formatInterviewerStoredForUi,
+  interviewerRowMatchesFilter,
+  type InterviewerSelectOption,
+} from "@/lib/interviewer-enum";
+import {
   effectiveInterviewLanguage,
   formatInterviewLanguageLabel,
   interviewLanguageBadgeClass,
@@ -188,10 +194,7 @@ function filterCompletedInterviews(
       i.post_interview_eligible !== false
     )
       return false;
-    if (
-      f.interviewer !== "all" &&
-      (i.interviewer ?? "") !== f.interviewer
-    )
+    if (!interviewerRowMatchesFilter(f.interviewer, i.interviewer))
       return false;
     if (f.category) {
       const lines = interviewCategoryLines(i.category);
@@ -668,7 +671,9 @@ export function InterviewsBoard() {
   const [liBusyId, setLiBusyId] = useState<string | null>(null);
   const [linkedInListPage, setLinkedInListPage] = useState(0);
   const [pocRoster, setPocRoster] = useState<string[]>([]);
-  const [interviewerRoster, setInterviewerRoster] = useState<string[]>([]);
+  const [interviewerRoster, setInterviewerRoster] = useState<
+    InterviewerSelectOption[]
+  >([]);
 
   const supabase = useMemo(() => {
     try {
@@ -757,7 +762,9 @@ export function InterviewsBoard() {
       fetchTeamRosterNames(supabase, "interviewer", true),
     ]);
     setPocRoster(pocNames);
-    setInterviewerRoster(interviewerNames);
+    setInterviewerRoster(
+      buildInterviewerSelectOptions(interviewerNames, null),
+    );
   }, [supabase]);
 
   useEffect(() => {
@@ -1112,7 +1119,7 @@ export function InterviewsBoard() {
         i.candidates?.email || "",
         i.interview_type || "",
         formatInterviewLanguageLabel(effectiveInterviewLanguage(i)),
-        i.interviewer || "",
+        formatInterviewerStoredForUi(i.interviewer),
         i.poc?.trim() || i.candidates?.poc_assigned?.trim() || "",
         formatDateTime(i.completed_at),
         postEligible,
@@ -2257,7 +2264,7 @@ export function InterviewsBoard() {
                                   </div>
                                 </td>
                                 <td className={tdInterviewer}>
-                                  {i.interviewer?.trim() || "—"}
+                                  {formatInterviewerStoredForUi(i.interviewer)}
                                 </td>
                                 <td className={tdZoomStatus}>
                                   {zoomStatusColumn(i)}
@@ -2480,7 +2487,7 @@ export function InterviewsBoard() {
                                 {formatDateTime(i.scheduled_date)}
                               </td>
                               <td className={tdInterviewer}>
-                                {i.interviewer}
+                                {formatInterviewerStoredForUi(i.interviewer)}
                               </td>
                               <td className={tdActions}>
                                 <div className="flex flex-wrap items-center justify-end gap-2">
@@ -2632,9 +2639,9 @@ export function InterviewsBoard() {
                         }
                       >
                         <option value="all">All</option>
-                        {interviewerRoster.map((n) => (
-                          <option key={n} value={n}>
-                            {n}
+                        {interviewerRoster.map((o) => (
+                          <option key={o.value} value={o.value}>
+                            {o.label}
                           </option>
                         ))}
                       </select>
@@ -2770,7 +2777,7 @@ export function InterviewsBoard() {
                                   </div>
                                 </td>
                                 <td className={tdInterviewer}>
-                                  {i.interviewer}
+                                  {formatInterviewerStoredForUi(i.interviewer)}
                                 </td>
                                 <td className={tdCompletedOn}>
                                   {formatDateTime(i.completed_at)}
