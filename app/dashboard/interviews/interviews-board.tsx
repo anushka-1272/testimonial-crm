@@ -7,7 +7,7 @@ import {
   parseISO,
   startOfDay,
 } from "date-fns";
-import { Pencil } from "lucide-react";
+import { Loader2, Pencil } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useAccessControl } from "@/components/access-control-context";
@@ -24,6 +24,10 @@ import { getUserSafe } from "@/lib/supabase-auth";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 import { slackEmailForTeamMember } from "@/lib/slack-contacts";
 import { voidSlackNotify } from "@/lib/slack-client";
+import {
+  canMoveToPostProduction,
+  POST_PRODUCTION_ELIGIBILITY_TOOLTIP,
+} from "@/lib/post-production-eligibility";
 import {
   fetchTeamRosterNames,
   mergeRosterWithCurrent,
@@ -326,6 +330,25 @@ function postInterviewEligibleBadge(
     return (
       <span className="inline-flex rounded-full bg-[#fef2f2] px-3 py-1 text-xs font-medium text-[#dc2626]">
         Not Eligible
+      </span>
+    );
+  }
+  return <span className="text-[#6e6e73]">—</span>;
+}
+
+/** Post production intake: strict eligible / not eligible (no “No Dispatch” branch). */
+function postProductionEligibilityGateBadge(i: InterviewWithCandidate) {
+  if (canMoveToPostProduction(i)) {
+    return (
+      <span className="inline-flex rounded-full bg-[#f0fdf4] px-2.5 py-1 text-xs font-medium text-[#15803d]">
+        Eligible
+      </span>
+    );
+  }
+  if (i.post_interview_eligible === false) {
+    return (
+      <span className="inline-flex rounded-full bg-[#fef2f2] px-2.5 py-1 text-xs font-medium text-[#dc2626]">
+        Not eligible
       </span>
     );
   }
@@ -641,6 +664,7 @@ export function InterviewsBoard() {
   const [completedPopoverId, setCompletedPopoverId] = useState<string | null>(
     null,
   );
+  const [postProdBusyId, setPostProdBusyId] = useState<string | null>(null);
   const [liBusyId, setLiBusyId] = useState<string | null>(null);
   const [linkedInListPage, setLinkedInListPage] = useState(0);
   const [pocRoster, setPocRoster] = useState<string[]>([]);
@@ -1110,6 +1134,50 @@ export function InterviewsBoard() {
     URL.revokeObjectURL(url);
   }, [completedFiltered]);
 
+  const addCompletedToPostProduction = useCallback(
+    async (i: InterviewWithCandidate) => {
+      if (!supabase || !canMoveToPostProduction(i)) return;
+      setPostProdBusyId(i.id);
+      setError(null);
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) {
+        setPostProdBusyId(null);
+        setError("You must be signed in.");
+        return;
+      }
+      let res: Response;
+      try {
+        res = await fetch("/api/post-production/create-entry", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            source: "testimonial",
+            interview_id: i.id,
+          }),
+        });
+      } catch {
+        setPostProdBusyId(null);
+        setError("Network error while adding to post production.");
+        return;
+      }
+      const json = (await res.json().catch(() => ({}))) as { error?: string };
+      setPostProdBusyId(null);
+      if (!res.ok) {
+        setError(json.error ?? "Could not add to post production.");
+        return;
+      }
+      setToastMessage("Added to post production.");
+      void loadData();
+    },
+    [supabase, loadData],
+  );
+
   const handlePocChange = async (candidate: EligibleCandidate, value: string) => {
     if (!supabase) return;
     const name = value.trim() || null;
@@ -1367,6 +1435,8 @@ export function InterviewsBoard() {
   const tdPhone = `${tdBase} min-w-[130px] text-left text-[#6e6e73]`;
   const thPostInterview = `${thBase} min-w-[160px] text-left`;
   const tdPostInterview = `${tdBase} min-w-[160px] text-left`;
+  const thPostProdGate = `${thBase} min-w-[120px] text-left`;
+  const tdPostProdGate = `${tdBase} min-w-[120px] text-left align-top`;
   const thCategoryCol = `${thBase} min-w-[120px] text-left`;
   const tdCategoryCol = `${tdBase} min-w-[120px] text-left text-[#6e6e73]`;
   const thFunnelCol = `${thBase} min-w-[120px] text-left`;
@@ -2634,7 +2704,7 @@ export function InterviewsBoard() {
 
                 <div className={tableWrap}>
                   <div className="w-full min-w-0 max-w-full overflow-x-auto">
-                    <table className="w-full min-w-[1520px] table-auto border-collapse">
+                    <table className="w-full min-w-[1640px] table-auto border-collapse">
                       <thead>
                         <tr>
                           <th className={thName}>Name</th>
@@ -2646,6 +2716,12 @@ export function InterviewsBoard() {
                           <th className={thPostInterview}>
                             Post-interview eligible
                           </th>
+                          <th
+                            className={thPostProdGate}
+                            title={POST_PRODUCTION_ELIGIBILITY_TOOLTIP}
+                          >
+                            Post production
+                          </th>
                           <th className={thCategoryCol}>Category</th>
                           <th className={thFunnelCol}>Funnel</th>
                           <th className={thCommentsCol}>Comments</th>
@@ -2655,7 +2731,7 @@ export function InterviewsBoard() {
                       <tbody>
                         {completedPage.slice.length === 0 ? (
                           <tr>
-                            <td className={tdBase} colSpan={11}>
+                            <td className={tdBase} colSpan={12}>
                               {emptyState}
                             </td>
                           </tr>
@@ -2705,6 +2781,9 @@ export function InterviewsBoard() {
                                     i.reward_item,
                                   )}
                                 </td>
+                                <td className={tdPostProdGate}>
+                                  {postProductionEligibilityGateBadge(i)}
+                                </td>
                                 <td className={tdCategoryCol}>
                                   {catLines.length ? catLines.join(" · ") : "—"}
                                 </td>
@@ -2721,9 +2800,35 @@ export function InterviewsBoard() {
                                 </td>
                                 <td className={`${tdActions} relative`}>
                                   <div
-                                    className="relative flex justify-end"
+                                    className="relative flex flex-wrap items-center justify-end gap-2"
                                     data-completed-popover-root
                                   >
+                                    <button
+                                      type="button"
+                                      disabled={
+                                        !canMoveToPostProduction(i) ||
+                                        postProdBusyId === i.id
+                                      }
+                                      title={
+                                        !canMoveToPostProduction(i)
+                                          ? POST_PRODUCTION_ELIGIBILITY_TOOLTIP
+                                          : undefined
+                                      }
+                                      className="rounded-lg bg-[#1d1d1f] px-2.5 py-1 text-xs font-medium text-white hover:bg-[#2d2d2f] disabled:cursor-not-allowed disabled:bg-[#d1d5db] disabled:text-[#6b7280]"
+                                      onMouseDown={(e) => e.stopPropagation()}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        void addCompletedToPostProduction(i);
+                                      }}
+                                    >
+                                      {postProdBusyId === i.id ? (
+                                        <Loader2
+                                          className="h-3.5 w-3.5 animate-spin"
+                                          aria-hidden
+                                        />
+                                      ) : null}{" "}
+                                      Add to Post Production
+                                    </button>
                                     <button
                                       type="button"
                                       className="text-sm font-medium text-[#3b82f6] hover:text-[#2563eb]"

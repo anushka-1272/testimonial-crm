@@ -4,6 +4,8 @@ import { format, parseISO } from "date-fns";
 import { Loader2, Pencil, Plus } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import type { SupabaseClient } from "@supabase/supabase-js";
+
 import { useAccessControl } from "@/components/access-control-context";
 import { CandidateDetailModal } from "@/components/candidate-detail-modal";
 import { ProjectCandidateDetailModal } from "@/components/project-candidate-detail-modal";
@@ -25,6 +27,10 @@ import { getUserSafe } from "@/lib/supabase-auth";
 import { SLACK_PRKHRVV_EMAIL } from "@/lib/slack-contacts";
 import { voidSlackNotify } from "@/lib/slack-client";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
+import {
+  canMoveToPostProduction,
+  POST_PRODUCTION_NOT_ELIGIBLE_ERROR,
+} from "@/lib/post-production-eligibility";
 import {
   fetchTeamRosterNames,
   mergeRosterWithCurrent,
@@ -121,12 +127,115 @@ export type PostProductionRow = {
     is_deleted?: boolean | null;
   } | null;
   project_candidates?: ProjectCandidateRow | ProjectCandidateRow[] | null;
+  /** Latest completed interview is no longer marked post-interview eligible. */
+  eligibility_mismatch?: boolean;
 };
 
 type LinkField = "raw_video_link" | "edited_video_link" | "youtube_link";
 
 const PP_SELECT =
   "id, created_at, candidate_id, project_candidate_id, source_type, candidate_name, raw_video_link, edited_video_link, pre_edit_review, pre_edit_review_by, post_edit_review, post_edit_review_by, edited_by, youtube_link, youtube_status, summary, cx_mail_sent, cx_mail_sent_at, updated_at, interview_language, candidates ( domain, job_role, is_deleted ), project_candidates ( id, email, full_name, whatsapp_number, project_title, problem_statement, target_user, ai_usage, demo_link, status, poc_assigned, poc_assigned_at, interview_type, is_deleted )";
+
+async function attachPostProductionEligibilityMismatch(
+  supabase: SupabaseClient,
+  rows: PostProductionRow[],
+): Promise<PostProductionRow[]> {
+  const staleCand = new Set<string>();
+  const staleProj = new Set<string>();
+
+  const tCids = [
+    ...new Set(
+      rows
+        .filter((r) => r.candidate_id && r.source_type === "testimonial")
+        .map((r) => r.candidate_id as string),
+    ),
+  ];
+  if (tCids.length) {
+    const { data: ivs } = await supabase
+      .from("interviews")
+      .select("candidate_id, post_interview_eligible, completed_at")
+      .in("candidate_id", tCids)
+      .eq("interview_status", "completed");
+    const byCand = new Map<
+      string,
+      { completed_at: string; eligible: boolean }[]
+    >();
+    for (const row of ivs ?? []) {
+      const cid = row.candidate_id as string;
+      const arr = byCand.get(cid) ?? [];
+      arr.push({
+        completed_at: String(row.completed_at ?? ""),
+        eligible: row.post_interview_eligible === true,
+      });
+      byCand.set(cid, arr);
+    }
+    for (const cid of tCids) {
+      const arr = byCand.get(cid) ?? [];
+      if (!arr.length) {
+        staleCand.add(cid);
+        continue;
+      }
+      const latest = arr.reduce((a, b) =>
+        a.completed_at >= b.completed_at ? a : b,
+      );
+      if (!latest.eligible) staleCand.add(cid);
+    }
+  }
+
+  const pIds = [
+    ...new Set(
+      rows
+        .filter((r) => r.project_candidate_id && r.source_type === "project")
+        .map((r) => r.project_candidate_id as string),
+    ),
+  ];
+  if (pIds.length) {
+    const { data: pivs } = await supabase
+      .from("project_interviews")
+      .select("project_candidate_id, post_interview_eligible, completed_at")
+      .in("project_candidate_id", pIds)
+      .eq("interview_status", "completed");
+    const byPc = new Map<
+      string,
+      { completed_at: string; eligible: boolean }[]
+    >();
+    for (const row of pivs ?? []) {
+      const pid = row.project_candidate_id as string;
+      const arr = byPc.get(pid) ?? [];
+      arr.push({
+        completed_at: String(row.completed_at ?? ""),
+        eligible: row.post_interview_eligible === true,
+      });
+      byPc.set(pid, arr);
+    }
+    for (const pid of pIds) {
+      const arr = byPc.get(pid) ?? [];
+      if (!arr.length) {
+        staleProj.add(pid);
+        continue;
+      }
+      const latest = arr.reduce((a, b) =>
+        a.completed_at >= b.completed_at ? a : b,
+      );
+      if (!latest.eligible) staleProj.add(pid);
+    }
+  }
+
+  return rows.map((r) => ({
+    ...r,
+    eligibility_mismatch:
+      Boolean(
+        r.candidate_id &&
+          r.source_type === "testimonial" &&
+          staleCand.has(r.candidate_id),
+      ) ||
+      Boolean(
+        r.project_candidate_id &&
+          r.source_type === "project" &&
+          staleProj.has(r.project_candidate_id),
+      ),
+  }));
+}
 
 function normalizePostProductionRow(
   r: Record<string, unknown>,
@@ -201,6 +310,7 @@ function youtubeStatusBadge(status: YoutubeStatus) {
 }
 
 type TestimonialPick = {
+  interview_id: string;
   candidate_id: string;
   full_name: string | null;
   email: string;
@@ -209,6 +319,7 @@ type TestimonialPick = {
 };
 
 type ProjectPick = {
+  project_interview_id: string;
   project_candidate_id: string;
   display_name: string;
   email: string;
@@ -295,25 +406,24 @@ export function PostProductionDashboard() {
       setError(e.message);
       return;
     }
-    setRows(
-      (data ?? [])
-        .map((row) =>
-          normalizePostProductionRow(row as Record<string, unknown>),
-        )
-        .filter((row) => {
-          if (row.source_type === "testimonial" && row.candidate_id) {
-            const c = row.candidates;
-            const one = c == null ? null : Array.isArray(c) ? c[0] ?? null : c;
-            if (one?.is_deleted) return false;
-          }
-          if (row.source_type === "project" && row.project_candidate_id) {
-            const p = row.project_candidates;
-            const one = p == null ? null : Array.isArray(p) ? p[0] ?? null : p;
-            if (one && "is_deleted" in one && one.is_deleted) return false;
-          }
-          return true;
-        }),
-    );
+    const base = (data ?? [])
+      .map((row) =>
+        normalizePostProductionRow(row as Record<string, unknown>),
+      )
+      .filter((row) => {
+        if (row.source_type === "testimonial" && row.candidate_id) {
+          const c = row.candidates;
+          const one = c == null ? null : Array.isArray(c) ? c[0] ?? null : c;
+          if (one?.is_deleted) return false;
+        }
+        if (row.source_type === "project" && row.project_candidate_id) {
+          const p = row.project_candidates;
+          const one = p == null ? null : Array.isArray(p) ? p[0] ?? null : p;
+          if (one && "is_deleted" in one && one.is_deleted) return false;
+        }
+        return true;
+      });
+    setRows(await attachPostProductionEligibilityMismatch(supabase, base));
     setError(null);
   }, [supabase]);
 
@@ -348,6 +458,20 @@ export function PostProductionDashboard() {
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "post_production" },
+        () => {
+          void loadRows();
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "interviews" },
+        () => {
+          void loadRows();
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "project_interviews" },
         () => {
           void loadRows();
         },
@@ -492,16 +616,18 @@ export function PostProductionDashboard() {
         supabase
           .from("interviews")
           .select(
-            "candidate_id, completed_at, scheduled_date, interviewer, candidates!inner ( id, full_name, email )",
+            "id, candidate_id, completed_at, scheduled_date, interviewer, post_interview_eligible, candidates!inner ( id, full_name, email )",
           )
           .eq("interview_status", "completed")
+          .eq("post_interview_eligible", true)
           .eq("candidates.is_deleted", false),
         supabase
           .from("project_interviews")
           .select(
-            "project_candidate_id, completed_at, scheduled_date, project_candidates!inner ( id, email, full_name, project_title )",
+            "id, project_candidate_id, completed_at, scheduled_date, post_interview_eligible, project_candidates!inner ( id, email, full_name, project_title )",
           )
           .eq("interview_status", "completed")
+          .eq("post_interview_eligible", true)
           .eq("project_candidates.is_deleted", false),
         supabase.from("post_production").select("candidate_id, project_candidate_id"),
       ]);
@@ -521,10 +647,12 @@ export function PostProductionDashboard() {
     const tMap = new Map<string, TestimonialPick>();
     for (const row of invT ?? []) {
       const r = row as {
+        id: string;
         candidate_id: string;
         completed_at: string | null;
         scheduled_date: string | null;
         interviewer: string | null;
+        post_interview_eligible: boolean | null;
         candidates:
           | { id: string; full_name: string | null; email: string }
           | { id: string; full_name: string | null; email: string }[]
@@ -532,6 +660,7 @@ export function PostProductionDashboard() {
       };
       const cid = r.candidate_id;
       if (!cid || inPostCand.has(cid)) continue;
+      if (!canMoveToPostProduction(r)) continue;
       const c = r.candidates;
       const cand = Array.isArray(c) ? c[0] : c;
       if (!cand) continue;
@@ -545,6 +674,7 @@ export function PostProductionDashboard() {
           (!prev.interview_date || dateIso > prev.interview_date))
       ) {
         tMap.set(cid, {
+          interview_id: r.id,
           candidate_id: cid,
           full_name: cand.full_name,
           email: cand.email,
@@ -558,9 +688,11 @@ export function PostProductionDashboard() {
     const pMap = new Map<string, ProjectPick>();
     for (const row of invP ?? []) {
       const r = row as {
+        id: string;
         project_candidate_id: string;
         completed_at: string | null;
         scheduled_date: string | null;
+        post_interview_eligible: boolean | null;
         project_candidates:
           | {
               id: string;
@@ -578,6 +710,7 @@ export function PostProductionDashboard() {
       };
       const pcid = r.project_candidate_id;
       if (!pcid || inPostProj.has(pcid)) continue;
+      if (!canMoveToPostProduction(r)) continue;
       const c = r.project_candidates;
       const cand = Array.isArray(c) ? c[0] : c;
       if (!cand) continue;
@@ -597,6 +730,7 @@ export function PostProductionDashboard() {
           (!prev.interview_date || dateIso > prev.interview_date))
       ) {
         pMap.set(pcid, {
+          project_interview_id: r.id,
           project_candidate_id: pcid,
           display_name,
           email,
@@ -635,92 +769,79 @@ export function PostProductionDashboard() {
     if (!supabase || !selectedAdd) return;
     setAddSubmitting(true);
 
-    if (selectedAdd.kind === "testimonial") {
-      const p = selectedAdd.pick;
-      const name =
-        p.full_name?.trim() || p.email.split("@")[0] || "Candidate";
-      const { data: ins, error: e } = await supabase
-        .from("post_production")
-        .insert({
-          candidate_id: p.candidate_id,
-          project_candidate_id: null,
-          source_type: "testimonial",
-          candidate_name: name,
-        })
-        .select("id")
-        .single();
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    const token = session?.access_token;
+    if (!token) {
       setAddSubmitting(false);
-      if (e) {
-        setError(
-          e.code === "23505"
-            ? "This candidate is already in post production."
-            : e.message,
-        );
-        return;
-      }
-      const auth = await getUserSafe(supabase);
-      if (auth) {
-        await logActivity({
-          supabase,
-          user: auth,
-          action_type: "post_production",
-          entity_type: "post_production",
-          entity_id: ins?.id ?? null,
-          candidate_name: name,
-          description: `Added ${name} (Testimonial) to post production`,
-        });
-      }
-      const ppSlackT =
-        `🎥 New post production entry added!\n` +
-        `*Candidate:* ${name}\n` +
-        `*Source:* Testimonial\n` +
-        `Please begin the editing process in the CRM.`;
-      voidSlackNotify(supabase, SLACK_PRKHRVV_EMAIL, ppSlackT);
-    } else {
-      const p = selectedAdd.pick;
-      const name =
-        p.project_title?.trim() ||
-        p.display_name ||
-        p.email.split("@")[0] ||
-        "Candidate";
-      const { data: ins, error: e } = await supabase
-        .from("post_production")
-        .insert({
-          candidate_id: null,
-          project_candidate_id: p.project_candidate_id,
-          source_type: "project",
-          candidate_name: name,
-        })
-        .select("id")
-        .single();
-      setAddSubmitting(false);
-      if (e) {
-        setError(
-          e.code === "23505"
-            ? "This project candidate is already in post production."
-            : e.message,
-        );
-        return;
-      }
-      const auth = await getUserSafe(supabase);
-      if (auth) {
-        await logActivity({
-          supabase,
-          user: auth,
-          action_type: "post_production",
-          entity_type: "post_production",
-          entity_id: ins?.id ?? null,
-          candidate_name: name,
-          description: `Added ${name} (Project) to post production`,
-        });
-      }
-      const ppSlackP =
-        `🎥 New post production entry added!\n` +
-        `*Candidate:* ${name}\n` +
-        `*Source:* Project\n` +
-        `Please begin the editing process in the CRM.`;
-      voidSlackNotify(supabase, SLACK_PRKHRVV_EMAIL, ppSlackP);
+      setError("You must be signed in to add entries.");
+      return;
     }
+
+    const body =
+      selectedAdd.kind === "testimonial"
+        ? {
+            source: "testimonial" as const,
+            interview_id: selectedAdd.pick.interview_id,
+          }
+        : {
+            source: "project" as const,
+            project_interview_id: selectedAdd.pick.project_interview_id,
+          };
+
+    const name =
+      selectedAdd.kind === "testimonial"
+        ? selectedAdd.pick.full_name?.trim() ||
+          selectedAdd.pick.email.split("@")[0] ||
+          "Candidate"
+        : selectedAdd.pick.project_title?.trim() ||
+          selectedAdd.pick.display_name ||
+          selectedAdd.pick.email.split("@")[0] ||
+          "Candidate";
+
+    let res: Response;
+    try {
+      res = await fetch("/api/post-production/create-entry", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(body),
+      });
+    } catch {
+      setAddSubmitting(false);
+      setError("Network error while adding to post production.");
+      return;
+    }
+
+    const json = (await res.json().catch(() => ({}))) as {
+      error?: string;
+      ok?: boolean;
+    };
+    setAddSubmitting(false);
+    if (!res.ok) {
+      setError(
+        json.error ??
+          (res.status === 409
+            ? "This candidate is already in post production."
+            : POST_PRODUCTION_NOT_ELIGIBLE_ERROR),
+      );
+      return;
+    }
+
+    const ppSlack =
+      selectedAdd.kind === "testimonial"
+        ? `🎥 New post production entry added!\n` +
+          `*Candidate:* ${name}\n` +
+          `*Source:* Testimonial\n` +
+          `Please begin the editing process in the CRM.`
+        : `🎥 New post production entry added!\n` +
+          `*Candidate:* ${name}\n` +
+          `*Source:* Project\n` +
+          `Please begin the editing process in the CRM.`;
+    voidSlackNotify(supabase, SLACK_PRKHRVV_EMAIL, ppSlack);
 
     setAddOpen(false);
     void loadRows();
@@ -1388,6 +1509,13 @@ export function PostProductionDashboard() {
                                   {row.candidate_name?.trim() || "—"}
                                 </span>
                               )}
+                              {row.eligibility_mismatch ? (
+                                <p className="mt-1 max-w-[130px] text-[11px] font-medium leading-snug text-amber-800">
+                                  Interview record is no longer marked
+                                  post-interview eligible — review before
+                                  continuing.
+                                </p>
+                              ) : null}
                             </td>
                             <td className={`${td} ${ppCol.source}`}>
                               {sourceBadge(row.source_type)}

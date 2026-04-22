@@ -1,0 +1,320 @@
+import { createClient } from "@supabase/supabase-js";
+import { NextResponse } from "next/server";
+import { z } from "zod";
+
+import { logActivity } from "@/lib/activity-logger";
+import { verifyRequestUser } from "@/lib/google-sheet-gviz";
+import {
+  ACTIVITY_ADDED_ELIGIBLE_TO_POST_PRODUCTION,
+  ACTIVITY_BLOCKED_POST_PRODUCTION,
+  POST_PRODUCTION_NOT_ELIGIBLE_ERROR,
+  canMoveToPostProduction,
+} from "@/lib/post-production-eligibility";
+
+export const runtime = "nodejs";
+
+const BodySchema = z.discriminatedUnion("source", [
+  z.object({
+    source: z.literal("testimonial"),
+    interview_id: z.string().uuid(),
+  }),
+  z.object({
+    source: z.literal("project"),
+    project_interview_id: z.string().uuid(),
+  }),
+]);
+
+export async function POST(request: Request) {
+  const user = await verifyRequestUser(request);
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!url || !anon) {
+    return NextResponse.json(
+      { error: "Server is missing Supabase configuration" },
+      { status: 500 },
+    );
+  }
+
+  const token = request.headers
+    .get("authorization")
+    ?.replace(/^Bearer\s+/i, "")
+    .trim();
+  if (!token) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const supabase = createClient(url, anon, {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: { headers: { Authorization: `Bearer ${token}` } },
+  });
+
+  let json: unknown;
+  try {
+    json = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+
+  const parsed = BodySchema.safeParse(json);
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: "Invalid body", details: parsed.error.flatten() },
+      { status: 400 },
+    );
+  }
+
+  const body = parsed.data;
+
+  if (body.source === "testimonial") {
+    const { data: iv, error: ivErr } = await supabase
+      .from("interviews")
+      .select(
+        "id, candidate_id, interview_status, post_interview_eligible, interview_language, interview_type, candidates!inner ( full_name, email, is_deleted )",
+      )
+      .eq("id", body.interview_id)
+      .maybeSingle();
+
+    if (ivErr || !iv) {
+      return NextResponse.json(
+        { error: ivErr?.message ?? "Interview not found" },
+        { status: ivErr ? 500 : 404 },
+      );
+    }
+
+    const candRaw = iv.candidates as
+      | { full_name: string | null; email: string; is_deleted?: boolean | null }
+      | {
+          full_name: string | null;
+          email: string;
+          is_deleted?: boolean | null;
+        }[]
+      | null;
+    const cand = Array.isArray(candRaw) ? candRaw[0] : candRaw;
+    if (!cand || cand.is_deleted) {
+      return NextResponse.json(
+        { error: "Candidate not found or removed" },
+        { status: 400 },
+      );
+    }
+
+    if (iv.interview_status !== "completed") {
+      return NextResponse.json(
+        { error: "Interview must be completed before post production" },
+        { status: 400 },
+      );
+    }
+
+    if (!canMoveToPostProduction(iv)) {
+      await logActivity({
+        supabase,
+        user,
+        action_type: "post_production",
+        entity_type: "interview",
+        entity_id: iv.id,
+        candidate_name: cand.full_name?.trim() || cand.email,
+        description: ACTIVITY_BLOCKED_POST_PRODUCTION,
+        metadata: { interview_id: iv.id, candidate_id: iv.candidate_id },
+      });
+      return NextResponse.json(
+        { error: POST_PRODUCTION_NOT_ELIGIBLE_ERROR },
+        { status: 400 },
+      );
+    }
+
+    const name =
+      cand.full_name?.trim() ||
+      cand.email.split("@")[0] ||
+      "Candidate";
+    const lang =
+      (iv.interview_language as string | null | undefined)?.trim() ||
+      "english";
+
+    const { data: ins, error: insErr } = await supabase
+      .from("post_production")
+      .insert({
+        candidate_id: iv.candidate_id,
+        project_candidate_id: null,
+        source_type: "testimonial",
+        candidate_name: name,
+        interview_language: lang,
+      })
+      .select("id")
+      .single();
+
+    if (insErr) {
+      const msg = insErr.message ?? "Insert failed";
+      if (
+        msg.includes("not eligible") ||
+        insErr.code === "23514" ||
+        insErr.code === "P0001"
+      ) {
+        await logActivity({
+          supabase,
+          user,
+          action_type: "post_production",
+          entity_type: "interview",
+          entity_id: iv.id,
+          candidate_name: name,
+          description: ACTIVITY_BLOCKED_POST_PRODUCTION,
+          metadata: { interview_id: iv.id, reason: "db_trigger" },
+        });
+        return NextResponse.json(
+          { error: POST_PRODUCTION_NOT_ELIGIBLE_ERROR },
+          { status: 400 },
+        );
+      }
+      if (insErr.code === "23505") {
+        return NextResponse.json(
+          { error: "This candidate is already in post production." },
+          { status: 409 },
+        );
+      }
+      return NextResponse.json({ error: msg }, { status: 500 });
+    }
+
+    await logActivity({
+      supabase,
+      user,
+      action_type: "post_production",
+      entity_type: "post_production",
+      entity_id: ins?.id ?? null,
+      candidate_name: name,
+      description: ACTIVITY_ADDED_ELIGIBLE_TO_POST_PRODUCTION,
+      metadata: { interview_id: iv.id, source: "testimonial" },
+    });
+
+    return NextResponse.json({ ok: true, id: ins?.id });
+  }
+
+  const { data: piv, error: pErr } = await supabase
+    .from("project_interviews")
+    .select(
+      "id, project_candidate_id, interview_status, post_interview_eligible, project_candidates!inner ( id, email, full_name, project_title, is_deleted )",
+    )
+    .eq("id", body.project_interview_id)
+    .maybeSingle();
+
+  if (pErr || !piv) {
+    return NextResponse.json(
+      { error: pErr?.message ?? "Project interview not found" },
+      { status: pErr ? 500 : 404 },
+    );
+  }
+
+  const pcRaw = piv.project_candidates as
+    | {
+        id: string;
+        email: string;
+        full_name: string | null;
+        project_title: string | null;
+        is_deleted?: boolean | null;
+      }
+    | {
+        id: string;
+        email: string;
+        full_name: string | null;
+        project_title: string | null;
+        is_deleted?: boolean | null;
+      }[]
+    | null;
+  const pc = Array.isArray(pcRaw) ? pcRaw[0] : pcRaw;
+  if (!pc || pc.is_deleted) {
+    return NextResponse.json(
+      { error: "Project candidate not found or removed" },
+      { status: 400 },
+    );
+  }
+
+  if (piv.interview_status !== "completed") {
+    return NextResponse.json(
+      { error: "Interview must be completed before post production" },
+      { status: 400 },
+    );
+  }
+
+  if (!canMoveToPostProduction(piv)) {
+    await logActivity({
+      supabase,
+      user,
+      action_type: "post_production",
+      entity_type: "interview",
+      entity_id: piv.id,
+      candidate_name: pc.project_title?.trim() || pc.email,
+      description: ACTIVITY_BLOCKED_POST_PRODUCTION,
+      metadata: {
+        project_interview_id: piv.id,
+        project_candidate_id: piv.project_candidate_id,
+      },
+    });
+    return NextResponse.json(
+      { error: POST_PRODUCTION_NOT_ELIGIBLE_ERROR },
+      { status: 400 },
+    );
+  }
+
+  const name =
+    pc.project_title?.trim() ||
+    pc.full_name?.trim() ||
+    pc.email.split("@")[0] ||
+    "Candidate";
+
+  const { data: insP, error: insPErr } = await supabase
+    .from("post_production")
+    .insert({
+      candidate_id: null,
+      project_candidate_id: piv.project_candidate_id,
+      source_type: "project",
+      candidate_name: name,
+      interview_language: "english",
+    })
+    .select("id")
+    .single();
+
+  if (insPErr) {
+    const msg = insPErr.message ?? "Insert failed";
+    if (
+      msg.includes("not eligible") ||
+      insPErr.code === "23514" ||
+      insPErr.code === "P0001"
+    ) {
+      await logActivity({
+        supabase,
+        user,
+        action_type: "post_production",
+        entity_type: "interview",
+        entity_id: piv.id,
+        candidate_name: name,
+        description: ACTIVITY_BLOCKED_POST_PRODUCTION,
+        metadata: { project_interview_id: piv.id, reason: "db_trigger" },
+      });
+      return NextResponse.json(
+        { error: POST_PRODUCTION_NOT_ELIGIBLE_ERROR },
+        { status: 400 },
+      );
+    }
+    if (insPErr.code === "23505") {
+      return NextResponse.json(
+        { error: "This project candidate is already in post production." },
+        { status: 409 },
+      );
+    }
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
+
+  await logActivity({
+    supabase,
+    user,
+    action_type: "post_production",
+    entity_type: "post_production",
+    entity_id: insP?.id ?? null,
+    candidate_name: name,
+    description: ACTIVITY_ADDED_ELIGIBLE_TO_POST_PRODUCTION,
+    metadata: { project_interview_id: piv.id, source: "project" },
+  });
+
+  return NextResponse.json({ ok: true, id: insP?.id });
+}

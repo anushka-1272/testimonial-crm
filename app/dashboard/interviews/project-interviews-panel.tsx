@@ -10,6 +10,10 @@ import { ProjectCandidateDetailModal } from "@/components/project-candidate-deta
 import { logActivity } from "@/lib/activity-logger";
 import { displayNameFromUser, getUserSafe } from "@/lib/supabase-auth";
 import {
+  canMoveToPostProduction,
+  POST_PRODUCTION_ELIGIBILITY_TOOLTIP,
+} from "@/lib/post-production-eligibility";
+import {
   fetchTeamRosterNames,
   mergeRosterWithCurrent,
 } from "@/lib/team-roster";
@@ -166,6 +170,26 @@ function postInterviewEligibleBadge(
   return <span className="text-[#6e6e73]">—</span>;
 }
 
+function postProductionGateBadgeProject(
+  i: ProjectInterviewWithProjectCandidate,
+) {
+  if (canMoveToPostProduction(i)) {
+    return (
+      <span className="inline-flex rounded-full bg-[#f0fdf4] px-2.5 py-1 text-xs font-medium text-[#15803d]">
+        Eligible
+      </span>
+    );
+  }
+  if (i.post_interview_eligible === false) {
+    return (
+      <span className="inline-flex rounded-full bg-[#fef2f2] px-2.5 py-1 text-xs font-medium text-[#dc2626]">
+        Not eligible
+      </span>
+    );
+  }
+  return <span className="text-[#6e6e73]">—</span>;
+}
+
 function truncateWithTooltip(text: string | null | undefined, maxLen: number) {
   const t = text?.trim() ?? "";
   if (!t) return { display: "—" as string, title: undefined as string | undefined };
@@ -224,6 +248,7 @@ export function ProjectInterviewsPanel({
   const [completedPopoverId, setCompletedPopoverId] = useState<string | null>(
     null,
   );
+  const [postProdBusyId, setPostProdBusyId] = useState<string | null>(null);
   const [sheetSyncBusy, setSheetSyncBusy] = useState(false);
   const [deleteBusyId, setDeleteBusyId] = useState<string | null>(null);
   const [addZoomFor, setAddZoomFor] =
@@ -301,6 +326,51 @@ export function ProjectInterviewsPanel({
       onError(null);
     }
   }, [supabase, onError]);
+
+  const addProjectCompletedToPostProduction = useCallback(
+    async (i: ProjectInterviewWithProjectCandidate) => {
+      if (!canMoveToPostProduction(i)) return;
+      setPostProdBusyId(i.id);
+      onError(null);
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) {
+        setPostProdBusyId(null);
+        onError("You must be signed in.");
+        return;
+      }
+      let res: Response;
+      try {
+        res = await fetch("/api/post-production/create-entry", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            source: "project",
+            project_interview_id: i.id,
+          }),
+        });
+      } catch {
+        setPostProdBusyId(null);
+        onError("Network error while adding to post production.");
+        return;
+      }
+      const json = (await res.json().catch(() => ({}))) as { error?: string };
+      setPostProdBusyId(null);
+      if (!res.ok) {
+        onError(json.error ?? "Could not add to post production.");
+        return;
+      }
+      onToast?.("Added to post production.");
+      await loadProjectData();
+      onPipelineChanged();
+    },
+    [supabase, loadProjectData, onPipelineChanged, onError, onToast],
+  );
 
   const loadPocRoster = useCallback(async () => {
     const names = await fetchTeamRosterNames(supabase, "poc", true);
@@ -642,6 +712,8 @@ export function ProjectInterviewsPanel({
   const tdCompletedOn = `${tdBase} min-w-[170px] text-left`;
   const thPostInterview = `${thBase} min-w-[160px] text-left`;
   const tdPostInterview = `${tdBase} min-w-[160px] text-left`;
+  const thPostProdGate = `${thBase} min-w-[120px] text-left`;
+  const tdPostProdGate = `${tdBase} min-w-[120px] text-left align-top`;
   const thFunnelCol = `${thBase} min-w-[120px] text-left`;
   const tdFunnelCol = `${tdBase} min-w-[120px] text-left text-[#6e6e73]`;
   const thCommentsCol = `${thBase} min-w-[160px] text-left`;
@@ -1242,7 +1314,7 @@ export function ProjectInterviewsPanel({
           </label>
           <div className={tableWrap}>
             <div className="w-full overflow-x-auto">
-              <table className="w-full min-w-[1200px] table-auto border-collapse">
+              <table className="w-full min-w-[1320px] table-auto border-collapse">
                 <thead>
                   <tr>
                     <th className={thName}>Name</th>
@@ -1253,6 +1325,12 @@ export function ProjectInterviewsPanel({
                     <th className={thPostInterview}>
                       Post-interview eligible
                     </th>
+                    <th
+                      className={thPostProdGate}
+                      title={POST_PRODUCTION_ELIGIBILITY_TOOLTIP}
+                    >
+                      Post production
+                    </th>
                     <th className={thFunnelCol}>Funnel</th>
                     <th className={thCommentsCol}>Comments</th>
                     <th className={thActions}>Actions</th>
@@ -1261,7 +1339,7 @@ export function ProjectInterviewsPanel({
                 <tbody>
                   {completedPage.slice.length === 0 ? (
                     <tr>
-                      <td className={tdBase} colSpan={9}>
+                      <td className={tdBase} colSpan={10}>
                         {emptyState}
                       </td>
                     </tr>
@@ -1300,6 +1378,9 @@ export function ProjectInterviewsPanel({
                               i.reward_item,
                             )}
                           </td>
+                          <td className={tdPostProdGate}>
+                            {postProductionGateBadgeProject(i)}
+                          </td>
                           <td className={tdFunnelCol}>
                             {i.funnel?.trim() || "—"}
                           </td>
@@ -1313,9 +1394,35 @@ export function ProjectInterviewsPanel({
                           </td>
                           <td className={`${tdActions} relative`}>
                             <div
-                              className="relative flex justify-end"
+                              className="relative flex flex-wrap items-center justify-end gap-2"
                               data-project-completed-popover-root
                             >
+                              <button
+                                type="button"
+                                disabled={
+                                  !canMoveToPostProduction(i) ||
+                                  postProdBusyId === i.id
+                                }
+                                title={
+                                  !canMoveToPostProduction(i)
+                                    ? POST_PRODUCTION_ELIGIBILITY_TOOLTIP
+                                    : undefined
+                                }
+                                className="rounded-lg bg-[#1d1d1f] px-2.5 py-1 text-xs font-medium text-white hover:bg-[#2d2d2f] disabled:cursor-not-allowed disabled:bg-[#d1d5db] disabled:text-[#6b7280]"
+                                onMouseDown={(e) => e.stopPropagation()}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  void addProjectCompletedToPostProduction(i);
+                                }}
+                              >
+                                {postProdBusyId === i.id ? (
+                                  <Loader2
+                                    className="h-3.5 w-3.5 animate-spin"
+                                    aria-hidden
+                                  />
+                                ) : null}{" "}
+                                Add to Post Production
+                              </button>
                               <button
                                 type="button"
                                 className="text-sm font-medium text-[#3b82f6] hover:text-[#2563eb]"
