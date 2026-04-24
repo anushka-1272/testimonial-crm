@@ -546,7 +546,7 @@ function followupStatusBadge(c: EligibleCandidate) {
   if (c.followup_status === "interested") {
     return (
       <span className="inline-flex rounded-full bg-[#f0fdf4] px-2.5 py-1 text-xs font-medium text-[#15803d]">
-        Interested
+        Scheduled
       </span>
     );
   }

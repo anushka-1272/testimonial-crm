@@ -535,41 +535,41 @@ export default function DashboardPage() {
       {
         title: "Testimonial interviews",
         value: stats.testimonials,
-        subtext: "Completed · selected period",
+        subtext: "Completed in selected period",
       },
       {
         title: "Project interviews",
         value: stats.projects,
-        subtext: "Completed · selected period",
+        subtext: "Completed in selected period",
       },
       {
         title: "Dispatches",
         value: stats.dispatches,
-        subtext: "Dispatch rows · selected period",
+        subtext: "Total dispatches (selected period)",
       },
       {
         title: "Form entries",
         value: stats.entries,
-        subtext: "Candidate sign-ups · selected period",
+        subtext: "New sign-ups (selected period)",
       },
       {
         title: "Eligible (Post Interview)",
         value: stats.calls,
-        subtext: "Eligible completed · selected period",
+        subtext: "Eligible after interview",
       },
       {
         title: "Calls Done – Testimonials",
         value: stats.testimonial_calls,
-        subtext: "followup_log with candidate_id",
+        subtext: "Total calls made",
         titleAttr:
-          "Follow-up call attempts (followup_log) linked to testimonial candidates. Filtered by created_at for Weekly/Monthly.",
+          "Follow-up calls logged for testimonial candidates in the selected period.",
       },
       {
         title: "Calls Done – Projects",
         value: stats.project_calls,
-        subtext: "followup_log with project_candidate_id",
+        subtext: "Total calls made",
         titleAttr:
-          "Follow-up call attempts (followup_log) linked to project candidates. Filtered by created_at for Weekly/Monthly.",
+          "Follow-up calls logged for project candidates in the selected period.",
       },
     ],
     [stats],

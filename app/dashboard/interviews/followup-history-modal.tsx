@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { followupOutcomeDisplayLabel } from "@/lib/followup-outcome-display";
 import { modalOverlayClass, modalPanel3xlClass } from "@/lib/modal-responsive";
 
 import type { FollowupLogRow } from "./types";
@@ -27,15 +28,8 @@ function formatWhen(iso: string | null | undefined): string {
 }
 
 function statusDisplay(status: string): string {
-  const map: Record<string, string> = {
-    no_answer: "No answer",
-    callback: "Callback requested",
-    interested: "Interested",
-    already_completed: "Already completed",
-    not_interested: "Not interested",
-    wrong_number: "Wrong number",
-  };
-  return map[status] ?? status;
+  if (status === "callback") return "Callback requested";
+  return followupOutcomeDisplayLabel(status);
 }
 
 export function FollowupHistoryModal({

@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 
+import { followupOutcomeDisplayLabel } from "@/lib/followup-outcome-display";
+
 const STATUS_ORDER = [
   "no_answer",
   "interested",
@@ -9,14 +11,6 @@ const STATUS_ORDER = [
   "callback",
   "not_interested",
 ] as const;
-
-const STATUS_LABELS: Record<(typeof STATUS_ORDER)[number], string> = {
-  no_answer: "No answer",
-  interested: "Interested",
-  already_completed: "Already completed",
-  callback: "Callback",
-  not_interested: "Not interested",
-};
 
 /** Matches dashboard `followup_log` status breakdown rows */
 export type CallOutcomesBreakdownMap = Record<
@@ -119,7 +113,9 @@ export function CallOutcomesBreakdown({
                   key={key}
                   className="flex items-center justify-between gap-4 py-2.5 text-sm"
                 >
-                  <span className="text-[#1d1d1f]">{STATUS_LABELS[key]}</span>
+                  <span className="text-[#1d1d1f]">
+                    {followupOutcomeDisplayLabel(key)}
+                  </span>
                   <span className="tabular-nums text-[#6e6e73]">
                     {n}{" "}
                     <span className="text-[#aeaeb2]">({pct(n, total)})</span>

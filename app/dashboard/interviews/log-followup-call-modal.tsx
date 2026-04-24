@@ -55,7 +55,7 @@ const OUTCOMES: {
   },
   {
     value: "interested",
-    label: "Interested",
+    label: "Scheduled",
     hint: "Proceed to schedule",
   },
   {
@@ -82,7 +82,7 @@ function statusLabelForActivity(outcome: FollowupCallOutcome): string {
     case "callback":
       return "callback requested";
     case "interested":
-      return "interested";
+      return "scheduled";
     case "already_completed":
       return "already completed (interview done)";
     case "not_interested":
