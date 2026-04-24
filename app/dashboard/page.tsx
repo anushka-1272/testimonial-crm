@@ -13,6 +13,13 @@ import { fetchTeamRosterNames } from "@/lib/team-roster";
 import { getUserSafe } from "@/lib/supabase-auth";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 
+import {
+  CallOutcomesBreakdown,
+  emptyCallOutcomesBreakdown,
+  type CallOutcomesBreakdownMap,
+} from "./call-outcomes-breakdown";
+import { DashboardStatCard } from "./dashboard-stat-card";
+
 type Period = "total" | "monthly" | "weekly";
 
 const INTERVIEWER_THEME: Record<string, { bar: string; avatar: string }> = {
@@ -85,47 +92,6 @@ const FOLLOWUP_BREAKDOWN_STATUSES = [
   "callback",
   "not_interested",
 ] as const;
-
-const FOLLOWUP_BREAKDOWN_LABELS: Record<
-  (typeof FOLLOWUP_BREAKDOWN_STATUSES)[number],
-  string
-> = {
-  no_answer: "No answer",
-  interested: "Interested",
-  already_completed: "Already completed",
-  callback: "Callback",
-  not_interested: "Not interested",
-};
-
-type FollowupCallBreakdown = Record<
-  (typeof FOLLOWUP_BREAKDOWN_STATUSES)[number],
-  number
->;
-
-function emptyFollowupBreakdown(): FollowupCallBreakdown {
-  return {
-    no_answer: 0,
-    interested: 0,
-    already_completed: 0,
-    callback: 0,
-    not_interested: 0,
-  };
-}
-
-function formatFollowupBreakdownSubtitle(
-  total: number,
-  b: FollowupCallBreakdown,
-): string | undefined {
-  if (total <= 0) return undefined;
-  const parts = FOLLOWUP_BREAKDOWN_STATUSES.filter((k) => b[k] > 0).map(
-    (k) => `${FOLLOWUP_BREAKDOWN_LABELS[k]}: ${b[k]}`,
-  );
-  const sumFour = FOLLOWUP_BREAKDOWN_STATUSES.reduce((s, k) => s + b[k], 0);
-  const other = total - sumFour;
-  if (other > 0) parts.push(`Other: ${other}`);
-  if (parts.length === 0) return undefined;
-  return parts.join(" · ");
-}
 
 function greetingForHour(h: number): string {
   if (h < 12) return "Good morning";
@@ -216,9 +182,9 @@ export default function DashboardPage() {
     project_calls: 0,
   });
   const [testimonialFollowupBreakdown, setTestimonialFollowupBreakdown] =
-    useState<FollowupCallBreakdown>(emptyFollowupBreakdown);
+    useState<CallOutcomesBreakdownMap>(emptyCallOutcomesBreakdown());
   const [projectFollowupBreakdown, setProjectFollowupBreakdown] =
-    useState<FollowupCallBreakdown>(emptyFollowupBreakdown);
+    useState<CallOutcomesBreakdownMap>(emptyCallOutcomesBreakdown());
   const [interviewer, setInterviewer] = useState<Record<string, number>>({});
   const [interviewerOpts, setInterviewerOpts] = useState<
     InterviewerSelectOption[]
@@ -331,8 +297,8 @@ export default function DashboardPage() {
     if (rangeEnd) projectCallsQ = projectCallsQ.lt("created_at", rangeEnd);
     const { count: project_calls } = await projectCallsQ;
 
-    const nextTestimonialBreakdown = emptyFollowupBreakdown();
-    const nextProjectBreakdown = emptyFollowupBreakdown();
+    const nextTestimonialBreakdown = emptyCallOutcomesBreakdown();
+    const nextProjectBreakdown = emptyCallOutcomesBreakdown();
     for (const st of FOLLOWUP_BREAKDOWN_STATUSES) {
       let tbq = supabase
         .from("followup_log")
@@ -564,24 +530,49 @@ export default function DashboardPage() {
     );
   }, [interviewer, interviewerOpts]);
 
-  const baseStatCards = useMemo(
+  const dashboardStatItems = useMemo(
     () => [
-      { label: "Testimonial interviews", value: stats.testimonials },
-      { label: "Project interviews", value: stats.projects },
-      { label: "Dispatches", value: stats.dispatches },
-      { label: "Form entries", value: stats.entries },
-      { label: "Eligible (Post Interview)", value: stats.calls },
+      {
+        title: "Testimonial interviews",
+        value: stats.testimonials,
+        subtext: "Completed · selected period",
+      },
+      {
+        title: "Project interviews",
+        value: stats.projects,
+        subtext: "Completed · selected period",
+      },
+      {
+        title: "Dispatches",
+        value: stats.dispatches,
+        subtext: "Dispatch rows · selected period",
+      },
+      {
+        title: "Form entries",
+        value: stats.entries,
+        subtext: "Candidate sign-ups · selected period",
+      },
+      {
+        title: "Eligible (Post Interview)",
+        value: stats.calls,
+        subtext: "Eligible completed · selected period",
+      },
+      {
+        title: "Calls Done – Testimonials",
+        value: stats.testimonial_calls,
+        subtext: "followup_log with candidate_id",
+        titleAttr:
+          "Follow-up call attempts (followup_log) linked to testimonial candidates. Filtered by created_at for Weekly/Monthly.",
+      },
+      {
+        title: "Calls Done – Projects",
+        value: stats.project_calls,
+        subtext: "followup_log with project_candidate_id",
+        titleAttr:
+          "Follow-up call attempts (followup_log) linked to project candidates. Filtered by created_at for Weekly/Monthly.",
+      },
     ],
     [stats],
-  );
-
-  const testimonialCallsSubtitle = formatFollowupBreakdownSubtitle(
-    stats.testimonial_calls,
-    testimonialFollowupBreakdown,
-  );
-  const projectCallsSubtitle = formatFollowupBreakdownSubtitle(
-    stats.project_calls,
-    projectFollowupBreakdown,
   );
 
   const hour = new Date().getHours();
@@ -624,58 +615,29 @@ export default function DashboardPage() {
             ))}
           </div>
 
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-6 lg:gap-4">
-            {baseStatCards.map(({ label, value }) => (
-              <div
-                key={label}
-                className={`rounded-2xl bg-white p-4 transition-transform duration-200 ease-in-out hover:scale-[1.01] sm:p-6 ${cardChrome} cursor-default`}
-              >
-                <p className="mb-3 text-xs font-medium text-[#6e6e73]">
-                  {label}
-                </p>
-                <p className="text-2xl font-bold tracking-tight text-[#1d1d1f] tabular-nums sm:text-4xl">
-                  {loading ? "—" : value}
-                </p>
-                <div className="mt-4 h-0.5 w-8 rounded-full bg-[#3b82f6]" />
-              </div>
-            ))}
-            <div
-              title="followup_log: testimonial attempts use candidate_id; project attempts use project_candidate_id. Filtered by created_at when Weekly/Monthly is selected. Not interview completions."
-              className={`rounded-2xl bg-white p-4 transition-transform duration-200 ease-in-out hover:scale-[1.01] sm:p-6 ${cardChrome} cursor-default`}
-            >
-              <p className="mb-3 text-xs font-medium text-[#6e6e73]">
-                Calls Done
-              </p>
-              <div className="space-y-3">
-                <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-[#aeaeb2]">
-                    Testimonials
-                  </p>
-                  <p className="text-2xl font-bold tracking-tight text-[#1d1d1f] tabular-nums sm:text-3xl">
-                    {loading ? "—" : stats.testimonial_calls}
-                  </p>
-                  {testimonialCallsSubtitle ? (
-                    <p className="mt-1 text-[11px] leading-snug text-[#6e6e73]">
-                      {testimonialCallsSubtitle}
-                    </p>
-                  ) : null}
-                </div>
-                <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-[#aeaeb2]">
-                    Projects
-                  </p>
-                  <p className="text-2xl font-bold tracking-tight text-[#1d1d1f] tabular-nums sm:text-3xl">
-                    {loading ? "—" : stats.project_calls}
-                  </p>
-                  {projectCallsSubtitle ? (
-                    <p className="mt-1 text-[11px] leading-snug text-[#6e6e73]">
-                      {projectCallsSubtitle}
-                    </p>
-                  ) : null}
-                </div>
-              </div>
-              <div className="mt-4 h-0.5 w-8 rounded-full bg-[#3b82f6]" />
+          <div className="space-y-8">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {dashboardStatItems.map(
+                ({ title, value, subtext, titleAttr }) => (
+                  <DashboardStatCard
+                    key={title}
+                    title={title}
+                    value={value}
+                    loading={loading}
+                    subtext={subtext}
+                    titleAttr={titleAttr}
+                  />
+                ),
+              )}
             </div>
+
+            <CallOutcomesBreakdown
+              loading={loading}
+              testimonialTotal={stats.testimonial_calls}
+              projectTotal={stats.project_calls}
+              testimonialBreakdown={testimonialFollowupBreakdown}
+              projectBreakdown={projectFollowupBreakdown}
+            />
           </div>
 
           <div className="border-t border-[#e8e8ed] pt-10">
