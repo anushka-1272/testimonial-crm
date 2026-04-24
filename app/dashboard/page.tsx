@@ -34,17 +34,32 @@ const INTERVIEWER_THEME_FALLBACK = [
 /** Rows fetched and stored in `recentActivity` for the dashboard preview only. */
 const DASHBOARD_RECENT_ACTIVITY_LIMIT = 3;
 
-function getDateRange(period: Period) {
+type PeriodBounds = { startIso: string; endIso?: string } | null;
+
+function getPeriodBounds(period: Period): PeriodBounds {
   const now = new Date();
   if (period === "weekly") {
-    const day = now.getDay();
-    const monday = new Date(now);
-    monday.setDate(now.getDate() - (day === 0 ? 6 : day - 1));
-    monday.setHours(0, 0, 0, 0);
-    return monday.toISOString();
+    // UTC Monday 00:00:00.000 → next Monday (exclusive), avoiding local TZ drift.
+    const day = now.getUTCDay(); // 0=Sun ... 6=Sat
+    const daysSinceMonday = day === 0 ? 6 : day - 1;
+    const startMs = Date.UTC(
+      now.getUTCFullYear(),
+      now.getUTCMonth(),
+      now.getUTCDate() - daysSinceMonday,
+      0,
+      0,
+      0,
+      0,
+    );
+    const endMs = startMs + 7 * 24 * 60 * 60 * 1000;
+    return {
+      startIso: new Date(startMs).toISOString(),
+      endIso: new Date(endMs).toISOString(),
+    };
   }
   if (period === "monthly") {
-    return new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+    const startMs = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1, 0, 0, 0, 0);
+    return { startIso: new Date(startMs).toISOString() };
   }
   return null;
 }
@@ -183,13 +198,23 @@ export default function DashboardPage() {
 
   const fetchStats = useCallback(async () => {
     setLoading(true);
-    const from = getDateRange(period);
+    const bounds = getPeriodBounds(period);
+    const rangeStart = bounds?.startIso ?? null;
+    const rangeEnd = bounds?.endIso ?? null;
+
+    if (period === "weekly" && rangeStart && rangeEnd) {
+      console.debug("[Dashboard weekly] range", {
+        startOfWeek: rangeStart,
+        endOfWeek: rangeEnd,
+      });
+    }
 
     let entriesQ = supabase
       .from("candidates")
       .select("*", { count: "exact", head: true })
       .eq("is_deleted", false);
-    if (from) entriesQ = entriesQ.gte("created_at", from);
+    if (rangeStart) entriesQ = entriesQ.gte("created_at", rangeStart);
+    if (rangeEnd) entriesQ = entriesQ.lt("created_at", rangeEnd);
     const { count: entries } = await entriesQ;
 
     let callsQ = supabase
@@ -197,31 +222,35 @@ export default function DashboardPage() {
       .select("*", { count: "exact", head: true })
       .eq("is_deleted", false)
       .eq("eligibility_status", "eligible");
-    if (from) callsQ = callsQ.gte("created_at", from);
+    if (rangeStart) callsQ = callsQ.gte("created_at", rangeStart);
+    if (rangeEnd) callsQ = callsQ.lt("created_at", rangeEnd);
     const { count: calls } = await callsQ;
 
     let testQ = supabase
       .from("interviews")
       .select("id, candidates!inner(id)", { count: "exact", head: true })
-      .eq("interview_status", "completed")
+      .or("interview_status.eq.completed,completed_at.not.is.null")
       .eq("interview_type", "testimonial")
       .eq("candidates.is_deleted", false);
-    if (from) testQ = testQ.gte("created_at", from);
+    if (rangeStart) testQ = testQ.gte("completed_at", rangeStart);
+    if (rangeEnd) testQ = testQ.lt("completed_at", rangeEnd);
     const { count: testimonials } = await testQ;
 
     let projQ = supabase
       .from("project_interviews")
       .select("id, project_candidates!inner(id)", { count: "exact", head: true })
-      .eq("interview_status", "completed")
+      .or("interview_status.eq.completed,completed_at.not.is.null")
       .eq("project_candidates.is_deleted", false);
-    if (from) projQ = projQ.gte("created_at", from);
+    if (rangeStart) projQ = projQ.gte("completed_at", rangeStart);
+    if (rangeEnd) projQ = projQ.lt("completed_at", rangeEnd);
     const { count: projects } = await projQ;
 
     let dispQ = supabase
       .from("dispatch")
       .select("id, candidates!inner(id)", { count: "exact", head: true })
       .eq("candidates.is_deleted", false);
-    if (from) dispQ = dispQ.gte("created_at", from);
+    if (rangeStart) dispQ = dispQ.gte("created_at", rangeStart);
+    if (rangeEnd) dispQ = dispQ.lt("created_at", rangeEnd);
     const { count: dispatches } = await dispQ;
 
     setStats({
@@ -241,9 +270,10 @@ export default function DashboardPage() {
         .from("interviews")
         .select("id, candidates!inner(id)", { count: "exact", head: true })
         .eq("interviewer", opt.value)
-        .eq("interview_status", "completed")
+        .or("interview_status.eq.completed,completed_at.not.is.null")
         .eq("candidates.is_deleted", false);
-      if (from) q = q.gte("created_at", from);
+      if (rangeStart) q = q.gte("completed_at", rangeStart);
+      if (rangeEnd) q = q.lt("completed_at", rangeEnd);
       const { count } = await q;
       ivStats[opt.value] = count || 0;
     }
@@ -278,6 +308,16 @@ export default function DashboardPage() {
       completed: fCompleted || 0,
       dispatched: fDispatched || 0,
     });
+
+    if (period === "weekly") {
+      const { data: sampleRows } = await supabase
+        .from("interviews")
+        .select("id, completed_at, interview_status")
+        .or("interview_status.eq.completed,completed_at.not.is.null")
+        .order("completed_at", { ascending: false })
+        .limit(5);
+      console.debug("[Dashboard weekly] completed samples", sampleRows ?? []);
+    }
 
     setLoading(false);
   }, [supabase, period]);
