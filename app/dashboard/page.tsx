@@ -77,6 +77,53 @@ function periodLabel(p: Period): string {
   return "Weekly";
 }
 
+/** `followup_log.status` values shown in Calls Done breakdown */
+const FOLLOWUP_BREAKDOWN_STATUSES = [
+  "no_answer",
+  "interested",
+  "callback",
+  "not_interested",
+] as const;
+
+const FOLLOWUP_BREAKDOWN_LABELS: Record<
+  (typeof FOLLOWUP_BREAKDOWN_STATUSES)[number],
+  string
+> = {
+  no_answer: "No answer",
+  interested: "Interested",
+  callback: "Callback",
+  not_interested: "Not interested",
+};
+
+type FollowupCallBreakdown = Record<
+  (typeof FOLLOWUP_BREAKDOWN_STATUSES)[number],
+  number
+>;
+
+function emptyFollowupBreakdown(): FollowupCallBreakdown {
+  return {
+    no_answer: 0,
+    interested: 0,
+    callback: 0,
+    not_interested: 0,
+  };
+}
+
+function formatFollowupBreakdownSubtitle(
+  total: number,
+  b: FollowupCallBreakdown,
+): string | undefined {
+  if (total <= 0) return undefined;
+  const parts = FOLLOWUP_BREAKDOWN_STATUSES.filter((k) => b[k] > 0).map(
+    (k) => `${FOLLOWUP_BREAKDOWN_LABELS[k]}: ${b[k]}`,
+  );
+  const sumFour = FOLLOWUP_BREAKDOWN_STATUSES.reduce((s, k) => s + b[k], 0);
+  const other = total - sumFour;
+  if (other > 0) parts.push(`Other: ${other}`);
+  if (parts.length === 0) return undefined;
+  return parts.join(" · ");
+}
+
 function greetingForHour(h: number): string {
   if (h < 12) return "Good morning";
   if (h < 17) return "Good afternoon";
@@ -160,7 +207,11 @@ export default function DashboardPage() {
     dispatches: 0,
     entries: 0,
     calls: 0,
+    /** One row per follow-up call attempt (`followup_log`), not interviews */
+    totalCallAttempts: 0,
   });
+  const [followupBreakdown, setFollowupBreakdown] =
+    useState<FollowupCallBreakdown>(emptyFollowupBreakdown);
   const [interviewer, setInterviewer] = useState<Record<string, number>>({});
   const [interviewerOpts, setInterviewerOpts] = useState<
     InterviewerSelectOption[]
@@ -254,12 +305,33 @@ export default function DashboardPage() {
     if (rangeEnd) dispQ = dispQ.lt("created_at", rangeEnd);
     const { count: dispatches } = await dispQ;
 
+    let followupTotalQ = supabase
+      .from("followup_log")
+      .select("id", { count: "exact", head: true });
+    if (rangeStart) followupTotalQ = followupTotalQ.gte("created_at", rangeStart);
+    if (rangeEnd) followupTotalQ = followupTotalQ.lt("created_at", rangeEnd);
+    const { count: totalCallAttempts } = await followupTotalQ;
+
+    const nextBreakdown = emptyFollowupBreakdown();
+    for (const st of FOLLOWUP_BREAKDOWN_STATUSES) {
+      let bq = supabase
+        .from("followup_log")
+        .select("id", { count: "exact", head: true })
+        .eq("status", st);
+      if (rangeStart) bq = bq.gte("created_at", rangeStart);
+      if (rangeEnd) bq = bq.lt("created_at", rangeEnd);
+      const { count: c } = await bq;
+      nextBreakdown[st] = c || 0;
+    }
+    setFollowupBreakdown(nextBreakdown);
+
     setStats({
       testimonials: testimonials || 0,
       projects: projects || 0,
       dispatches: dispatches || 0,
       entries: entries || 0,
       calls: calls || 0,
+      totalCallAttempts: totalCallAttempts || 0,
     });
 
     const ivNames = await fetchTeamRosterNames(supabase, "interviewer", true);
@@ -459,16 +531,26 @@ export default function DashboardPage() {
     );
   }, [interviewer, interviewerOpts]);
 
-  const statCards = useMemo(
-    () => [
+  const statCards = useMemo(() => {
+    const callsDoneSubtitle = formatFollowupBreakdownSubtitle(
+      stats.totalCallAttempts,
+      followupBreakdown,
+    );
+    return [
       { label: "Testimonial interviews", value: stats.testimonials },
       { label: "Project interviews", value: stats.projects },
       { label: "Dispatches", value: stats.dispatches },
       { label: "Form entries", value: stats.entries },
       { label: "Eligible (Post Interview)", value: stats.calls },
-    ],
-    [stats],
-  );
+      {
+        label: "Calls Done",
+        value: stats.totalCallAttempts,
+        title:
+          "Total follow-up call attempts logged in followup_log (by period when Weekly/Monthly is selected). Does not include interview completions.",
+        subtitle: callsDoneSubtitle,
+      },
+    ];
+  }, [stats, followupBreakdown]);
 
   const hour = new Date().getHours();
   const greeting = greetingForHour(hour);
@@ -510,10 +592,11 @@ export default function DashboardPage() {
             ))}
           </div>
 
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-5 lg:gap-4">
-            {statCards.map(({ label, value }) => (
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-6 lg:gap-4">
+            {statCards.map(({ label, value, subtitle, title }) => (
               <div
                 key={label}
+                title={title}
                 className={`rounded-2xl bg-white p-4 transition-transform duration-200 ease-in-out hover:scale-[1.01] sm:p-6 ${cardChrome} cursor-default`}
               >
                 <p className="mb-3 text-xs font-medium text-[#6e6e73]">
@@ -522,6 +605,11 @@ export default function DashboardPage() {
                 <p className="text-2xl font-bold tracking-tight text-[#1d1d1f] tabular-nums sm:text-4xl">
                   {loading ? "—" : value}
                 </p>
+                {subtitle ? (
+                  <p className="mt-2 text-[11px] leading-snug text-[#6e6e73]">
+                    {subtitle}
+                  </p>
+                ) : null}
                 <div className="mt-4 h-0.5 w-8 rounded-full bg-[#3b82f6]" />
               </div>
             ))}

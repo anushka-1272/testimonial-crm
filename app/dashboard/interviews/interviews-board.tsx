@@ -2994,6 +2994,7 @@ export function InterviewsBoard() {
         key={logFollowupFor?.id ?? "log-followup-closed"}
         open={!!logFollowupFor}
         candidate={logFollowupFor}
+        projectCandidate={null}
         supabase={supabase}
         onClose={() => setLogFollowupFor(null)}
         onSaved={() => void loadData()}

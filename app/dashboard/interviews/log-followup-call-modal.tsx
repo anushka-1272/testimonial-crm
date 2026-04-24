@@ -11,11 +11,18 @@ import { slackEmailForTeamMember } from "@/lib/slack-contacts";
 import { modalOverlayClass, modalPanelClass } from "@/lib/modal-responsive";
 import { voidSlackNotify } from "@/lib/slack-client";
 
-import type { EligibleCandidate, FollowupCallOutcome } from "./types";
+import type {
+  EligibleCandidate,
+  FollowupCallOutcome,
+  ProjectLogFollowupRow,
+} from "./types";
 
 type Props = {
   open: boolean;
+  /** Testimonial eligible-tab candidate (`candidates.id`) */
   candidate: EligibleCandidate | null;
+  /** Project pending candidate (`project_candidates.id`); when set, logs to `followup_log.project_candidate_id` */
+  projectCandidate: ProjectLogFollowupRow | null;
   supabase: SupabaseClient;
   onClose: () => void;
   onSaved: () => void;
@@ -83,6 +90,7 @@ function statusLabelForActivity(outcome: FollowupCallOutcome): string {
 export function LogFollowupCallModal({
   open,
   candidate,
+  projectCandidate,
   supabase,
   onClose,
   onSaved,
@@ -101,14 +109,17 @@ export function LogFollowupCallModal({
     setNotInterestedReason("");
     setNotes("");
     setError(null);
-  }, [open, candidate?.id]);
+  }, [open, candidate?.id, projectCandidate?.id]);
 
-  if (!open || !candidate) return null;
+  if (!open || (!candidate && !projectCandidate)) return null;
 
-  const nextAttempt = candidate.followup_count + 1;
-  const phone =
-    candidate.whatsapp_number?.trim() || "—";
-  const displayName = candidate.full_name?.trim() || candidate.email;
+  const row = projectCandidate ?? candidate!;
+  const isProject = Boolean(projectCandidate);
+
+  const nextAttempt = row.followup_count + 1;
+  const phone = row.whatsapp_number?.trim() || "—";
+  const displayName = row.full_name?.trim() || row.email;
+  const emailLine = row.email?.trim() || "";
 
   const inp =
     "mt-1 w-full rounded-xl border border-[#e5e5e5] px-3 py-2.5 text-sm text-[#1d1d1f] focus:border-[#3b82f6] focus:outline-none focus:ring-0";
@@ -133,10 +144,10 @@ export function LogFollowupCallModal({
         ? new Date(callbackLocal).toISOString()
         : null;
 
-    let newCount = candidate.followup_count + 1;
-    let newStatus = candidate.followup_status;
-    let newCallbackAt: string | null = candidate.callback_datetime;
-    let newReason: string | null = candidate.not_interested_reason;
+    let newCount = row.followup_count + 1;
+    let newStatus = row.followup_status;
+    let newCallbackAt: string | null = row.callback_datetime;
+    let newReason: string | null = row.not_interested_reason;
 
     switch (outcome) {
       case "no_answer":
@@ -170,15 +181,29 @@ export function LogFollowupCallModal({
       const byName = actorName(authUser);
       const byEmail = authUser?.email ?? null;
 
-      const { error: logErr } = await supabase.from("followup_log").insert({
-        candidate_id: candidate.id,
-        attempt_number: newCount,
-        status: outcome,
-        notes: notes.trim() || null,
-        callback_datetime: outcome === "callback" ? callbackIso : null,
-        logged_by: byName,
-        logged_by_email: byEmail,
-      });
+      const logPayload = isProject
+        ? {
+            project_candidate_id: projectCandidate!.id,
+            attempt_number: newCount,
+            status: outcome,
+            notes: notes.trim() || null,
+            callback_datetime: outcome === "callback" ? callbackIso : null,
+            logged_by: byName,
+            logged_by_email: byEmail,
+          }
+        : {
+            candidate_id: candidate!.id,
+            attempt_number: newCount,
+            status: outcome,
+            notes: notes.trim() || null,
+            callback_datetime: outcome === "callback" ? callbackIso : null,
+            logged_by: byName,
+            logged_by_email: byEmail,
+          };
+
+      const { error: logErr } = await supabase
+        .from("followup_log")
+        .insert(logPayload);
 
       if (logErr) {
         setError(logErr.message);
@@ -186,26 +211,35 @@ export function LogFollowupCallModal({
         return;
       }
 
-      const { error: upErr } = await supabase
-        .from("candidates")
-        .update({
-          followup_count: newCount,
-          followup_status: newStatus,
-          callback_datetime: newCallbackAt,
-          not_interested_reason:
-            outcome === "not_interested" ? newReason : null,
-          not_interested_at:
-            outcome === "not_interested"
-              ? new Date().toISOString()
-              : null,
-        })
-        .eq("id", candidate.id);
+      const updatePayload = {
+        followup_count: newCount,
+        followup_status: newStatus,
+        callback_datetime: newCallbackAt,
+        not_interested_reason:
+          outcome === "not_interested" ? newReason : null,
+        not_interested_at:
+          outcome === "not_interested" ? new Date().toISOString() : null,
+      };
+
+      const { error: upErr } = isProject
+        ? await supabase
+            .from("project_candidates")
+            .update(updatePayload)
+            .eq("id", projectCandidate!.id)
+            .eq("is_deleted", false)
+        : await supabase
+            .from("candidates")
+            .update(updatePayload)
+            .eq("id", candidate!.id);
 
       if (upErr) {
         setError(upErr.message);
         setSubmitting(false);
         return;
       }
+
+      const entityType = isProject ? "project_candidate" : "candidate";
+      const entityId = isProject ? projectCandidate!.id : candidate!.id;
 
       if (authUser) {
         if (outcome === "callback" && callbackIso) {
@@ -214,40 +248,40 @@ export function LogFollowupCallModal({
             supabase,
             user: authUser,
             action_type: "eligibility",
-            entity_type: "candidate",
-            entity_id: candidate.id,
+            entity_type: entityType,
+            entity_id: entityId,
             candidate_name: displayName,
             description: `Callback scheduled for ${displayName} at ${dtLabel}`,
-            metadata: { followup: true },
+            metadata: { followup: true, project: isProject },
           });
         } else if (outcome === "not_interested") {
           await logActivity({
             supabase,
             user: authUser,
             action_type: "eligibility",
-            entity_type: "candidate",
-            entity_id: candidate.id,
+            entity_type: entityType,
+            entity_id: entityId,
             candidate_name: displayName,
             description: `Marked ${displayName} as not interested`,
-            metadata: { followup: true },
+            metadata: { followup: true, project: isProject },
           });
         } else {
           await logActivity({
             supabase,
             user: authUser,
             action_type: "eligibility",
-            entity_type: "candidate",
-            entity_id: candidate.id,
+            entity_type: entityType,
+            entity_id: entityId,
             candidate_name: displayName,
             description: `Logged follow-up call for ${displayName}: ${statusLabelForActivity(outcome)}`,
-            metadata: { followup: true },
+            metadata: { followup: true, project: isProject },
           });
         }
       }
 
       const pocEmail = await slackEmailForTeamMember(
         supabase,
-        candidate.poc_assigned,
+        row.poc_assigned,
       );
       if (pocEmail) {
         if (outcome === "no_answer") {
@@ -289,8 +323,7 @@ export function LogFollowupCallModal({
     setSubmitting(false);
   };
 
-  const showFinalWarning =
-    outcome === "no_answer" && candidate.followup_count >= 2;
+  const showFinalWarning = outcome === "no_answer" && row.followup_count >= 2;
 
   return (
     <div className={modalOverlayClass}>
@@ -311,6 +344,9 @@ export function LogFollowupCallModal({
             <p className="text-sm text-[#6e6e73]">
               {displayName} · {phone}
             </p>
+            {emailLine ? (
+              <p className="mt-0.5 text-xs text-[#6e6e73]">{emailLine}</p>
+            ) : null}
             <p className="mt-1 text-sm font-medium text-[#1d1d1f]">
               Attempt {nextAttempt} of 3
             </p>

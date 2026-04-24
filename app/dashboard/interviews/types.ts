@@ -68,7 +68,8 @@ export type FollowupCallOutcome =
 export type FollowupLogRow = {
   id: string;
   created_at: string;
-  candidate_id: string;
+  candidate_id: string | null;
+  project_candidate_id?: string | null;
   attempt_number: number;
   status: string;
   notes: string | null;
@@ -111,6 +112,26 @@ export type ProjectCandidateRow = {
   poc_assigned_at: string | null;
   interview_type: string | null;
   is_deleted?: boolean | null;
+  /** Follow-up calling (pending pipeline); mirrors `candidates` follow-up fields */
+  followup_status?: FollowupStatus;
+  followup_count?: number;
+  callback_datetime?: string | null;
+  not_interested_reason?: string | null;
+  not_interested_at?: string | null;
+};
+
+/** Row passed into `LogFollowupCallModal` for project pending tab */
+export type ProjectLogFollowupRow = {
+  id: string;
+  full_name: string | null;
+  email: string;
+  whatsapp_number: string | null;
+  poc_assigned: string | null;
+  followup_status: FollowupStatus;
+  followup_count: number;
+  callback_datetime: string | null;
+  not_interested_reason: string | null;
+  not_interested_at: string | null;
 };
 
 /** Project pipeline interview row (joined with project_candidates). */

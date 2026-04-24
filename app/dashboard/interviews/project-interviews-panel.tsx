@@ -23,10 +23,13 @@ import {
 import { AddZoomDetailsModal } from "./add-zoom-details-modal";
 import { AssignInterviewerModal } from "./assign-interviewer-modal";
 import { EditInterviewDetailsModal } from "./edit-interview-details-modal";
+import { LogFollowupCallModal } from "./log-followup-call-modal";
 import type { ScheduleProjectCandidate } from "./schedule-interview-modal";
 import type {
+  FollowupStatus,
   ProjectCandidateRow,
   ProjectInterviewWithProjectCandidate,
+  ProjectLogFollowupRow,
 } from "./types";
 
 const PAGE_SIZE = 20;
@@ -116,6 +119,38 @@ function compareProjectInterviewCompletedDesc(
 
 function pocOptionsFor(pc: ProjectCandidateRow, pocRoster: string[]): string[] {
   return mergeRosterWithCurrent(pocRoster, pc.poc_assigned);
+}
+
+function normalizeProjectCandidateFromDb(
+  raw: Record<string, unknown>,
+): ProjectCandidateRow {
+  return {
+    ...(raw as ProjectCandidateRow),
+    followup_status:
+      (raw.followup_status as FollowupStatus | undefined) ?? "pending",
+    followup_count: Number(raw.followup_count ?? 0),
+    callback_datetime:
+      (raw.callback_datetime as string | null | undefined) ?? null,
+    not_interested_reason:
+      (raw.not_interested_reason as string | null | undefined) ?? null,
+    not_interested_at:
+      (raw.not_interested_at as string | null | undefined) ?? null,
+  };
+}
+
+function projectCandidateForLogModal(pc: ProjectCandidateRow): ProjectLogFollowupRow {
+  return {
+    id: pc.id,
+    full_name: pc.full_name,
+    email: pc.email,
+    whatsapp_number: pc.whatsapp_number,
+    poc_assigned: pc.poc_assigned,
+    followup_status: pc.followup_status ?? "pending",
+    followup_count: pc.followup_count ?? 0,
+    callback_datetime: pc.callback_datetime ?? null,
+    not_interested_reason: pc.not_interested_reason ?? null,
+    not_interested_at: pc.not_interested_at ?? null,
+  };
 }
 
 function normalizeProjectInterviewRow(
@@ -260,6 +295,8 @@ export function ProjectInterviewsPanel({
     useState<ProjectInterviewWithProjectCandidate | null>(null);
   const [editInterviewFor, setEditInterviewFor] =
     useState<ProjectInterviewWithProjectCandidate | null>(null);
+  const [logFollowupFor, setLogFollowupFor] =
+    useState<ProjectLogFollowupRow | null>(null);
 
   const { role, canEditCurrentPage } = useAccessControl();
   const canEditScheduledTab =
@@ -270,7 +307,7 @@ export function ProjectInterviewsPanel({
     const { data: pc, error: eCandidates } = await supabase
       .from("project_candidates")
       .select(
-        "id, created_at, email, full_name, whatsapp_number, project_title, problem_statement, target_user, ai_usage, demo_link, status, poc_assigned, poc_assigned_at, interview_type",
+        "id, created_at, email, full_name, whatsapp_number, project_title, problem_statement, target_user, ai_usage, demo_link, status, poc_assigned, poc_assigned_at, interview_type, followup_status, followup_count, callback_datetime, not_interested_reason, not_interested_at",
       )
       .eq("is_deleted", false)
       .order("created_at", { ascending: true });
@@ -283,7 +320,9 @@ export function ProjectInterviewsPanel({
       );
       setCandidates([]);
     } else {
-      candidateList = (pc ?? []) as ProjectCandidateRow[];
+      candidateList = ((pc ?? []) as Record<string, unknown>[]).map(
+        normalizeProjectCandidateFromDb,
+      );
       console.log(
         `[ProjectInterviewsPanel] Loaded ${candidateList.length} project_candidates from DB`,
       );
@@ -932,6 +971,29 @@ export function ProjectInterviewsPanel({
                           </td>
                           <td className={tdActions}>
                             <div className="flex flex-wrap justify-end gap-2">
+                              <button
+                                type="button"
+                                disabled={
+                                  !canEditScheduledTab ||
+                                  deleteBusyId === c.id ||
+                                  pocSavingId === c.id
+                                }
+                                title={
+                                  !canEditScheduledTab
+                                    ? "View only"
+                                    : undefined
+                                }
+                                className="rounded-lg border border-[#e5e5e5] bg-white px-3 py-1.5 text-xs font-medium text-[#1d1d1f] transition-colors hover:bg-[#fafafa] disabled:cursor-not-allowed disabled:opacity-50"
+                                onClick={() =>
+                                  canEditScheduledTab
+                                    ? setLogFollowupFor(
+                                        projectCandidateForLogModal(c),
+                                      )
+                                    : undefined
+                                }
+                              >
+                                Log Call
+                              </button>
                               <button
                                 type="button"
                                 disabled={
@@ -1610,6 +1672,19 @@ export function ProjectInterviewsPanel({
               }
             : undefined
         }
+      />
+
+      <LogFollowupCallModal
+        key={logFollowupFor?.id ?? "project-log-followup-closed"}
+        open={!!logFollowupFor}
+        candidate={null}
+        projectCandidate={logFollowupFor}
+        supabase={supabase}
+        onClose={() => setLogFollowupFor(null)}
+        onSaved={() => {
+          void loadProjectData();
+          onPipelineChanged();
+        }}
       />
     </>
   );
