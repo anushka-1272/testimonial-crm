@@ -13,6 +13,12 @@ export const SLACK_DISHAN_EMAIL = "dishan.pramanik.ost@houseofedtech.in";
 export const SLACK_RIANKA_EMAIL = "rianka.dutta.ost@houseofedtech.in";
 export const SLACK_SIDDHARTHA_EMAIL = "siddhartha.bardhan.ost@houseofedtech.in";
 export const SLACK_PRKHRVV_EMAIL = "prkhrvv@houseofedtech.in";
+/** Post production: pre-review + post-review + YouTube (private) upload */
+export const SLACK_SAPNA_POST_PRODUCTION_EMAIL =
+  "sapna.kumari@houseofedtech.in";
+/** Post production: editing after pre-review */
+export const SLACK_SOMOSHREE_POST_PRODUCTION_EMAIL =
+  "somoshree.roy.chowdhury@houseofedtech.in";
 export const SLACK_ANUSHKA_WEEKLY_EMAIL = "anushka@houseofedtech.in";
 
 export async function slackEmailForTeamMember(

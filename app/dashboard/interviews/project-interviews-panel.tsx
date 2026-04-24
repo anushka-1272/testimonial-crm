@@ -67,7 +67,6 @@ function matchesPendingSearch(pc: ProjectCandidateRow, q: string): boolean {
     projectDisplayName(pc).toLowerCase().includes(s) ||
     (pc.full_name ?? "").toLowerCase().includes(s) ||
     (pc.email ?? "").toLowerCase().includes(s) ||
-    (pc.whatsapp_number ?? "").toLowerCase().includes(s) ||
     (pc.project_title ?? "").toLowerCase().includes(s)
   );
 }
@@ -743,8 +742,6 @@ export function ProjectInterviewsPanel({
   const tdName = `${tdBase} min-w-[160px] text-left`;
   const thEmail = `${thBase} min-w-[220px] text-left`;
   const tdEmail = `${tdBase} min-w-[220px] text-left text-[#6e6e73]`;
-  const thPhone = `${thBase} min-w-[130px] text-left`;
-  const tdPhone = `${tdBase} min-w-[130px] text-left text-[#6e6e73]`;
   const thProjTitle = `${thBase} min-w-[180px] text-left`;
   const tdProjTitle = `${tdBase} min-w-[180px] text-left text-[#6e6e73]`;
   const thPoc = `${thBase} min-w-[160px] text-left`;
@@ -871,7 +868,7 @@ export function ProjectInterviewsPanel({
             </span>
             <input
               type="search"
-              placeholder="Name, email, phone, or title"
+              placeholder="Name, email, or title"
               className={filterInp}
               value={filters.pending.search}
               onChange={(e) => patchFilter("pending", { search: e.target.value })}
@@ -883,7 +880,7 @@ export function ProjectInterviewsPanel({
                 <thead>
                   <tr>
                     <th className={thName}>Name</th>
-                    <th className={thPhone}>Phone</th>
+                    <th className={thEmail}>Email</th>
                     <th className={thProjTitle}>Project title</th>
                     <th className={thPoc}>POC assigned</th>
                     <th className={thActions}>Actions</th>
@@ -911,8 +908,8 @@ export function ProjectInterviewsPanel({
                               {projectDisplayName(c)}
                             </button>
                           </td>
-                          <td className={tdPhone}>
-                            {c.whatsapp_number?.trim() || "—"}
+                          <td className={tdEmail}>
+                            {c.email?.trim() || "—"}
                           </td>
                           <td className={tdProjTitle}>
                             {c.project_title?.trim() || "—"}
@@ -1064,7 +1061,7 @@ export function ProjectInterviewsPanel({
             </span>
             <input
               type="search"
-              placeholder="Name, email, phone, or title"
+              placeholder="Name, email, or title"
               className={filterInp}
               value={filters.scheduled.search}
               onChange={(e) =>
@@ -1079,7 +1076,6 @@ export function ProjectInterviewsPanel({
                   <tr>
                     <th className={thName}>Name</th>
                     <th className={thEmail}>Email</th>
-                    <th className={thPhone}>Phone</th>
                     <th className={thProjTitle}>Project title</th>
                     <th className={thDateTime}>Date &amp; time</th>
                     <th className={thInterviewer}>Interviewer</th>
@@ -1091,7 +1087,7 @@ export function ProjectInterviewsPanel({
                 <tbody>
                   {scheduledPage.slice.length === 0 ? (
                     <tr>
-                      <td className={tdBase} colSpan={9}>
+                      <td className={tdBase} colSpan={8}>
                         {emptyState}
                       </td>
                     </tr>
@@ -1122,9 +1118,6 @@ export function ProjectInterviewsPanel({
                             </button>
                           </td>
                           <td className={tdEmail}>{pc.email?.trim() || "—"}</td>
-                          <td className={tdPhone}>
-                            {pc.whatsapp_number?.trim() || "—"}
-                          </td>
                           <td className={tdProjTitle}>
                             {pc.project_title?.trim() || "—"}
                           </td>
@@ -1286,7 +1279,7 @@ export function ProjectInterviewsPanel({
             </span>
             <input
               type="search"
-              placeholder="Name, email, phone, or title"
+              placeholder="Name, email, or title"
               className={filterInp}
               value={filters.rescheduled.search}
               onChange={(e) =>
@@ -1300,7 +1293,7 @@ export function ProjectInterviewsPanel({
                 <thead>
                   <tr>
                     <th className={thName}>Name</th>
-                    <th className={thPhone}>Phone</th>
+                    <th className={thEmail}>Email</th>
                     <th className={thProjTitle}>Project title</th>
                     <th className={thDateTime}>Original date</th>
                     <th className={thReason}>Reason</th>
@@ -1331,8 +1324,8 @@ export function ProjectInterviewsPanel({
                               {projectDisplayName(pc)}
                             </button>
                           </td>
-                          <td className={tdPhone}>
-                            {pc.whatsapp_number?.trim() || "—"}
+                          <td className={tdEmail}>
+                            {pc.email?.trim() || "—"}
                           </td>
                           <td className={tdProjTitle}>
                             {pc.project_title?.trim() || "—"}
@@ -1399,7 +1392,7 @@ export function ProjectInterviewsPanel({
             </span>
             <input
               type="search"
-              placeholder="Name, email, phone, or title"
+              placeholder="Name, email, or title"
               className={filterInp}
               value={filters.completed.search}
               onChange={(e) =>
@@ -1413,7 +1406,7 @@ export function ProjectInterviewsPanel({
                 <thead>
                   <tr>
                     <th className={thName}>Name</th>
-                    <th className={thPhone}>Phone</th>
+                    <th className={thEmail}>Email</th>
                     <th className={thProjTitle}>Project title</th>
                     <th className={thInterviewer}>Interviewer</th>
                     <th className={thCompletedOn}>Completed on</th>
@@ -1457,8 +1450,8 @@ export function ProjectInterviewsPanel({
                               {projectDisplayName(pc)}
                             </button>
                           </td>
-                          <td className={tdPhone}>
-                            {pc.whatsapp_number?.trim() || "—"}
+                          <td className={tdEmail}>
+                            {pc.email?.trim() || "—"}
                           </td>
                           <td className={tdProjTitle}>
                             {pc.project_title?.trim() || "—"}

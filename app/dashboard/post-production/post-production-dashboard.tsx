@@ -23,9 +23,8 @@ import {
   matchesInterviewLanguageFilter,
   type InterviewLanguageFilter,
 } from "@/lib/interview-language";
+import { notifyPostProductionSlackAfterPatch } from "@/lib/post-production-slack-workflow";
 import { getUserSafe } from "@/lib/supabase-auth";
-import { SLACK_PRKHRVV_EMAIL } from "@/lib/slack-contacts";
-import { voidSlackNotify } from "@/lib/slack-client";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 import {
   canMoveToPostProduction,
@@ -790,16 +789,6 @@ export function PostProductionDashboard() {
             project_interview_id: selectedAdd.pick.project_interview_id,
           };
 
-    const name =
-      selectedAdd.kind === "testimonial"
-        ? selectedAdd.pick.full_name?.trim() ||
-          selectedAdd.pick.email.split("@")[0] ||
-          "Candidate"
-        : selectedAdd.pick.project_title?.trim() ||
-          selectedAdd.pick.display_name ||
-          selectedAdd.pick.email.split("@")[0] ||
-          "Candidate";
-
     let res: Response;
     try {
       res = await fetch("/api/post-production/create-entry", {
@@ -831,18 +820,6 @@ export function PostProductionDashboard() {
       return;
     }
 
-    const ppSlack =
-      selectedAdd.kind === "testimonial"
-        ? `🎥 New post production entry added!\n` +
-          `*Candidate:* ${name}\n` +
-          `*Source:* Testimonial\n` +
-          `Please begin the editing process in the CRM.`
-        : `🎥 New post production entry added!\n` +
-          `*Candidate:* ${name}\n` +
-          `*Source:* Project\n` +
-          `Please begin the editing process in the CRM.`;
-    voidSlackNotify(supabase, SLACK_PRKHRVV_EMAIL, ppSlack);
-
     setAddOpen(false);
     void loadRows();
   };
@@ -873,6 +850,8 @@ export function PostProductionDashboard() {
     id: string,
     patch: Record<string, unknown>,
     log?: { description: string; candidateName: string },
+    /** When set, Slack workflow compares this row to `patch` so notifications fire only on real transitions */
+    slackBefore?: PostProductionRow,
   ) => {
     if (!canEditCurrentPage) return;
     if (!supabase) return;
@@ -885,6 +864,16 @@ export function PostProductionDashboard() {
     if (e) {
       setError(e.message);
       return;
+    }
+    if (slackBefore) {
+      notifyPostProductionSlackAfterPatch(supabase, {
+        candidate_name: slackBefore.candidate_name,
+        raw_video_link: slackBefore.raw_video_link,
+        edited_video_link: slackBefore.edited_video_link,
+        pre_edit_review: slackBefore.pre_edit_review,
+        post_edit_review: slackBefore.post_edit_review,
+        youtube_link: slackBefore.youtube_link,
+      }, patch);
     }
     if (log) {
       const auth = await getUserSafe(supabase);
@@ -907,7 +896,7 @@ export function PostProductionDashboard() {
     if (!linkEdit || linkEdit.rowId !== row.id || linkEdit.field !== field)
       return;
     const v = linkEdit.value.trim() || null;
-    await patchRow(row.id, { [field]: v });
+    await patchRow(row.id, { [field]: v }, undefined, row);
     setLinkEdit(null);
   };
 
@@ -931,6 +920,7 @@ export function PostProductionDashboard() {
           description: `Marked pre-edit review done for ${name} by ${reviewBy}`,
           candidateName: name,
         },
+        row,
       );
     } else {
       await patchRow(
@@ -943,6 +933,7 @@ export function PostProductionDashboard() {
           description: `Marked post-edit review done for ${name} by ${reviewBy}`,
           candidateName: name,
         },
+        row,
       );
     }
     setReviewPopover(null);
