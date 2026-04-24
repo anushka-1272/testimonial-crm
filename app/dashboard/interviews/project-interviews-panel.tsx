@@ -1490,6 +1490,30 @@ export function ProjectInterviewsPanel({
                               <button
                                 type="button"
                                 disabled={
+                                  !canEditScheduledTab ||
+                                  postProdBusyId === i.id
+                                }
+                                title={
+                                  !canEditScheduledTab
+                                    ? "View only"
+                                    : undefined
+                                }
+                                className="rounded-lg border border-[#e5e5e5] bg-white px-3 py-1.5 text-xs font-medium text-[#1d1d1f] transition-colors hover:bg-[#fafafa] disabled:cursor-not-allowed disabled:opacity-50"
+                                onMouseDown={(e) => e.stopPropagation()}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (canEditScheduledTab) {
+                                    setLogFollowupFor(
+                                      projectCandidateForLogModal(pc),
+                                    );
+                                  }
+                                }}
+                              >
+                                Log Call (Post)
+                              </button>
+                              <button
+                                type="button"
+                                disabled={
                                   !canMoveToPostProduction(i) ||
                                   postProdBusyId === i.id
                                 }
