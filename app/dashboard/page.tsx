@@ -39,13 +39,13 @@ type PeriodBounds = { startIso: string; endIso?: string } | null;
 function getPeriodBounds(period: Period): PeriodBounds {
   const now = new Date();
   if (period === "weekly") {
-    // UTC Monday 00:00:00.000 → next Monday (exclusive), avoiding local TZ drift.
+    // UTC Saturday 00:00:00.000 → next Saturday (exclusive), i.e. Sat–Fri.
     const day = now.getUTCDay(); // 0=Sun ... 6=Sat
-    const daysSinceMonday = day === 0 ? 6 : day - 1;
+    const diff = day === 6 ? 0 : -(day + 1);
     const startMs = Date.UTC(
       now.getUTCFullYear(),
       now.getUTCMonth(),
-      now.getUTCDate() - daysSinceMonday,
+      now.getUTCDate() + diff,
       0,
       0,
       0,
@@ -203,10 +203,7 @@ export default function DashboardPage() {
     const rangeEnd = bounds?.endIso ?? null;
 
     if (period === "weekly" && rangeStart && rangeEnd) {
-      console.debug("[Dashboard weekly] range", {
-        startOfWeek: rangeStart,
-        endOfWeek: rangeEnd,
-      });
+      console.log("WEEK (Sat-Fri)", rangeStart, rangeEnd);
     }
 
     let entriesQ = supabase
@@ -218,18 +215,21 @@ export default function DashboardPage() {
     const { count: entries } = await entriesQ;
 
     let callsQ = supabase
-      .from("candidates")
-      .select("*", { count: "exact", head: true })
-      .eq("is_deleted", false)
-      .eq("eligibility_status", "eligible");
-    if (rangeStart) callsQ = callsQ.gte("created_at", rangeStart);
-    if (rangeEnd) callsQ = callsQ.lt("created_at", rangeEnd);
+      .from("interviews")
+      .select("id, candidates!inner(id)", { count: "exact", head: true })
+      .or("interview_status.eq.completed,completed_at.not.is.null")
+      .not("completed_at", "is", null)
+      .eq("post_interview_eligible", true)
+      .eq("candidates.is_deleted", false);
+    if (rangeStart) callsQ = callsQ.gte("completed_at", rangeStart);
+    if (rangeEnd) callsQ = callsQ.lt("completed_at", rangeEnd);
     const { count: calls } = await callsQ;
 
     let testQ = supabase
       .from("interviews")
       .select("id, candidates!inner(id)", { count: "exact", head: true })
       .or("interview_status.eq.completed,completed_at.not.is.null")
+      .not("completed_at", "is", null)
       .eq("interview_type", "testimonial")
       .eq("candidates.is_deleted", false);
     if (rangeStart) testQ = testQ.gte("completed_at", rangeStart);
@@ -240,6 +240,7 @@ export default function DashboardPage() {
       .from("project_interviews")
       .select("id, project_candidates!inner(id)", { count: "exact", head: true })
       .or("interview_status.eq.completed,completed_at.not.is.null")
+      .not("completed_at", "is", null)
       .eq("project_candidates.is_deleted", false);
     if (rangeStart) projQ = projQ.gte("completed_at", rangeStart);
     if (rangeEnd) projQ = projQ.lt("completed_at", rangeEnd);
@@ -271,6 +272,7 @@ export default function DashboardPage() {
         .select("id, candidates!inner(id)", { count: "exact", head: true })
         .eq("interviewer", opt.value)
         .or("interview_status.eq.completed,completed_at.not.is.null")
+        .not("completed_at", "is", null)
         .eq("candidates.is_deleted", false);
       if (rangeStart) q = q.gte("completed_at", rangeStart);
       if (rangeEnd) q = q.lt("completed_at", rangeEnd);
@@ -283,20 +285,29 @@ export default function DashboardPage() {
       .from("candidates")
       .select("*", { count: "exact", head: true })
       .eq("is_deleted", false);
-    const { count: fEligible } = await supabase
-      .from("candidates")
-      .select("*", { count: "exact", head: true })
-      .eq("is_deleted", false)
-      .eq("eligibility_status", "eligible");
+    let fEligibleQ = supabase
+      .from("interviews")
+      .select("id, candidates!inner(id)", { count: "exact", head: true })
+      .or("interview_status.eq.completed,completed_at.not.is.null")
+      .not("completed_at", "is", null)
+      .eq("post_interview_eligible", true)
+      .eq("candidates.is_deleted", false);
+    if (rangeStart) fEligibleQ = fEligibleQ.gte("completed_at", rangeStart);
+    if (rangeEnd) fEligibleQ = fEligibleQ.lt("completed_at", rangeEnd);
+    const { count: fEligible } = await fEligibleQ;
     const { count: fScheduled } = await supabase
       .from("interviews")
       .select("id, candidates!inner(id)", { count: "exact", head: true })
       .eq("candidates.is_deleted", false);
-    const { count: fCompleted } = await supabase
+    let fCompletedQ = supabase
       .from("interviews")
       .select("id, candidates!inner(id)", { count: "exact", head: true })
-      .eq("interview_status", "completed")
+      .or("interview_status.eq.completed,completed_at.not.is.null")
+      .not("completed_at", "is", null)
       .eq("candidates.is_deleted", false);
+    if (rangeStart) fCompletedQ = fCompletedQ.gte("completed_at", rangeStart);
+    if (rangeEnd) fCompletedQ = fCompletedQ.lt("completed_at", rangeEnd);
+    const { count: fCompleted } = await fCompletedQ;
     const { count: fDispatched } = await supabase
       .from("dispatch")
       .select("id, candidates!inner(id)", { count: "exact", head: true })
@@ -310,12 +321,16 @@ export default function DashboardPage() {
     });
 
     if (period === "weekly") {
-      const { data: sampleRows } = await supabase
+      let sampleQ = supabase
         .from("interviews")
         .select("id, completed_at, interview_status")
         .or("interview_status.eq.completed,completed_at.not.is.null")
+        .not("completed_at", "is", null)
         .order("completed_at", { ascending: false })
         .limit(5);
+      if (rangeStart) sampleQ = sampleQ.gte("completed_at", rangeStart);
+      if (rangeEnd) sampleQ = sampleQ.lt("completed_at", rangeEnd);
+      const { data: sampleRows } = await sampleQ;
       console.debug("[Dashboard weekly] completed samples", sampleRows ?? []);
     }
 
@@ -450,7 +465,7 @@ export default function DashboardPage() {
       { label: "Project interviews", value: stats.projects },
       { label: "Dispatches", value: stats.dispatches },
       { label: "Form entries", value: stats.entries },
-      { label: "Calls done", value: stats.calls },
+      { label: "Eligible (Post Interview)", value: stats.calls },
     ],
     [stats],
   );

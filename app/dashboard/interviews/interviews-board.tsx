@@ -2277,7 +2277,7 @@ export function InterviewsBoard() {
                                   </button>
                                 </td>
                                 <td className={tdEmail}>
-                                  {i.candidates?.email}
+                                  {i.candidates?.email || "—"}
                                 </td>
                                 <td className={tdInterviewType}>
                                   <div className="flex items-center justify-center">

@@ -702,6 +702,8 @@ export function ProjectInterviewsPanel({
     "border-b border-gray-100 py-4 px-4 text-sm align-middle text-[#1d1d1f]";
   const thName = `${thBase} min-w-[160px] text-left`;
   const tdName = `${tdBase} min-w-[160px] text-left`;
+  const thEmail = `${thBase} min-w-[220px] text-left`;
+  const tdEmail = `${tdBase} min-w-[220px] text-left text-[#6e6e73]`;
   const thPhone = `${thBase} min-w-[130px] text-left`;
   const tdPhone = `${tdBase} min-w-[130px] text-left text-[#6e6e73]`;
   const thProjTitle = `${thBase} min-w-[180px] text-left`;
@@ -1010,10 +1012,11 @@ export function ProjectInterviewsPanel({
           </label>
           <div className={tableWrap}>
             <div className="w-full overflow-x-auto">
-              <table className="w-full min-w-[1100px] table-auto border-collapse">
+              <table className="w-full min-w-[1280px] table-auto border-collapse">
                 <thead>
                   <tr>
                     <th className={thName}>Name</th>
+                    <th className={thEmail}>Email</th>
                     <th className={thPhone}>Phone</th>
                     <th className={thProjTitle}>Project title</th>
                     <th className={thDateTime}>Date &amp; time</th>
@@ -1026,7 +1029,7 @@ export function ProjectInterviewsPanel({
                 <tbody>
                   {scheduledPage.slice.length === 0 ? (
                     <tr>
-                      <td className={tdBase} colSpan={8}>
+                      <td className={tdBase} colSpan={9}>
                         {emptyState}
                       </td>
                     </tr>
@@ -1056,6 +1059,7 @@ export function ProjectInterviewsPanel({
                               {projectDisplayName(pc)}
                             </button>
                           </td>
+                          <td className={tdEmail}>{pc.email?.trim() || "—"}</td>
                           <td className={tdPhone}>
                             {pc.whatsapp_number?.trim() || "—"}
                           </td>
