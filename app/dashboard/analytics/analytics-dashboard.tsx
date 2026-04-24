@@ -202,6 +202,13 @@ function categoryLines(raw: string | null | undefined): string[] {
     .filter(Boolean);
 }
 
+/** Axis / bar labels; full string in tooltip */
+function truncateLabel(s: string, maxLen = 22): string {
+  const t = s.trim();
+  if (t.length <= maxLen) return t;
+  return `${t.slice(0, Math.max(1, maxLen - 1))}…`;
+}
+
 function dispatchSortTime(d: DispatchRow): string | null {
   return d.dispatch_date ?? d.actual_delivery_date ?? d.created_at ?? null;
 }
@@ -446,30 +453,45 @@ export function AnalyticsDashboard() {
     return DOMAIN_INDUSTRY_BUCKETS.map((domain) => {
       const { eligible, notEligible } = counts.get(domain)!;
       const total = eligible + notEligible;
+      const eligiblePct = total > 0 ? (eligible / total) * 100 : 0;
+      const notEligiblePct = total > 0 ? (notEligible / total) * 100 : 0;
       return {
         domain,
+        domainShort: truncateLabel(domain, 22),
         eligible,
         notEligible,
         total,
+        eligiblePct,
+        notEligiblePct,
         conversion:
           total > 0 ? Math.round((eligible / total) * 100) : 0,
       };
-    });
+    })
+      .filter((r) => r.total > 0)
+      .sort((a, b) => b.total - a.total);
   }, [candidates, candidateLatestCompletedInterviewInRange]);
 
   const jobRoleData = useMemo(() => {
     const byId = new Map(candidates.map((c) => [c.id, c]));
     const map = new Map<
       string,
-      { role: string; eligible: number; notEligible: number }
+      { role: string; roleShort: string; eligible: number; notEligible: number }
     >();
     for (const [candidateId, iv] of candidateLatestCompletedInterviewInRange) {
       const c = byId.get(candidateId);
       if (!c) continue;
-      const role = c.role_before_program?.trim() || "Unknown";
-      if (!map.has(role))
-        map.set(role, { role, eligible: 0, notEligible: 0 });
-      const row = map.get(role)!;
+      const roleRaw =
+        c.job_role?.trim() ||
+        c.role_before_program?.trim() ||
+        "Unknown";
+      if (!map.has(roleRaw))
+        map.set(roleRaw, {
+          role: roleRaw,
+          roleShort: truncateLabel(roleRaw, 24),
+          eligible: 0,
+          notEligible: 0,
+        });
+      const row = map.get(roleRaw)!;
       if (iv.post_interview_eligible === true) row.eligible += 1;
       else row.notEligible += 1;
     }
@@ -696,62 +718,89 @@ export function AnalyticsDashboard() {
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             <ChartCard
               title="Domain breakdown"
-              subtitle="Candidates with a completed testimonial interview in range; intake mapped to domain; stacked by post-interview eligibility"
+              subtitle="100% stacked — completed testimonial interviews in range only (status completed or completed_at set); domain from intake; green = post-interview eligible share, red = not"
               empty={domainChartTotal === 0}
             >
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart
                   data={domainData}
-                  margin={{ top: 8, right: 8, left: 0, bottom: 96 }}
+                  margin={{ top: 12, right: 12, left: 0, bottom: 52 }}
+                  barCategoryGap="14%"
                 >
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                  <XAxis
-                    dataKey="domain"
-                    angle={-40}
-                    textAnchor="end"
-                    height={100}
-                    interval={0}
-                    tick={{ fontSize: 9, fill: COLORS.gray }}
+                  <CartesianGrid
+                    strokeDasharray="3 3"
+                    stroke="#e5e7eb"
+                    vertical={false}
                   />
-                  <YAxis tick={{ fontSize: 11, fill: COLORS.gray }} />
+                  <XAxis
+                    dataKey="domainShort"
+                    interval={0}
+                    height={44}
+                    tick={{ fontSize: 11, fill: COLORS.gray }}
+                  />
+                  <YAxis
+                    domain={[0, 100]}
+                    tickFormatter={(v) => `${v}%`}
+                    width={44}
+                    tick={{ fontSize: 11, fill: COLORS.gray }}
+                  />
                   <Tooltip
                     content={({ active, payload }) => {
                       if (!active || !payload?.length) return null;
                       const p = payload[0]!.payload as (typeof domainData)[0];
+                      const ep =
+                        Math.round(p.eligiblePct * 10) / 10;
+                      const np =
+                        Math.round(p.notEligiblePct * 10) / 10;
                       return (
                         <div className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs shadow-md">
-                          <p className="font-medium">{p.domain}</p>
-                          <p className="text-green-700">
-                            Post-interview eligible: {p.eligible}
+                          <p className="font-medium text-gray-900">{p.domain}</p>
+                          <p className="mt-1 text-green-700">
+                            Eligible: {p.eligible} ({ep}%)
                           </p>
                           <p className="text-red-700">
-                            Not post-interview eligible: {p.notEligible}
+                            Not eligible: {p.notEligible} ({np}%)
                           </p>
-                          <p className="text-gray-600">
-                            Conversion: {p.conversion}%
+                          <p className="mt-1 text-gray-500">
+                            Total: {p.total}
                           </p>
                         </div>
                       );
                     }}
                   />
-                  <Legend />
+                  <Legend wrapperStyle={{ fontSize: 12 }} />
                   <Bar
-                    dataKey="eligible"
-                    stackId="a"
+                    dataKey="eligiblePct"
+                    stackId="dom"
                     fill={COLORS.success}
-                    name="Post-interview eligible"
-                  />
-                  <Bar
-                    dataKey="notEligible"
-                    stackId="a"
-                    fill={COLORS.danger}
-                    name="Not post-interview eligible"
+                    name="Eligible %"
+                    maxBarSize={56}
                   >
                     <LabelList
-                      dataKey="conversion"
-                      position="top"
-                      formatter={(v: number) => (v > 0 ? `${v}%` : "")}
-                      className="fill-gray-600 text-[10px]"
+                      dataKey="eligiblePct"
+                      position="center"
+                      fill="#ffffff"
+                      className="text-[10px] font-semibold"
+                      formatter={(v: number) =>
+                        v >= 6 ? `${Math.round(v)}%` : ""
+                      }
+                    />
+                  </Bar>
+                  <Bar
+                    dataKey="notEligiblePct"
+                    stackId="dom"
+                    fill={COLORS.danger}
+                    name="Not eligible %"
+                    maxBarSize={56}
+                  >
+                    <LabelList
+                      dataKey="notEligiblePct"
+                      position="center"
+                      fill="#ffffff"
+                      className="text-[10px] font-semibold"
+                      formatter={(v: number) =>
+                        v >= 6 ? `${Math.round(v)}%` : ""
+                      }
                     />
                   </Bar>
                 </BarChart>
@@ -760,37 +809,87 @@ export function AnalyticsDashboard() {
 
             <ChartCard
               title="Job role breakdown"
-              subtitle="Top 10 roles (intake) among candidates with a completed testimonial interview in range; stacked by post-interview eligibility"
+              subtitle="Top 10 job roles — completed testimonial interviews in range; green = eligible count, red = not (dual stack); sorted by total"
               empty={jobRoleData.length === 0}
             >
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart
                   layout="vertical"
                   data={[...jobRoleData].reverse()}
-                  margin={{ top: 8, right: 16, left: 8, bottom: 8 }}
+                  margin={{ top: 8, right: 28, left: 4, bottom: 8 }}
+                  barCategoryGap="12%"
                 >
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                  <CartesianGrid
+                    strokeDasharray="3 3"
+                    stroke="#e5e7eb"
+                    horizontal={false}
+                  />
                   <XAxis type="number" tick={{ fontSize: 11, fill: COLORS.gray }} />
                   <YAxis
                     type="category"
-                    dataKey="role"
-                    width={120}
-                    tick={{ fontSize: 10, fill: COLORS.gray }}
+                    dataKey="roleShort"
+                    width={108}
+                    tick={{ fontSize: 11, fill: COLORS.gray }}
                   />
-                  <Tooltip />
-                  <Legend />
+                  <Tooltip
+                    content={({ active, payload }) => {
+                      if (!active || !payload?.length) return null;
+                      const p = payload[0]!.payload as (typeof jobRoleData)[0];
+                      return (
+                        <div className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs shadow-md">
+                          <p className="max-w-[240px] font-medium text-gray-900">
+                            {p.role}
+                          </p>
+                          <p className="mt-1 text-green-700">
+                            Eligible: {p.eligible} (
+                            {p.total > 0
+                              ? Math.round((p.eligible / p.total) * 100)
+                              : 0}
+                            %)
+                          </p>
+                          <p className="text-red-700">
+                            Not eligible: {p.notEligible} (
+                            {p.total > 0
+                              ? Math.round((p.notEligible / p.total) * 100)
+                              : 0}
+                            %)
+                          </p>
+                          <p className="mt-1 text-gray-500">Total: {p.total}</p>
+                        </div>
+                      );
+                    }}
+                  />
+                  <Legend wrapperStyle={{ fontSize: 12 }} />
                   <Bar
                     dataKey="eligible"
-                    stackId="r"
+                    stackId="jr"
                     fill={COLORS.success}
                     name="Post-interview eligible"
-                  />
+                    maxBarSize={36}
+                  >
+                    <LabelList
+                      dataKey="eligible"
+                      position="center"
+                      fill="#ffffff"
+                      className="text-[10px] font-semibold"
+                      formatter={(v: number) => (v > 0 ? String(v) : "")}
+                    />
+                  </Bar>
                   <Bar
                     dataKey="notEligible"
-                    stackId="r"
+                    stackId="jr"
                     fill={COLORS.danger}
                     name="Not post-interview eligible"
-                  />
+                    maxBarSize={36}
+                  >
+                    <LabelList
+                      dataKey="notEligible"
+                      position="center"
+                      fill="#ffffff"
+                      className="text-[10px] font-semibold"
+                      formatter={(v: number) => (v > 0 ? String(v) : "")}
+                    />
+                  </Bar>
                 </BarChart>
               </ResponsiveContainer>
             </ChartCard>
