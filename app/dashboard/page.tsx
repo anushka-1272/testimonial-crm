@@ -13,11 +13,6 @@ import { fetchTeamRosterNames } from "@/lib/team-roster";
 import { getUserSafe } from "@/lib/supabase-auth";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 
-import {
-  CallOutcomesBreakdown,
-  emptyCallOutcomesBreakdown,
-  type CallOutcomesBreakdownMap,
-} from "./call-outcomes-breakdown";
 import { DashboardStatCard } from "./dashboard-stat-card";
 
 type Period = "total" | "monthly" | "weekly";
@@ -83,15 +78,6 @@ function periodLabel(p: Period): string {
   if (p === "monthly") return "Monthly";
   return "Weekly";
 }
-
-/** `followup_log.status` values shown in Calls Done breakdown */
-const FOLLOWUP_BREAKDOWN_STATUSES = [
-  "no_answer",
-  "interested",
-  "already_completed",
-  "callback",
-  "not_interested",
-] as const;
 
 function greetingForHour(h: number): string {
   if (h < 12) return "Good morning";
@@ -181,10 +167,6 @@ export default function DashboardPage() {
     /** `followup_log` rows with `project_candidate_id` (project pipeline) */
     project_calls: 0,
   });
-  const [testimonialFollowupBreakdown, setTestimonialFollowupBreakdown] =
-    useState<CallOutcomesBreakdownMap>(emptyCallOutcomesBreakdown());
-  const [projectFollowupBreakdown, setProjectFollowupBreakdown] =
-    useState<CallOutcomesBreakdownMap>(emptyCallOutcomesBreakdown());
   const [interviewer, setInterviewer] = useState<Record<string, number>>({});
   const [interviewerOpts, setInterviewerOpts] = useState<
     InterviewerSelectOption[]
@@ -296,32 +278,6 @@ export default function DashboardPage() {
       projectCallsQ = projectCallsQ.gte("created_at", rangeStart);
     if (rangeEnd) projectCallsQ = projectCallsQ.lt("created_at", rangeEnd);
     const { count: project_calls } = await projectCallsQ;
-
-    const nextTestimonialBreakdown = emptyCallOutcomesBreakdown();
-    const nextProjectBreakdown = emptyCallOutcomesBreakdown();
-    for (const st of FOLLOWUP_BREAKDOWN_STATUSES) {
-      let tbq = supabase
-        .from("followup_log")
-        .select("id", { count: "exact", head: true })
-        .eq("status", st)
-        .not("candidate_id", "is", null);
-      if (rangeStart) tbq = tbq.gte("created_at", rangeStart);
-      if (rangeEnd) tbq = tbq.lt("created_at", rangeEnd);
-      const { count: tc } = await tbq;
-      nextTestimonialBreakdown[st] = tc || 0;
-
-      let pbq = supabase
-        .from("followup_log")
-        .select("id", { count: "exact", head: true })
-        .eq("status", st)
-        .not("project_candidate_id", "is", null);
-      if (rangeStart) pbq = pbq.gte("created_at", rangeStart);
-      if (rangeEnd) pbq = pbq.lt("created_at", rangeEnd);
-      const { count: pc } = await pbq;
-      nextProjectBreakdown[st] = pc || 0;
-    }
-    setTestimonialFollowupBreakdown(nextTestimonialBreakdown);
-    setProjectFollowupBreakdown(nextProjectBreakdown);
 
     setStats({
       testimonials: testimonials || 0,
@@ -615,29 +571,19 @@ export default function DashboardPage() {
             ))}
           </div>
 
-          <div className="space-y-8">
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              {dashboardStatItems.map(
-                ({ title, value, subtext, titleAttr }) => (
-                  <DashboardStatCard
-                    key={title}
-                    title={title}
-                    value={value}
-                    loading={loading}
-                    subtext={subtext}
-                    titleAttr={titleAttr}
-                  />
-                ),
-              )}
-            </div>
-
-            <CallOutcomesBreakdown
-              loading={loading}
-              testimonialTotal={stats.testimonial_calls}
-              projectTotal={stats.project_calls}
-              testimonialBreakdown={testimonialFollowupBreakdown}
-              projectBreakdown={projectFollowupBreakdown}
-            />
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {dashboardStatItems.map(
+              ({ title, value, subtext, titleAttr }) => (
+                <DashboardStatCard
+                  key={title}
+                  title={title}
+                  value={value}
+                  loading={loading}
+                  subtext={subtext}
+                  titleAttr={titleAttr}
+                />
+              ),
+            )}
           </div>
 
           <div className="border-t border-[#e8e8ed] pt-10">
