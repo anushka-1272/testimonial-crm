@@ -81,6 +81,7 @@ function periodLabel(p: Period): string {
 const FOLLOWUP_BREAKDOWN_STATUSES = [
   "no_answer",
   "interested",
+  "already_completed",
   "callback",
   "not_interested",
 ] as const;
@@ -91,6 +92,7 @@ const FOLLOWUP_BREAKDOWN_LABELS: Record<
 > = {
   no_answer: "No answer",
   interested: "Interested",
+  already_completed: "Already completed",
   callback: "Callback",
   not_interested: "Not interested",
 };
@@ -104,6 +106,7 @@ function emptyFollowupBreakdown(): FollowupCallBreakdown {
   return {
     no_answer: 0,
     interested: 0,
+    already_completed: 0,
     callback: 0,
     not_interested: 0,
   };

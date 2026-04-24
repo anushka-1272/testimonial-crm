@@ -207,6 +207,17 @@ function postInterviewEligibleBadge(
   return <span className="text-[#6e6e73]">—</span>;
 }
 
+function alreadyCompletedFollowupBadge(
+  followupStatus: FollowupStatus | undefined,
+) {
+  if (followupStatus !== "already_completed") return null;
+  return (
+    <span className="mt-1 inline-flex w-fit rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-800">
+      Already Completed
+    </span>
+  );
+}
+
 function postProductionGateBadgeProject(
   i: ProjectInterviewWithProjectCandidate,
 ) {
@@ -900,13 +911,16 @@ export function ProjectInterviewsPanel({
                       return (
                         <tr key={c.id}>
                           <td className={tdName}>
-                            <button
-                              type="button"
-                              className={nameLinkBtn}
-                              onClick={() => setDetail(c)}
-                            >
-                              {projectDisplayName(c)}
-                            </button>
+                            <div className="flex min-w-0 flex-col items-start">
+                              <button
+                                type="button"
+                                className={nameLinkBtn}
+                                onClick={() => setDetail(c)}
+                              >
+                                {projectDisplayName(c)}
+                              </button>
+                              {alreadyCompletedFollowupBadge(c.followup_status)}
+                            </div>
                           </td>
                           <td className={tdEmail}>
                             {c.email?.trim() || "—"}
@@ -1109,13 +1123,16 @@ export function ProjectInterviewsPanel({
                       return (
                         <tr key={i.id}>
                           <td className={tdName}>
-                            <button
-                              type="button"
-                              className={nameLinkBtn}
-                              onClick={() => setDetail(pc)}
-                            >
-                              {projectDisplayName(pc)}
-                            </button>
+                            <div className="flex min-w-0 flex-col items-start">
+                              <button
+                                type="button"
+                                className={nameLinkBtn}
+                                onClick={() => setDetail(pc)}
+                              >
+                                {projectDisplayName(pc)}
+                              </button>
+                              {alreadyCompletedFollowupBadge(pc.followup_status)}
+                            </div>
                           </td>
                           <td className={tdEmail}>{pc.email?.trim() || "—"}</td>
                           <td className={tdProjTitle}>
@@ -1316,13 +1333,16 @@ export function ProjectInterviewsPanel({
                       return (
                         <tr key={i.id}>
                           <td className={tdName}>
-                            <button
-                              type="button"
-                              className={nameLinkBtn}
-                              onClick={() => setDetail(pc)}
-                            >
-                              {projectDisplayName(pc)}
-                            </button>
+                            <div className="flex min-w-0 flex-col items-start">
+                              <button
+                                type="button"
+                                className={nameLinkBtn}
+                                onClick={() => setDetail(pc)}
+                              >
+                                {projectDisplayName(pc)}
+                              </button>
+                              {alreadyCompletedFollowupBadge(pc.followup_status)}
+                            </div>
                           </td>
                           <td className={tdEmail}>
                             {pc.email?.trim() || "—"}
@@ -1442,13 +1462,16 @@ export function ProjectInterviewsPanel({
                       return (
                         <tr key={i.id}>
                           <td className={tdName}>
-                            <button
-                              type="button"
-                              className={nameLinkBtn}
-                              onClick={() => setDetail(pc)}
-                            >
-                              {projectDisplayName(pc)}
-                            </button>
+                            <div className="flex min-w-0 flex-col items-start">
+                              <button
+                                type="button"
+                                className={nameLinkBtn}
+                                onClick={() => setDetail(pc)}
+                              >
+                                {projectDisplayName(pc)}
+                              </button>
+                              {alreadyCompletedFollowupBadge(pc.followup_status)}
+                            </div>
                           </td>
                           <td className={tdEmail}>
                             {pc.email?.trim() || "—"}

@@ -115,6 +115,10 @@ export function resolveFollowupStatusPublicDisplay(
     return { title: "Not Interested", subtitle: null };
   }
 
+  if (status === "already_completed") {
+    return { title: "Interview already completed", subtitle: null };
+  }
+
   if (count > 0) {
     const attemptLabel = count === 1 ? "1 attempt" : `${count} attempts`;
     return {

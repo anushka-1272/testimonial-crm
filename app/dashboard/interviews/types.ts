@@ -56,12 +56,14 @@ export type FollowupStatus =
   | "wrong_number"
   | "not_interested"
   | "scheduled"
-  | "interested";
+  | "interested"
+  | "already_completed";
 
 export type FollowupCallOutcome =
   | "no_answer"
   | "callback"
   | "interested"
+  | "already_completed"
   | "not_interested"
   | "wrong_number";
 

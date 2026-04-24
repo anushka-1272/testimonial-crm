@@ -59,6 +59,11 @@ const OUTCOMES: {
     hint: "Proceed to schedule",
   },
   {
+    value: "already_completed",
+    label: "Interview Already Completed",
+    hint: "Candidate has already completed interview",
+  },
+  {
     value: "not_interested",
     label: "Not Interested",
     hint: "End pipeline",
@@ -78,6 +83,8 @@ function statusLabelForActivity(outcome: FollowupCallOutcome): string {
       return "callback requested";
     case "interested":
       return "interested";
+    case "already_completed":
+      return "already completed (interview done)";
     case "not_interested":
       return "not interested";
     case "wrong_number":
@@ -162,6 +169,10 @@ export function LogFollowupCallModal({
         newStatus = "interested";
         newCallbackAt = null;
         break;
+      case "already_completed":
+        newStatus = "already_completed";
+        newCallbackAt = null;
+        break;
       case "not_interested":
         newStatus = "not_interested";
         newReason = notInterestedReason.trim() || null;
@@ -236,6 +247,20 @@ export function LogFollowupCallModal({
         setError(upErr.message);
         setSubmitting(false);
         return;
+      }
+
+      if (isProject && outcome === "already_completed") {
+        const { error: piErr } = await supabase
+          .from("project_interviews")
+          .update({ interview_status: "completed" })
+          .eq("project_candidate_id", projectCandidate!.id)
+          .neq("interview_status", "completed");
+        if (piErr) {
+          console.error(
+            "[LogFollowupCallModal] project_interviews → completed:",
+            piErr.message,
+          );
+        }
       }
 
       const entityType = isProject ? "project_candidate" : "candidate";
@@ -394,6 +419,7 @@ export function LogFollowupCallModal({
                       {o.value === "no_answer" && "📞 "}
                       {o.value === "callback" && "📅 "}
                       {o.value === "interested" && "✅ "}
+                      {o.value === "already_completed" && "✓ "}
                       {o.value === "not_interested" && "❌ "}
                       {o.value === "wrong_number" && "📵 "}
                       {o.label}

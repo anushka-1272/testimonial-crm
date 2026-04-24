@@ -31,6 +31,7 @@ function statusDisplay(status: string): string {
     no_answer: "No answer",
     callback: "Callback requested",
     interested: "Interested",
+    already_completed: "Already completed",
     not_interested: "Not interested",
     wrong_number: "Wrong number",
   };
