@@ -156,6 +156,10 @@ function hasAssignedInterviewer(i: InterviewWithCandidate): boolean {
   return Boolean(i.interviewer?.trim());
 }
 
+function isCompletedInterview(i: InterviewWithCandidate): boolean {
+  return i.interview_status === "completed" || Boolean(i.completed_at);
+}
+
 function zoomPipelineFilterKey(
   i: InterviewWithCandidate,
 ): ZoomStatusFilter | null {
@@ -720,9 +724,24 @@ export function InterviewsBoard() {
         )
         .map((i) => i.candidate_id),
     );
+    const completedByCandidate = new Map<string, InterviewWithCandidate>();
+    for (const i of list) {
+      if (!isCompletedInterview(i)) continue;
+      const prev = completedByCandidate.get(i.candidate_id);
+      if (!prev) {
+        completedByCandidate.set(i.candidate_id, i);
+        continue;
+      }
+      const prevTime = new Date(
+        prev.completed_at ?? prev.scheduled_date ?? 0,
+      ).getTime();
+      const nextTime = new Date(i.completed_at ?? i.scheduled_date ?? 0).getTime();
+      if (nextTime >= prevTime) completedByCandidate.set(i.candidate_id, i);
+    }
+    const completedCandidateIds = new Set(completedByCandidate.keys());
 
     const queue = (elig ?? [])
-      .filter((c) => !busy.has(c.id))
+      .filter((c) => !busy.has(c.id) && !completedCandidateIds.has(c.id))
       .map((row) => {
         const r = row as Record<string, unknown>;
         const onTrack = Boolean(r.linkedin_track);
@@ -750,6 +769,15 @@ export function InterviewsBoard() {
             (r.not_interested_at as string | null) ?? null,
         } satisfies EligibleCandidate;
       });
+    const leaked = queue.find((c) => completedCandidateIds.has(c.id));
+    if (leaked) {
+      const sample = completedByCandidate.get(leaked.id);
+      console.debug("[InterviewsBoard] Eligible leak check", {
+        candidate_id: leaked.id,
+        interview_status: sample?.interview_status ?? null,
+        completed_at: sample?.completed_at ?? null,
+      });
+    }
     setEligibleQueue(queue);
     setInterviews(list);
     setError(null);
@@ -851,6 +879,7 @@ export function InterviewsBoard() {
           m.completed.push(i);
           break;
         default:
+          if (isCompletedInterview(i)) m.completed.push(i);
           break;
       }
     }
@@ -964,13 +993,20 @@ export function InterviewsBoard() {
 
   const eligibleFiltered = useMemo(
     () =>
-      [...filterEligible(eligibleQueue, filters.eligible)].sort((a, b) => {
+      [...filterEligible(eligibleQueue, filters.eligible)]
+        // Safety guard: if any completed candidate slips through, hide in Eligible tab.
+        .filter((c) => {
+          return !interviews.some(
+            (i) => i.candidate_id === c.id && isCompletedInterview(i),
+          );
+        })
+        .sort((a, b) => {
         const dateA = new Date(a.created_at || 0).getTime();
         const dateB = new Date(b.created_at || 0).getTime();
         const cmp = dateA - dateB;
         return cmp !== 0 ? cmp : a.id.localeCompare(b.id);
-      }),
-    [eligibleQueue, filters.eligible, filterEligible],
+        }),
+    [eligibleQueue, filters.eligible, filterEligible, interviews],
   );
 
   const interviewEligibleFiltered = useMemo(
