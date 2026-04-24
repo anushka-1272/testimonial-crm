@@ -210,10 +210,14 @@ export default function DashboardPage() {
     dispatches: 0,
     entries: 0,
     calls: 0,
-    /** One row per follow-up call attempt (`followup_log`), not interviews */
-    totalCallAttempts: 0,
+    /** `followup_log` rows with `candidate_id` (testimonial / eligible pipeline) */
+    testimonial_calls: 0,
+    /** `followup_log` rows with `project_candidate_id` (project pipeline) */
+    project_calls: 0,
   });
-  const [followupBreakdown, setFollowupBreakdown] =
+  const [testimonialFollowupBreakdown, setTestimonialFollowupBreakdown] =
+    useState<FollowupCallBreakdown>(emptyFollowupBreakdown);
+  const [projectFollowupBreakdown, setProjectFollowupBreakdown] =
     useState<FollowupCallBreakdown>(emptyFollowupBreakdown);
   const [interviewer, setInterviewer] = useState<Record<string, number>>({});
   const [interviewerOpts, setInterviewerOpts] = useState<
@@ -308,25 +312,50 @@ export default function DashboardPage() {
     if (rangeEnd) dispQ = dispQ.lt("created_at", rangeEnd);
     const { count: dispatches } = await dispQ;
 
-    let followupTotalQ = supabase
+    let testimonialCallsQ = supabase
       .from("followup_log")
-      .select("id", { count: "exact", head: true });
-    if (rangeStart) followupTotalQ = followupTotalQ.gte("created_at", rangeStart);
-    if (rangeEnd) followupTotalQ = followupTotalQ.lt("created_at", rangeEnd);
-    const { count: totalCallAttempts } = await followupTotalQ;
+      .select("id", { count: "exact", head: true })
+      .not("candidate_id", "is", null);
+    if (rangeStart)
+      testimonialCallsQ = testimonialCallsQ.gte("created_at", rangeStart);
+    if (rangeEnd)
+      testimonialCallsQ = testimonialCallsQ.lt("created_at", rangeEnd);
+    const { count: testimonial_calls } = await testimonialCallsQ;
 
-    const nextBreakdown = emptyFollowupBreakdown();
+    let projectCallsQ = supabase
+      .from("followup_log")
+      .select("id", { count: "exact", head: true })
+      .not("project_candidate_id", "is", null);
+    if (rangeStart)
+      projectCallsQ = projectCallsQ.gte("created_at", rangeStart);
+    if (rangeEnd) projectCallsQ = projectCallsQ.lt("created_at", rangeEnd);
+    const { count: project_calls } = await projectCallsQ;
+
+    const nextTestimonialBreakdown = emptyFollowupBreakdown();
+    const nextProjectBreakdown = emptyFollowupBreakdown();
     for (const st of FOLLOWUP_BREAKDOWN_STATUSES) {
-      let bq = supabase
+      let tbq = supabase
         .from("followup_log")
         .select("id", { count: "exact", head: true })
-        .eq("status", st);
-      if (rangeStart) bq = bq.gte("created_at", rangeStart);
-      if (rangeEnd) bq = bq.lt("created_at", rangeEnd);
-      const { count: c } = await bq;
-      nextBreakdown[st] = c || 0;
+        .eq("status", st)
+        .not("candidate_id", "is", null);
+      if (rangeStart) tbq = tbq.gte("created_at", rangeStart);
+      if (rangeEnd) tbq = tbq.lt("created_at", rangeEnd);
+      const { count: tc } = await tbq;
+      nextTestimonialBreakdown[st] = tc || 0;
+
+      let pbq = supabase
+        .from("followup_log")
+        .select("id", { count: "exact", head: true })
+        .eq("status", st)
+        .not("project_candidate_id", "is", null);
+      if (rangeStart) pbq = pbq.gte("created_at", rangeStart);
+      if (rangeEnd) pbq = pbq.lt("created_at", rangeEnd);
+      const { count: pc } = await pbq;
+      nextProjectBreakdown[st] = pc || 0;
     }
-    setFollowupBreakdown(nextBreakdown);
+    setTestimonialFollowupBreakdown(nextTestimonialBreakdown);
+    setProjectFollowupBreakdown(nextProjectBreakdown);
 
     setStats({
       testimonials: testimonials || 0,
@@ -334,7 +363,8 @@ export default function DashboardPage() {
       dispatches: dispatches || 0,
       entries: entries || 0,
       calls: calls || 0,
-      totalCallAttempts: totalCallAttempts || 0,
+      testimonial_calls: testimonial_calls || 0,
+      project_calls: project_calls || 0,
     });
 
     const ivNames = await fetchTeamRosterNames(supabase, "interviewer", true);
@@ -534,26 +564,25 @@ export default function DashboardPage() {
     );
   }, [interviewer, interviewerOpts]);
 
-  const statCards = useMemo(() => {
-    const callsDoneSubtitle = formatFollowupBreakdownSubtitle(
-      stats.totalCallAttempts,
-      followupBreakdown,
-    );
-    return [
+  const baseStatCards = useMemo(
+    () => [
       { label: "Testimonial interviews", value: stats.testimonials },
       { label: "Project interviews", value: stats.projects },
       { label: "Dispatches", value: stats.dispatches },
       { label: "Form entries", value: stats.entries },
       { label: "Eligible (Post Interview)", value: stats.calls },
-      {
-        label: "Calls Done",
-        value: stats.totalCallAttempts,
-        title:
-          "Total follow-up call attempts logged in followup_log (by period when Weekly/Monthly is selected). Does not include interview completions.",
-        subtitle: callsDoneSubtitle,
-      },
-    ];
-  }, [stats, followupBreakdown]);
+    ],
+    [stats],
+  );
+
+  const testimonialCallsSubtitle = formatFollowupBreakdownSubtitle(
+    stats.testimonial_calls,
+    testimonialFollowupBreakdown,
+  );
+  const projectCallsSubtitle = formatFollowupBreakdownSubtitle(
+    stats.project_calls,
+    projectFollowupBreakdown,
+  );
 
   const hour = new Date().getHours();
   const greeting = greetingForHour(hour);
@@ -596,10 +625,9 @@ export default function DashboardPage() {
           </div>
 
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-6 lg:gap-4">
-            {statCards.map(({ label, value, subtitle, title }) => (
+            {baseStatCards.map(({ label, value }) => (
               <div
                 key={label}
-                title={title}
                 className={`rounded-2xl bg-white p-4 transition-transform duration-200 ease-in-out hover:scale-[1.01] sm:p-6 ${cardChrome} cursor-default`}
               >
                 <p className="mb-3 text-xs font-medium text-[#6e6e73]">
@@ -608,14 +636,46 @@ export default function DashboardPage() {
                 <p className="text-2xl font-bold tracking-tight text-[#1d1d1f] tabular-nums sm:text-4xl">
                   {loading ? "—" : value}
                 </p>
-                {subtitle ? (
-                  <p className="mt-2 text-[11px] leading-snug text-[#6e6e73]">
-                    {subtitle}
-                  </p>
-                ) : null}
                 <div className="mt-4 h-0.5 w-8 rounded-full bg-[#3b82f6]" />
               </div>
             ))}
+            <div
+              title="followup_log: testimonial attempts use candidate_id; project attempts use project_candidate_id. Filtered by created_at when Weekly/Monthly is selected. Not interview completions."
+              className={`rounded-2xl bg-white p-4 transition-transform duration-200 ease-in-out hover:scale-[1.01] sm:p-6 ${cardChrome} cursor-default`}
+            >
+              <p className="mb-3 text-xs font-medium text-[#6e6e73]">
+                Calls Done
+              </p>
+              <div className="space-y-3">
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-[#aeaeb2]">
+                    Testimonials
+                  </p>
+                  <p className="text-2xl font-bold tracking-tight text-[#1d1d1f] tabular-nums sm:text-3xl">
+                    {loading ? "—" : stats.testimonial_calls}
+                  </p>
+                  {testimonialCallsSubtitle ? (
+                    <p className="mt-1 text-[11px] leading-snug text-[#6e6e73]">
+                      {testimonialCallsSubtitle}
+                    </p>
+                  ) : null}
+                </div>
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-[#aeaeb2]">
+                    Projects
+                  </p>
+                  <p className="text-2xl font-bold tracking-tight text-[#1d1d1f] tabular-nums sm:text-3xl">
+                    {loading ? "—" : stats.project_calls}
+                  </p>
+                  {projectCallsSubtitle ? (
+                    <p className="mt-1 text-[11px] leading-snug text-[#6e6e73]">
+                      {projectCallsSubtitle}
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+              <div className="mt-4 h-0.5 w-8 rounded-full bg-[#3b82f6]" />
+            </div>
           </div>
 
           <div className="border-t border-[#e8e8ed] pt-10">
