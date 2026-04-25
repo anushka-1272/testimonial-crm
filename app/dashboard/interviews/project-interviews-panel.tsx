@@ -23,6 +23,11 @@ import {
 import { AddZoomDetailsModal } from "./add-zoom-details-modal";
 import { AssignInterviewerModal } from "./assign-interviewer-modal";
 import { EditInterviewDetailsModal } from "./edit-interview-details-modal";
+import {
+  followupStatusBadgeFromSnapshot,
+  getFollowUpStatus,
+  type FollowupLogStatusRow,
+} from "./followup-status";
 import { LogFollowupCallModal } from "./log-followup-call-modal";
 import type { ScheduleProjectCandidate } from "./schedule-interview-modal";
 import type {
@@ -295,6 +300,7 @@ export function ProjectInterviewsPanel({
   const [interviews, setInterviews] = useState<
     ProjectInterviewWithProjectCandidate[]
   >([]);
+  const [followupLogs, setFollowupLogs] = useState<FollowupLogStatusRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [subTab, setSubTab] = useState<ProjectSubTab>("pending");
   const [filters, setFilters] = useState(defaultFilters);
@@ -356,6 +362,13 @@ export function ProjectInterviewsPanel({
       .from("project_interviews")
       .select(PROJECT_INTERVIEW_COLUMNS)
       .order("created_at", { ascending: true });
+    const { data: fl, error: eFollowup } = await supabase
+      .from("followup_log")
+      .select(
+        "created_at, project_candidate_id, status, attempt_number, callback_datetime",
+      )
+      .not("project_candidate_id", "is", null)
+      .order("created_at", { ascending: true });
 
     if (eInterviews) {
       console.log(
@@ -379,6 +392,15 @@ export function ProjectInterviewsPanel({
         .filter((i) => i.project_candidates != null);
       setInterviews(merged);
     }
+    if (eFollowup) {
+      console.log(
+        "[ProjectInterviewsPanel] followup_log load error:",
+        eFollowup,
+      );
+      setFollowupLogs([]);
+    } else {
+      setFollowupLogs((fl ?? []) as FollowupLogStatusRow[]);
+    }
 
     if (eCandidates && eInterviews) {
       onError(
@@ -390,6 +412,8 @@ export function ProjectInterviewsPanel({
       onError(
         `Could not load project interviews: ${eInterviews.message}. Pending list still uses candidates.`,
       );
+    } else if (eFollowup) {
+      onError(`Could not load follow-up logs: ${eFollowup.message}.`);
     } else {
       onError(null);
     }
@@ -476,6 +500,13 @@ export function ProjectInterviewsPanel({
           onPipelineChanged();
         },
       )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "followup_log" },
+        () => {
+          void loadProjectData();
+        },
+      )
       .subscribe();
     return () => {
       void supabase.removeChannel(ch);
@@ -542,6 +573,28 @@ export function ProjectInterviewsPanel({
           .map((i) => i.project_candidate_id),
       ),
     [interviews],
+  );
+
+  const followupLogsByProjectCandidateId = useMemo(() => {
+    const map = new Map<string, FollowupLogStatusRow[]>();
+    for (const log of followupLogs) {
+      const id = log.project_candidate_id?.trim();
+      if (!id) continue;
+      const list = map.get(id);
+      if (list) list.push(log);
+      else map.set(id, [log]);
+    }
+    return map;
+  }, [followupLogs]);
+
+  const followupBadgeForProjectCandidate = useCallback(
+    (projectCandidateId: string) => {
+      const logs = followupLogsByProjectCandidateId.get(projectCandidateId) ?? [];
+      const summary = getFollowUpStatus(logs);
+      if (!summary) return <span className="text-[#6e6e73]">—</span>;
+      return followupStatusBadgeFromSnapshot(summary);
+    },
+    [followupLogsByProjectCandidateId],
   );
 
   const pendingQueue = useMemo(() => {
@@ -766,6 +819,8 @@ export function ProjectInterviewsPanel({
   const tdProjTitle = `${tdBase} min-w-[180px] text-left text-[#6e6e73]`;
   const thPoc = `${thBase} min-w-[160px] text-left`;
   const tdPoc = `${tdBase} min-w-[160px] text-left`;
+  const thFollowUp = `${thBase} min-w-[150px] text-left`;
+  const tdFollowUp = `${tdBase} min-w-[150px] text-left`;
   const thActions = `${thBase} min-w-[120px] text-right`;
   const tdActions = `${tdBase} min-w-[120px] text-right`;
   const thDateTime = `${thBase} min-w-[170px] text-left`;
@@ -903,13 +958,14 @@ export function ProjectInterviewsPanel({
                     <th className={thEmail}>Email</th>
                     <th className={thProjTitle}>Project title</th>
                     <th className={thPoc}>POC assigned</th>
+                    <th className={thFollowUp}>Follow-up</th>
                     <th className={thActions}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {pendingPage.slice.length === 0 ? (
                     <tr>
-                      <td className={tdBase} colSpan={5}>
+                      <td className={tdBase} colSpan={6}>
                         {emptyState}
                       </td>
                     </tr>
@@ -988,6 +1044,9 @@ export function ProjectInterviewsPanel({
                                 </button>
                               </div>
                             )}
+                          </td>
+                          <td className={tdFollowUp}>
+                            {followupBadgeForProjectCandidate(c.id)}
                           </td>
                           <td className={tdActions}>
                             <div className="flex flex-wrap justify-end gap-2">
@@ -1104,13 +1163,14 @@ export function ProjectInterviewsPanel({
                     <th className={thInterviewer}>Interviewer</th>
                     <th className={thZoomStatus}>Zoom status</th>
                     <th className={thPoc}>POC</th>
+                    <th className={thFollowUp}>Follow-up</th>
                     <th className={thActions}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {scheduledPage.slice.length === 0 ? (
                     <tr>
-                      <td className={tdBase} colSpan={8}>
+                      <td className={tdBase} colSpan={9}>
                         {emptyState}
                       </td>
                     </tr>
@@ -1189,6 +1249,9 @@ export function ProjectInterviewsPanel({
                             {i.poc?.trim() ||
                               pc.poc_assigned?.trim() ||
                               "—"}
+                          </td>
+                          <td className={tdFollowUp}>
+                            {followupBadgeForProjectCandidate(i.project_candidate_id)}
                           </td>
                           <td className={tdActions}>
                             <div className="flex flex-wrap items-center justify-end gap-2">
@@ -1325,13 +1388,14 @@ export function ProjectInterviewsPanel({
                     <th className={thReason}>Reason</th>
                     <th className={thDateTime}>New date</th>
                     <th className={thInterviewer}>Interviewer</th>
+                    <th className={thFollowUp}>Follow-up</th>
                     <th className={thActions}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {rescheduledPage.slice.length === 0 ? (
                     <tr>
-                      <td className={tdBase} colSpan={8}>
+                      <td className={tdBase} colSpan={9}>
                         {emptyState}
                       </td>
                     </tr>
@@ -1373,6 +1437,9 @@ export function ProjectInterviewsPanel({
                           </td>
                           <td className={tdInterviewer}>
                             {formatInterviewerStoredForUi(i.interviewer)}
+                          </td>
+                          <td className={tdFollowUp}>
+                            {followupBadgeForProjectCandidate(i.project_candidate_id)}
                           </td>
                           <td className={tdActions}>
                             <div className="flex flex-wrap items-center justify-end gap-2">
@@ -1450,13 +1517,14 @@ export function ProjectInterviewsPanel({
                     </th>
                     <th className={thFunnelCol}>Funnel</th>
                     <th className={thCommentsCol}>Comments</th>
+                    <th className={thFollowUp}>Follow-up</th>
                     <th className={thActions}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {completedPage.slice.length === 0 ? (
                     <tr>
-                      <td className={tdBase} colSpan={10}>
+                      <td className={tdBase} colSpan={11}>
                         {emptyState}
                       </td>
                     </tr>
@@ -1513,6 +1581,9 @@ export function ProjectInterviewsPanel({
                             <span className="block max-w-[200px] truncate">
                               {commentsPreview.display}
                             </span>
+                          </td>
+                          <td className={tdFollowUp}>
+                            {followupBadgeForProjectCandidate(i.project_candidate_id)}
                           </td>
                           <td className={`${tdActions} relative`}>
                             <div
