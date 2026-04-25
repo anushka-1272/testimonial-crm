@@ -18,7 +18,6 @@ import {
   resolveDashboardStatsBounds,
   type DashboardPeriod,
 } from "@/lib/dashboard-ist-dates";
-import { followupOutcomeDisplayLabel } from "@/lib/followup-outcome-display";
 import { getUserSafe } from "@/lib/supabase-auth";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 
@@ -162,10 +161,6 @@ export default function DashboardPage() {
   );
   const [recentLoading, setRecentLoading] = useState(true);
   const [loading, setLoading] = useState(true);
-  /** `followup_log.status` counts (testimonial + project) for the selected period */
-  const [followupOutcomeBreakdown, setFollowupOutcomeBreakdown] = useState<
-    { status: string; count: number; label: string }[]
-  >([]);
 
   useEffect(() => {
     const ctrl = new AbortController();
@@ -271,38 +266,6 @@ export default function DashboardPage() {
       testimonial_calls: testimonial_calls || 0,
       project_calls: project_calls || 0,
     });
-
-    let followupLogQ = supabase.from("followup_log").select("status");
-    if (rangeStart) followupLogQ = followupLogQ.gte("created_at", rangeStart);
-    if (rangeEnd) followupLogQ = followupLogQ.lt("created_at", rangeEnd);
-    const { data: followupStatusRows, error: followupBreakdownErr } =
-      await followupLogQ;
-    if (followupBreakdownErr) {
-      setFollowupOutcomeBreakdown([]);
-    } else {
-      const counts = new Map<string, number>();
-      for (const r of followupStatusRows ?? []) {
-        const row = r as { status?: string | null };
-        const s =
-          typeof row.status === "string" && row.status.trim()
-            ? row.status.trim()
-            : "(empty)";
-        counts.set(s, (counts.get(s) ?? 0) + 1);
-      }
-      setFollowupOutcomeBreakdown(
-        [...counts.entries()]
-          .map(([status, count]) => ({
-            status,
-            count,
-            label: followupOutcomeDisplayLabel(status),
-          }))
-          .sort((a, b) =>
-            b.count !== a.count
-              ? b.count - a.count
-              : a.status.localeCompare(b.status),
-          ),
-      );
-    }
 
     const ivNames = await fetchTeamRosterNames(supabase, "interviewer", true);
     const ivOptions = buildInterviewerSelectOptions(ivNames, null);
@@ -626,40 +589,6 @@ export default function DashboardPage() {
                   titleAttr={titleAttr}
                 />
               ),
-            )}
-          </div>
-
-          <div className="rounded-2xl border border-[#e8e8ed] bg-white p-5 shadow-[0_2px_8px_rgba(0,0,0,0.04)]">
-            <h2 className="text-base font-semibold text-[#1d1d1f]">
-              Call outcomes breakdown
-            </h2>
-            <p className="mt-1 text-sm text-[#6e6e73]">
-              Counts by outcome (
-              <code className="rounded bg-[#f5f5f7] px-1 py-0.5 text-xs">
-                followup_log.status
-              </code>
-              ) for testimonial and project follow-up logs in the selected period.
-            </p>
-            {loading ? (
-              <p className="mt-4 text-sm text-[#6e6e73]">Loading…</p>
-            ) : followupOutcomeBreakdown.length === 0 ? (
-              <p className="mt-4 text-sm text-[#6e6e73]">
-                No follow-up calls logged in this period.
-              </p>
-            ) : (
-              <ul className="mt-4 divide-y divide-[#f0f0f0]">
-                {followupOutcomeBreakdown.map(({ status, count, label }) => (
-                  <li
-                    key={status}
-                    className="flex items-center justify-between gap-4 py-2.5 text-sm"
-                  >
-                    <span className="font-medium text-[#1d1d1f]">{label}</span>
-                    <span className="tabular-nums text-[#6e6e73]" title={status}>
-                      {count}
-                    </span>
-                  </li>
-                ))}
-              </ul>
             )}
           </div>
 
