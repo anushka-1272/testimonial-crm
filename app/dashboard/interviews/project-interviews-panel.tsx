@@ -581,6 +581,21 @@ export function ProjectInterviewsPanel({
     [interviews],
   );
 
+  /** Candidates already completed at least one project interview — never show in Pending. */
+  const completedCandidateIds = useMemo(
+    () =>
+      new Set(
+        interviews
+          .filter(
+            (i) =>
+              i.interview_status === "completed" ||
+              Boolean(i.completed_at?.trim()),
+          )
+          .map((i) => i.project_candidate_id),
+      ),
+    [interviews],
+  );
+
   const followupLogsByProjectCandidateId = useMemo(() => {
     const map = new Map<string, FollowupLogStatusRow[]>();
     for (const log of followupLogs) {
@@ -607,6 +622,7 @@ export function ProjectInterviewsPanel({
     const q = filters.pending.search;
     const rows = candidates.filter((c) => {
       if (activePipelineCandidateIds.has(c.id)) return false;
+      if (completedCandidateIds.has(c.id)) return false;
       const statusNorm = (c.status ?? "pending").trim() || "pending";
       const hasInterview = candidateIdsWithInterview.has(c.id);
       const qualifiesPending =
@@ -618,6 +634,7 @@ export function ProjectInterviewsPanel({
     candidates,
     candidateIdsWithInterview,
     activePipelineCandidateIds,
+    completedCandidateIds,
     filters.pending.search,
   ]);
 
