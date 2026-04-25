@@ -1,7 +1,7 @@
 "use client";
 
 import { parseISO } from "date-fns";
-import { ExternalLink, Loader2 } from "lucide-react";
+import { Download, ExternalLink, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { modalOverlayClass, modalPanelClass } from "@/lib/modal-responsive";
@@ -243,6 +243,7 @@ export function InterviewLibraryDashboard() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
   const [detailData, setDetailData] = useState<LibraryDetailData | null>(null);
+  const [exportingCsv, setExportingCsv] = useState(false);
   const [expandedTextKeys, setExpandedTextKeys] = useState<Set<string>>(
     () => new Set(),
   );
@@ -565,6 +566,54 @@ export function InterviewLibraryDashboard() {
     });
   };
 
+  const handleExportCsv = async () => {
+    if (!supabase || exportingCsv) return;
+    setExportingCsv(true);
+    setError(null);
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) {
+        setError("You must be signed in to export.");
+        setExportingCsv(false);
+        return;
+      }
+
+      const params = new URLSearchParams();
+      if (search.trim()) params.set("search", search.trim());
+      if (typeFilter !== "all") params.set("type", typeFilter);
+      if (domainFilter !== "all") params.set("domain", domainFilter);
+      if (dateFrom.trim()) params.set("from", dateFrom.trim());
+      if (dateTo.trim()) params.set("to", dateTo.trim());
+
+      const res = await fetch(`/api/interview-library/export?${params.toString()}`, {
+        method: "GET",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (!res.ok) {
+        const message = await res.text().catch(() => "");
+        throw new Error(message || "Failed to export CSV.");
+      }
+
+      const blob = await res.blob();
+      const dlUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = dlUrl;
+      a.download = "interview-library.csv";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(dlUrl);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to export CSV.");
+    } finally {
+      setExportingCsv(false);
+    }
+  };
+
   if (!supabase) {
     return (
       <div className="py-16 text-center text-sm text-[#6e6e73]">
@@ -667,19 +716,34 @@ export function InterviewLibraryDashboard() {
                 onChange={(e) => setDateTo(e.target.value)}
               />
             </label>
-            <button
-              type="button"
-              className="rounded-xl border border-[#e5e5e5] bg-white px-4 py-2 text-sm font-medium text-[#1d1d1f] hover:bg-[#fafafa] lg:mb-0.5"
-              onClick={() => {
-                setSearch("");
-                setTypeFilter("all");
-                setDomainFilter("all");
-                setDateFrom("");
-                setDateTo("");
-              }}
-            >
-              Clear filters
-            </button>
+            <div className="flex items-center gap-2 lg:mb-0.5 lg:ml-auto">
+              <button
+                type="button"
+                disabled={exportingCsv}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-[#1d1d1f] bg-[#1d1d1f] px-4 py-2 text-sm font-medium text-white hover:bg-[#2c2c2e] disabled:cursor-not-allowed disabled:opacity-60"
+                onClick={() => void handleExportCsv()}
+              >
+                {exportingCsv ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Download className="h-4 w-4" />
+                )}
+                Export CSV
+              </button>
+              <button
+                type="button"
+                className="rounded-xl border border-[#e5e5e5] bg-white px-4 py-2 text-sm font-medium text-[#1d1d1f] hover:bg-[#fafafa]"
+                onClick={() => {
+                  setSearch("");
+                  setTypeFilter("all");
+                  setDomainFilter("all");
+                  setDateFrom("");
+                  setDateTo("");
+                }}
+              >
+                Clear filters
+              </button>
+            </div>
           </div>
         </div>
 
