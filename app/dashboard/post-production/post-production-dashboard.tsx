@@ -247,6 +247,23 @@ function formatInterviewDateLabel(iso: string | null): string {
   }
 }
 
+function formatInterviewDateTimeIst(iso: string | null): string {
+  if (!iso?.trim()) return "—";
+  try {
+    return new Intl.DateTimeFormat("en-IN", {
+      timeZone: "Asia/Kolkata",
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    }).format(new Date(iso.trim()));
+  } catch {
+    return "—";
+  }
+}
+
 function sourceBadge(sourceType: SourceType) {
   const label = sourceType === "project" ? "Project" : "Testimonial";
   if (sourceType === "project") {
@@ -433,6 +450,18 @@ export function PostProductionDashboard() {
     rowId: string;
     kind: "pre" | "post";
   } | null>(null);
+  const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
+  const [interviewDetailsByRow, setInterviewDetailsByRow] = useState<
+    Record<
+      string,
+      {
+        loading: boolean;
+        date: string | null;
+        interviewer: string | null;
+        zoomAccount: string | null;
+      }
+    >
+  >({});
   const [postProductionTeam, setPostProductionTeam] = useState<string[]>([]);
   const [reviewBy, setReviewBy] = useState("");
   const reviewRootRef = useRef<HTMLDivElement>(null);
@@ -1004,25 +1033,104 @@ export function PostProductionDashboard() {
   };
 
   const openNameDetail = async (row: PostProductionRow) => {
-    if (row.source_type === "project" && row.project_candidate_id) {
-      const nested = projectCandidateFromRow(row);
-      if (nested) {
-        setProjectDetailCandidate(nested);
-        return;
-      }
-      if (!supabase) return;
-      const { data } = await supabase
-        .from("project_candidates")
-        .select(
-          "id, email, full_name, whatsapp_number, project_title, problem_statement, target_user, ai_usage, demo_link, status, poc_assigned, poc_assigned_at, interview_type",
-        )
-        .eq("id", row.project_candidate_id)
-        .eq("is_deleted", false)
-        .maybeSingle();
-      if (data) setProjectDetailCandidate(data as ProjectCandidateRow);
+    if (!supabase) return;
+    if (expandedRowId === row.id) {
+      setExpandedRowId(null);
       return;
     }
-    if (row.candidate_id) setDetailCandidateId(row.candidate_id);
+    setExpandedRowId(row.id);
+    if (interviewDetailsByRow[row.id]) return;
+
+    setInterviewDetailsByRow((prev) => ({
+      ...prev,
+      [row.id]: {
+        loading: true,
+        date: null,
+        interviewer: null,
+        zoomAccount: null,
+      },
+    }));
+
+    try {
+      if (row.source_type === "project") {
+        const projectInterviewId = row.project_interview_id ?? row.interview_id;
+        if (!projectInterviewId) {
+          setInterviewDetailsByRow((prev) => ({
+            ...prev,
+            [row.id]: {
+              loading: false,
+              date: null,
+              interviewer: null,
+              zoomAccount: null,
+            },
+          }));
+          return;
+        }
+        const { data } = await supabase
+          .from("project_interviews")
+          .select("scheduled_date, completed_at, interviewer, zoom_account")
+          .eq("id", projectInterviewId)
+          .maybeSingle();
+        setInterviewDetailsByRow((prev) => ({
+          ...prev,
+          [row.id]: {
+            loading: false,
+            date:
+              (data?.completed_at as string | null | undefined)?.trim() ||
+              (data?.scheduled_date as string | null | undefined)?.trim() ||
+              null,
+            interviewer:
+              (data?.interviewer as string | null | undefined)?.trim() || null,
+            zoomAccount:
+              (data?.zoom_account as string | null | undefined)?.trim() || null,
+          },
+        }));
+        return;
+      }
+
+      if (!row.interview_id) {
+        setInterviewDetailsByRow((prev) => ({
+          ...prev,
+          [row.id]: {
+            loading: false,
+            date: null,
+            interviewer: null,
+            zoomAccount: null,
+          },
+        }));
+        return;
+      }
+
+      const { data } = await supabase
+        .from("interviews")
+        .select("scheduled_date, completed_at, interviewer, zoom_account")
+        .eq("id", row.interview_id)
+        .maybeSingle();
+      setInterviewDetailsByRow((prev) => ({
+        ...prev,
+        [row.id]: {
+          loading: false,
+          date:
+            (data?.completed_at as string | null | undefined)?.trim() ||
+            (data?.scheduled_date as string | null | undefined)?.trim() ||
+            null,
+          interviewer:
+            (data?.interviewer as string | null | undefined)?.trim() || null,
+          zoomAccount:
+            (data?.zoom_account as string | null | undefined)?.trim() || null,
+        },
+      }));
+    } catch {
+      setInterviewDetailsByRow((prev) => ({
+        ...prev,
+        [row.id]: {
+          loading: false,
+          date: null,
+          interviewer: null,
+          zoomAccount: null,
+        },
+      }));
+    }
   };
 
   const patchRow = async (
@@ -1665,12 +1773,10 @@ export function PostProductionDashboard() {
                       </tr>
                     ) : (
                       filtered.map((row) => {
-                        const cid = row.candidate_id;
-                        const pcid = row.project_candidate_id;
                         const busy = savingId === row.id;
-                        const nameClickable =
-                          (row.source_type === "testimonial" && !!cid) ||
-                          (row.source_type === "project" && !!pcid);
+                        const nameClickable = Boolean(row.candidate_name?.trim());
+                        const details = interviewDetailsByRow[row.id];
+                        const isExpanded = expandedRowId === row.id;
                         return (
                           <tr key={row.id}>
                             <td className={`${td} ${ppCol.name}`}>
@@ -1688,6 +1794,34 @@ export function PostProductionDashboard() {
                                   {row.candidate_name?.trim() || "—"}
                                 </span>
                               )}
+                              {isExpanded ? (
+                                <div className="mt-1 rounded-md border border-[#e5e7eb] bg-[#fafafa] px-2 py-1.5 text-[11px] text-[#4b5563]">
+                                  {details?.loading ? (
+                                    <span>Loading...</span>
+                                  ) : (
+                                    <div className="space-y-0.5">
+                                      <p>
+                                        <span className="font-medium text-[#374151]">
+                                          Interview Date:
+                                        </span>{" "}
+                                        {formatInterviewDateTimeIst(details?.date ?? null)}
+                                      </p>
+                                      <p>
+                                        <span className="font-medium text-[#374151]">
+                                          Interviewer:
+                                        </span>{" "}
+                                        {details?.interviewer?.trim() || "—"}
+                                      </p>
+                                      <p>
+                                        <span className="font-medium text-[#374151]">
+                                          Zoom Account:
+                                        </span>{" "}
+                                        {details?.zoomAccount?.trim() || "—"}
+                                      </p>
+                                    </div>
+                                  )}
+                                </div>
+                              ) : null}
                             </td>
                             <td className={`${td} ${ppCol.source}`}>
                               {sourceBadge(row.source_type)}
