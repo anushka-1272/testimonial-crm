@@ -130,12 +130,104 @@ export type PostProductionRow = {
     is_deleted?: boolean | null;
   } | null;
   project_candidates?: ProjectCandidateRow | ProjectCandidateRow[] | null;
+  interviews?:
+    | {
+        scheduled_date: string | null;
+        completed_at: string | null;
+        interviewer: string | null;
+        zoom_account: string | null;
+        interview_language: string | null;
+        achievement: string | null;
+        candidates?:
+          | {
+              full_name: string | null;
+              email: string | null;
+              domain: string | null;
+              job_role: string | null;
+            }
+          | {
+              full_name: string | null;
+              email: string | null;
+              domain: string | null;
+              job_role: string | null;
+            }[]
+          | null;
+      }
+    | {
+        scheduled_date: string | null;
+        completed_at: string | null;
+        interviewer: string | null;
+        zoom_account: string | null;
+        interview_language: string | null;
+        achievement: string | null;
+        candidates?:
+          | {
+              full_name: string | null;
+              email: string | null;
+              domain: string | null;
+              job_role: string | null;
+            }
+          | {
+              full_name: string | null;
+              email: string | null;
+              domain: string | null;
+              job_role: string | null;
+            }[]
+          | null;
+      }[]
+    | null;
+  project_interviews?:
+    | {
+        scheduled_date: string | null;
+        completed_at: string | null;
+        interviewer: string | null;
+        zoom_account: string | null;
+        project_candidates?:
+          | {
+              full_name: string | null;
+              email: string | null;
+              project_title: string | null;
+              problem_statement: string | null;
+              demo_link: string | null;
+            }
+          | {
+              full_name: string | null;
+              email: string | null;
+              project_title: string | null;
+              problem_statement: string | null;
+              demo_link: string | null;
+            }[]
+          | null;
+      }
+    | {
+        scheduled_date: string | null;
+        completed_at: string | null;
+        interviewer: string | null;
+        zoom_account: string | null;
+        project_candidates?:
+          | {
+              full_name: string | null;
+              email: string | null;
+              project_title: string | null;
+              problem_statement: string | null;
+              demo_link: string | null;
+            }
+          | {
+              full_name: string | null;
+              email: string | null;
+              project_title: string | null;
+              problem_statement: string | null;
+              demo_link: string | null;
+            }[]
+          | null;
+      }[]
+    | null;
 };
 
 type LinkField = "raw_video_link" | "edited_video_link" | "youtube_link";
 
 const PP_SELECT =
-  "id, created_at, interview_id, project_interview_id, candidate_id, project_candidate_id, source_type, candidate_name, raw_video_link, edited_video_link, pre_edit_review, pre_edit_review_by, post_edit_review, post_edit_review_by, edited_by, youtube_link, youtube_status, summary, cx_mail_sent, cx_mail_sent_at, updated_at, interview_language, candidates ( domain, job_role, is_deleted ), project_candidates ( id, email, full_name, whatsapp_number, project_title, problem_statement, target_user, ai_usage, demo_link, status, poc_assigned, poc_assigned_at, interview_type, is_deleted )";
+  "id, created_at, interview_id, project_interview_id, candidate_id, project_candidate_id, source_type, candidate_name, raw_video_link, edited_video_link, pre_edit_review, pre_edit_review_by, post_edit_review, post_edit_review_by, edited_by, youtube_link, youtube_status, summary, cx_mail_sent, cx_mail_sent_at, updated_at, interview_language, candidates ( domain, job_role, is_deleted ), project_candidates ( id, email, full_name, whatsapp_number, project_title, problem_statement, target_user, ai_usage, demo_link, status, poc_assigned, poc_assigned_at, interview_type, is_deleted ), interviews:interview_id ( scheduled_date, completed_at, interviewer, zoom_account, interview_language, achievement, candidates ( full_name, email, domain, job_role ) ), project_interviews:project_interview_id ( scheduled_date, completed_at, interviewer, zoom_account, project_candidates ( full_name, email, project_title, problem_statement, demo_link ) )";
 
 function chunkIds<T>(arr: T[], size: number): T[][] {
   const out: T[][] = [];
@@ -460,7 +552,9 @@ export function PostProductionDashboard() {
     rowId: string;
     kind: "pre" | "post";
   } | null>(null);
-  const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
+  const [detailModalRow, setDetailModalRow] = useState<PostProductionRow | null>(
+    null,
+  );
   const [interviewDetailsByRow, setInterviewDetailsByRow] = useState<
     Record<
       string,
@@ -1054,207 +1148,82 @@ export function PostProductionDashboard() {
     setToastMessage("Added to post production");
   };
 
-  const openNameDetail = async (row: PostProductionRow) => {
-    if (!supabase) return;
-    if (expandedRowId === row.id) {
-      setExpandedRowId(null);
-      return;
-    }
-    setExpandedRowId(row.id);
+  const openNameDetail = (row: PostProductionRow) => {
+    setDetailModalRow(row);
     if (interviewDetailsByRow[row.id]) return;
+    const ivRaw = row.interviews;
+    const interview = Array.isArray(ivRaw) ? (ivRaw[0] ?? null) : (ivRaw ?? null);
+    const ivCandRaw = interview?.candidates;
+    const interviewCandidate = Array.isArray(ivCandRaw)
+      ? (ivCandRaw[0] ?? null)
+      : (ivCandRaw ?? null);
 
+    const pivRaw = row.project_interviews;
+    const projectInterview = Array.isArray(pivRaw)
+      ? (pivRaw[0] ?? null)
+      : (pivRaw ?? null);
+    const piCandRaw = projectInterview?.project_candidates;
+    const projectInterviewCandidate = Array.isArray(piCandRaw)
+      ? (piCandRaw[0] ?? null)
+      : (piCandRaw ?? null);
+    const projectCandidateFallback = Array.isArray(row.project_candidates)
+      ? (row.project_candidates[0] ?? null)
+      : (row.project_candidates ?? null);
+
+    const isProject = row.source_type === "project";
     setInterviewDetailsByRow((prev) => ({
       ...prev,
       [row.id]: {
-        loading: true,
-        date: null,
-        interviewer: null,
-        zoomAccount: null,
-        name: null,
-        email: null,
-        domain: null,
-        role: null,
-        language: null,
-        projectTitle: null,
-        problemStatement: null,
-        demoLink: null,
-        achievement: null,
+        loading: false,
+        date: isProject
+          ? trimOrNull(projectInterview?.completed_at) ??
+            trimOrNull(projectInterview?.scheduled_date)
+          : trimOrNull(interview?.completed_at) ??
+            trimOrNull(interview?.scheduled_date),
+        interviewer: isProject
+          ? trimOrNull(projectInterview?.interviewer)
+          : trimOrNull(interview?.interviewer),
+        zoomAccount: isProject
+          ? trimOrNull(projectInterview?.zoom_account)
+          : trimOrNull(interview?.zoom_account),
+        name: isProject
+          ? trimOrNull(projectInterviewCandidate?.full_name) ??
+            trimOrNull(projectCandidateFallback?.full_name) ??
+            trimOrNull(row.candidate_name)
+          : trimOrNull(interviewCandidate?.full_name) ??
+            trimOrNull(row.candidate_name),
+        email: isProject
+          ? trimOrNull(projectInterviewCandidate?.email) ??
+            trimOrNull(projectCandidateFallback?.email)
+          : trimOrNull(interviewCandidate?.email),
+        domain: isProject ? null : trimOrNull(interviewCandidate?.domain),
+        role: isProject ? null : trimOrNull(interviewCandidate?.job_role),
+        language: isProject
+          ? null
+          : trimOrNull(interview?.interview_language) ??
+            trimOrNull(row.interview_language),
+        projectTitle: isProject
+          ? trimOrNull(projectInterviewCandidate?.project_title) ??
+            trimOrNull(projectCandidateFallback?.project_title)
+          : null,
+        problemStatement: isProject
+          ? trimOrNull(projectInterviewCandidate?.problem_statement) ??
+            trimOrNull(projectCandidateFallback?.problem_statement)
+          : null,
+        demoLink: isProject
+          ? trimOrNull(projectInterviewCandidate?.demo_link) ??
+            trimOrNull(projectCandidateFallback?.demo_link)
+          : null,
+        achievement: isProject
+          ? null
+          : trimOrNull(interview?.achievement),
       },
     }));
+  };
 
-    try {
-      if (row.source_type === "project") {
-        const projectInterviewId = row.project_interview_id ?? row.interview_id;
-        if (!projectInterviewId) {
-          setInterviewDetailsByRow((prev) => ({
-            ...prev,
-            [row.id]: {
-              loading: false,
-              date: null,
-              interviewer: null,
-              zoomAccount: null,
-              name: null,
-              email: null,
-              domain: null,
-              role: null,
-              language: null,
-              projectTitle: null,
-              problemStatement: null,
-              demoLink: null,
-              achievement: null,
-            },
-          }));
-          return;
-        }
-        const { data } = await supabase
-          .from("project_interviews")
-          .select(
-            "scheduled_date, completed_at, interviewer, zoom_account, project_candidates ( full_name, email, project_title, problem_statement, demo_link )",
-          )
-          .eq("id", projectInterviewId)
-          .maybeSingle();
-        const projectCandidateRaw = data?.project_candidates as
-          | {
-              full_name: string | null;
-              email: string | null;
-              project_title: string | null;
-              problem_statement: string | null;
-              demo_link: string | null;
-            }
-          | {
-              full_name: string | null;
-              email: string | null;
-              project_title: string | null;
-              problem_statement: string | null;
-              demo_link: string | null;
-            }[]
-          | null
-          | undefined;
-        const projectCandidate = Array.isArray(projectCandidateRaw)
-          ? projectCandidateRaw[0] ?? null
-          : projectCandidateRaw ?? null;
-        setInterviewDetailsByRow((prev) => ({
-          ...prev,
-          [row.id]: {
-            loading: false,
-            date:
-              (data?.completed_at as string | null | undefined)?.trim() ||
-              (data?.scheduled_date as string | null | undefined)?.trim() ||
-              null,
-            interviewer:
-              (data?.interviewer as string | null | undefined)?.trim() || null,
-            zoomAccount:
-              (data?.zoom_account as string | null | undefined)?.trim() || null,
-            name:
-              trimOrNull(projectCandidate?.full_name) ||
-              trimOrNull(row.candidate_name),
-            email: trimOrNull(projectCandidate?.email),
-            domain: null,
-            role: null,
-            language: null,
-            projectTitle: trimOrNull(projectCandidate?.project_title),
-            problemStatement: trimOrNull(projectCandidate?.problem_statement),
-            demoLink: trimOrNull(projectCandidate?.demo_link),
-            achievement: null,
-          },
-        }));
-        return;
-      }
-
-      if (!row.interview_id) {
-        setInterviewDetailsByRow((prev) => ({
-          ...prev,
-          [row.id]: {
-            loading: false,
-            date: null,
-            interviewer: null,
-            zoomAccount: null,
-            name: trimOrNull(row.candidate_name),
-            email: null,
-            domain: null,
-            role: null,
-            language: trimOrNull(row.interview_language),
-            projectTitle: null,
-            problemStatement: null,
-            demoLink: null,
-            achievement: null,
-          },
-        }));
-        return;
-      }
-
-      const { data } = await supabase
-        .from("interviews")
-        .select(
-          "scheduled_date, completed_at, interviewer, zoom_account, interview_language, achievement, candidates ( full_name, email, domain, job_role )",
-        )
-        .eq("id", row.interview_id)
-        .maybeSingle();
-      const candidateRaw = data?.candidates as
-        | {
-            full_name: string | null;
-            email: string | null;
-            domain: string | null;
-            job_role: string | null;
-          }
-        | {
-            full_name: string | null;
-            email: string | null;
-            domain: string | null;
-            job_role: string | null;
-          }[]
-        | null
-        | undefined;
-      const candidate = Array.isArray(candidateRaw)
-        ? candidateRaw[0] ?? null
-        : candidateRaw ?? null;
-      setInterviewDetailsByRow((prev) => ({
-        ...prev,
-        [row.id]: {
-          loading: false,
-          date:
-            (data?.completed_at as string | null | undefined)?.trim() ||
-            (data?.scheduled_date as string | null | undefined)?.trim() ||
-            null,
-          interviewer:
-            (data?.interviewer as string | null | undefined)?.trim() || null,
-          zoomAccount:
-            (data?.zoom_account as string | null | undefined)?.trim() || null,
-          name: trimOrNull(candidate?.full_name) || trimOrNull(row.candidate_name),
-          email: trimOrNull(candidate?.email),
-          domain: trimOrNull(candidate?.domain),
-          role: trimOrNull(candidate?.job_role),
-          language:
-            trimOrNull(
-              (data?.interview_language as string | null | undefined) ??
-                row.interview_language,
-            ) || trimOrNull(row.interview_language),
-          projectTitle: null,
-          problemStatement: null,
-          demoLink: null,
-          achievement: trimOrNull(data?.achievement as string | null | undefined),
-        },
-      }));
-    } catch {
-      setInterviewDetailsByRow((prev) => ({
-        ...prev,
-        [row.id]: {
-          loading: false,
-          date: null,
-          interviewer: null,
-          zoomAccount: null,
-          name: trimOrNull(row.candidate_name),
-          email: null,
-          domain: null,
-          role: null,
-          language: trimOrNull(row.interview_language),
-          projectTitle: null,
-          problemStatement: null,
-          demoLink: null,
-          achievement: null,
-        },
-      }));
-    }
+  const closeDetailModal = () => {
+    setDetailModalRow(null);
+    setExpandedTextKeys(new Set());
   };
 
   const toggleExpandedText = (key: string) => {
@@ -1265,6 +1234,15 @@ export function PostProductionDashboard() {
       return next;
     });
   };
+
+  useEffect(() => {
+    if (!detailModalRow) return;
+    const onKeyDown = (ev: KeyboardEvent) => {
+      if (ev.key === "Escape") closeDetailModal();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [detailModalRow]);
 
   const patchRow = async (
     id: string,
@@ -1626,6 +1604,19 @@ export function PostProductionDashboard() {
     actions: "w-[90px] max-w-[90px]",
   } as const;
 
+  const modalRow = detailModalRow;
+  const modalDetails = modalRow ? interviewDetailsByRow[modalRow.id] : undefined;
+  const modalProblemKey = modalRow ? `${modalRow.id}:problem` : "";
+  const modalAchievementKey = modalRow ? `${modalRow.id}:achievement` : "";
+  const modalExpandedProblem =
+    Boolean(modalRow) && expandedTextKeys.has(modalProblemKey);
+  const modalExpandedAchievement =
+    Boolean(modalRow) && expandedTextKeys.has(modalAchievementKey);
+  const modalProblemText = modalDetails?.problemStatement?.trim() ?? "";
+  const modalAchievementText = modalDetails?.achievement?.trim() ?? "";
+  const modalProblemPreview = truncateText(modalProblemText, 120);
+  const modalAchievementPreview = truncateText(modalAchievementText, 170);
+
   if (!supabase) {
     return (
       <div className="px-8 py-16 text-center text-sm text-[#6e6e73]">
@@ -1908,16 +1899,6 @@ export function PostProductionDashboard() {
                       filtered.map((row) => {
                         const busy = savingId === row.id;
                         const nameClickable = Boolean(row.candidate_name?.trim());
-                        const details = interviewDetailsByRow[row.id];
-                        const isExpanded = expandedRowId === row.id;
-                        const problemKey = `${row.id}:problem`;
-                        const achievementKey = `${row.id}:achievement`;
-                        const expandedProblem = expandedTextKeys.has(problemKey);
-                        const expandedAchievement = expandedTextKeys.has(achievementKey);
-                        const problemText = details?.problemStatement?.trim() ?? "";
-                        const achievementText = details?.achievement?.trim() ?? "";
-                        const problemPreview = truncateText(problemText, 120);
-                        const achievementPreview = truncateText(achievementText, 170);
                         return (
                           <tr key={row.id}>
                             <td className={`${td} ${ppCol.name}`}>
@@ -1935,148 +1916,6 @@ export function PostProductionDashboard() {
                                   {row.candidate_name?.trim() || "—"}
                                 </span>
                               )}
-                              {isExpanded ? (
-                                <div className="mt-1 space-y-2 rounded-md border border-[#e5e7eb] bg-[#fafafa] px-2 py-1.5 text-[11px] text-[#4b5563]">
-                                  {details?.loading ? (
-                                    <span>Loading...</span>
-                                  ) : (
-                                    <div className="space-y-2">
-                                      <div className="rounded border border-[#e5e7eb] bg-white px-2 py-1.5">
-                                        <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-[#6b7280]">
-                                          Interview Details
-                                        </p>
-                                        <p>
-                                          <span className="font-medium text-[#374151]">
-                                            Date:
-                                          </span>{" "}
-                                          {formatInterviewDateTimeIst(details?.date ?? null)}
-                                        </p>
-                                        <p>
-                                          <span className="font-medium text-[#374151]">
-                                            Interviewer:
-                                          </span>{" "}
-                                          {details?.interviewer?.trim() || "—"}
-                                        </p>
-                                        <p>
-                                          <span className="font-medium text-[#374151]">
-                                            Zoom Account:
-                                          </span>{" "}
-                                          {details?.zoomAccount?.trim() || "—"}
-                                        </p>
-                                      </div>
-
-                                      <div className="rounded border border-[#e5e7eb] bg-white px-2 py-1.5">
-                                        <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-[#6b7280]">
-                                          Candidate Details
-                                        </p>
-                                        <p>
-                                          <span className="font-medium text-[#374151]">
-                                            Name:
-                                          </span>{" "}
-                                          {details?.name?.trim() || row.candidate_name?.trim() || "—"}
-                                        </p>
-                                        <p>
-                                          <span className="font-medium text-[#374151]">
-                                            Email:
-                                          </span>{" "}
-                                          {details?.email?.trim() || "—"}
-                                        </p>
-
-                                        {row.source_type === "testimonial" ? (
-                                          <>
-                                            <p>
-                                              <span className="font-medium text-[#374151]">
-                                                Domain:
-                                              </span>{" "}
-                                              {details?.domain?.trim() || "—"}
-                                            </p>
-                                            <p>
-                                              <span className="font-medium text-[#374151]">
-                                                Role:
-                                              </span>{" "}
-                                              {details?.role?.trim() || "—"}
-                                            </p>
-                                            <p>
-                                              <span className="font-medium text-[#374151]">
-                                                Language:
-                                              </span>{" "}
-                                              {details?.language?.trim() || row.interview_language?.trim() || "—"}
-                                            </p>
-                                            {achievementText ? (
-                                              <div className="mt-1 rounded border-l-2 border-[#60a5fa] bg-[#eff6ff] px-2 py-1 italic text-[#1f2937]">
-                                                <span className="not-italic font-medium text-[#1e3a8a]">
-                                                  Achievement:
-                                                </span>{" "}
-                                                {expandedAchievement
-                                                  ? achievementText
-                                                  : achievementPreview.text}
-                                                {achievementPreview.truncated ? (
-                                                  <button
-                                                    type="button"
-                                                    className="ml-1 font-medium text-[#2563eb] not-italic hover:underline"
-                                                    onClick={() =>
-                                                      toggleExpandedText(achievementKey)
-                                                    }
-                                                  >
-                                                    {expandedAchievement ? "View less" : "View more"}
-                                                  </button>
-                                                ) : null}
-                                              </div>
-                                            ) : null}
-                                          </>
-                                        ) : (
-                                          <>
-                                            <p>
-                                              <span className="font-medium text-[#374151]">
-                                                Project Title:
-                                              </span>{" "}
-                                              {details?.projectTitle?.trim() || "—"}
-                                            </p>
-                                            <p>
-                                              <span className="font-medium text-[#374151]">
-                                                Problem Statement:
-                                              </span>{" "}
-                                              {problemText
-                                                ? expandedProblem
-                                                  ? problemText
-                                                  : problemPreview.text
-                                                : "—"}
-                                              {problemText && problemPreview.truncated ? (
-                                                <button
-                                                  type="button"
-                                                  className="ml-1 font-medium text-[#2563eb] hover:underline"
-                                                  onClick={() =>
-                                                    toggleExpandedText(problemKey)
-                                                  }
-                                                >
-                                                  {expandedProblem ? "View less" : "View more"}
-                                                </button>
-                                              ) : null}
-                                            </p>
-                                            <p>
-                                              <span className="font-medium text-[#374151]">
-                                                Demo Link:
-                                              </span>{" "}
-                                              {details?.demoLink ? (
-                                                <a
-                                                  href={details.demoLink}
-                                                  target="_blank"
-                                                  rel="noopener noreferrer"
-                                                  className="text-[#2563eb] hover:underline"
-                                                >
-                                                  Open demo
-                                                </a>
-                                              ) : (
-                                                "—"
-                                              )}
-                                            </p>
-                                          </>
-                                        )}
-                                      </div>
-                                    </div>
-                                  )}
-                                </div>
-                              ) : null}
                             </td>
                             <td className={`${td} ${ppCol.source}`}>
                               {sourceBadge(row.source_type)}
@@ -2249,6 +2088,151 @@ export function PostProductionDashboard() {
           </>
         )}
       </main>
+
+      {modalRow ? (
+        <div className={modalOverlayZ80Class}>
+          <button
+            type="button"
+            className="absolute inset-0"
+            aria-label="Close"
+            onClick={closeDetailModal}
+          />
+          <div
+            role="dialog"
+            aria-modal="true"
+            className={`${modalPanelClass} max-h-[85vh] max-w-[600px] scale-100 overflow-y-auto p-6 shadow-xl transition-all duration-200`}
+          >
+            <div className="mb-4 flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-semibold text-[#1d1d1f]">
+                  {modalDetails?.name?.trim() || modalRow.candidate_name?.trim() || "—"}
+                </h2>
+                <p className="mt-1 text-sm text-[#6e6e73]">
+                  {modalRow.source_type === "project" ? "Project" : "Testimonial"}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={closeDetailModal}
+                className="rounded-lg px-2 py-1 text-sm font-medium text-[#6e6e73] hover:bg-[#f5f5f7] hover:text-[#1d1d1f]"
+              >
+                Close
+              </button>
+            </div>
+
+            {modalDetails ? (
+              <div className="space-y-3 text-sm">
+                <section className="rounded-lg border border-[#e5e7eb] bg-white p-3">
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[#6b7280]">
+                    Interview Details
+                  </p>
+                  <p>
+                    <span className="font-medium text-[#374151]">Date:</span>{" "}
+                    {formatInterviewDateTimeIst(modalDetails.date ?? null)}
+                  </p>
+                  <p>
+                    <span className="font-medium text-[#374151]">Interviewer:</span>{" "}
+                    {modalDetails.interviewer?.trim() || "—"}
+                  </p>
+                  <p>
+                    <span className="font-medium text-[#374151]">Zoom Account:</span>{" "}
+                    {modalDetails.zoomAccount?.trim() || "—"}
+                  </p>
+                </section>
+
+                <section className="rounded-lg border border-[#e5e7eb] bg-white p-3">
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[#6b7280]">
+                    Candidate Details
+                  </p>
+                  <p>
+                    <span className="font-medium text-[#374151]">Email:</span>{" "}
+                    {modalDetails.email?.trim() || "—"}
+                  </p>
+
+                  {modalRow.source_type === "testimonial" ? (
+                    <>
+                      <p>
+                        <span className="font-medium text-[#374151]">Domain:</span>{" "}
+                        {modalDetails.domain?.trim() || "—"}
+                      </p>
+                      <p>
+                        <span className="font-medium text-[#374151]">Role:</span>{" "}
+                        {modalDetails.role?.trim() || "—"}
+                      </p>
+                      <p>
+                        <span className="font-medium text-[#374151]">Language:</span>{" "}
+                        {modalDetails.language?.trim() || modalRow.interview_language?.trim() || "—"}
+                      </p>
+                      {modalAchievementText ? (
+                        <div className="mt-2 rounded border-l-2 border-[#60a5fa] bg-[#eff6ff] px-3 py-2 italic text-[#1f2937]">
+                          <span className="not-italic font-medium text-[#1e3a8a]">
+                            Achievement:
+                          </span>{" "}
+                          {modalExpandedAchievement
+                            ? modalAchievementText
+                            : modalAchievementPreview.text}
+                          {modalAchievementPreview.truncated ? (
+                            <button
+                              type="button"
+                              className="ml-1 font-medium text-[#2563eb] not-italic hover:underline"
+                              onClick={() => toggleExpandedText(modalAchievementKey)}
+                            >
+                              {modalExpandedAchievement ? "View less" : "View more"}
+                            </button>
+                          ) : null}
+                        </div>
+                      ) : null}
+                    </>
+                  ) : (
+                    <>
+                      <p>
+                        <span className="font-medium text-[#374151]">Project Title:</span>{" "}
+                        {modalDetails.projectTitle?.trim() || "—"}
+                      </p>
+                      <p>
+                        <span className="font-medium text-[#374151]">
+                          Problem Statement:
+                        </span>{" "}
+                        {modalProblemText
+                          ? modalExpandedProblem
+                            ? modalProblemText
+                            : modalProblemPreview.text
+                          : "—"}
+                        {modalProblemText && modalProblemPreview.truncated ? (
+                          <button
+                            type="button"
+                            className="ml-1 font-medium text-[#2563eb] hover:underline"
+                            onClick={() => toggleExpandedText(modalProblemKey)}
+                          >
+                            {modalExpandedProblem ? "View less" : "View more"}
+                          </button>
+                        ) : null}
+                      </p>
+                      <p>
+                        <span className="font-medium text-[#374151]">Demo Link:</span>{" "}
+                        {modalDetails.demoLink ? (
+                          <a
+                            href={modalDetails.demoLink}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-[#2563eb] hover:underline"
+                          >
+                            Open demo
+                          </a>
+                        ) : (
+                          "—"
+                        )}
+                      </p>
+                    </>
+                  )}
+                </section>
+              </div>
+            ) : (
+              <p className="text-sm text-[#6e6e73]">Loading details...</p>
+            )}
+          </div>
+        </div>
+      ) : null}
 
       <CandidateDetailModal
         open={!!detailCandidateId}
