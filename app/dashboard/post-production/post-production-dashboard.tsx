@@ -330,6 +330,39 @@ type AddSelection =
   | { kind: "testimonial"; pick: TestimonialPick }
   | { kind: "project"; pick: ProjectPick };
 
+const POST_PRODUCTION_KEYS_PAGE = 1000;
+
+/**
+ * Load all candidate / project-candidate ids already in post production.
+ * Paginates past the default 1000-row cap so we do not wrongly hide addable rows.
+ */
+async function fetchPostProductionExistingKeys(supabase: SupabaseClient): Promise<{
+  candidateIds: Set<string>;
+  projectCandidateIds: Set<string>;
+}> {
+  const candidateIds = new Set<string>();
+  const projectCandidateIds = new Set<string>();
+  let from = 0;
+  for (;;) {
+    const { data, error } = await supabase
+      .from("post_production")
+      .select("candidate_id, project_candidate_id")
+      .order("id", { ascending: true })
+      .range(from, from + POST_PRODUCTION_KEYS_PAGE - 1);
+    if (error) throw error;
+    const batch = data ?? [];
+    for (const r of batch) {
+      const cid = r.candidate_id as string | null;
+      const pid = r.project_candidate_id as string | null;
+      if (cid) candidateIds.add(cid);
+      if (pid) projectCandidateIds.add(pid);
+    }
+    if (batch.length < POST_PRODUCTION_KEYS_PAGE) break;
+    from += POST_PRODUCTION_KEYS_PAGE;
+  }
+  return { candidateIds, projectCandidateIds };
+}
+
 function escapeCsvCell(v: unknown): string {
   const s = String(v ?? "");
   if (s.includes("\"") || s.includes(",") || s.includes("\n")) {
@@ -380,6 +413,7 @@ export function PostProductionDashboard() {
   const [addLoading, setAddLoading] = useState(false);
   const [selectedAdd, setSelectedAdd] = useState<AddSelection | null>(null);
   const [addSubmitting, setAddSubmitting] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const [linkEdit, setLinkEdit] = useState<{
     rowId: string;
@@ -395,15 +429,15 @@ export function PostProductionDashboard() {
   const [reviewBy, setReviewBy] = useState("");
   const reviewRootRef = useRef<HTMLDivElement>(null);
 
-  const loadRows = useCallback(async () => {
-    if (!supabase) return;
+  const loadRows = useCallback(async (): Promise<boolean> => {
+    if (!supabase) return false;
     const { data, error: e } = await supabase
       .from("post_production")
       .select(PP_SELECT)
       .order("created_at", { ascending: false });
     if (e) {
       setError(e.message);
-      return;
+      return false;
     }
     const base = (data ?? [])
       .map((row) =>
@@ -424,6 +458,7 @@ export function PostProductionDashboard() {
       });
     setRows(await attachPostProductionEligibilityMismatch(supabase, base));
     setError(null);
+    return true;
   }, [supabase]);
 
   const loadRoster = useCallback(async () => {
@@ -490,6 +525,12 @@ export function PostProductionDashboard() {
     document.addEventListener("mousedown", onDoc);
     return () => document.removeEventListener("mousedown", onDoc);
   }, [reviewPopover]);
+
+  useEffect(() => {
+    if (!toastMessage) return;
+    const t = window.setTimeout(() => setToastMessage(null), 4000);
+    return () => window.clearTimeout(t);
+  }, [toastMessage]);
 
   const stats = useMemo(() => {
     const total = rows.length;
@@ -610,8 +651,12 @@ export function PostProductionDashboard() {
     setAddSearch("");
     setSelectedAdd(null);
     setAddLoading(true);
-    const [{ data: invT }, { data: invP }, { data: existing }] =
-      await Promise.all([
+    let invT: unknown[] | null = null;
+    let invP: unknown[] | null = null;
+    let inPostCand = new Set<string>();
+    let inPostProj = new Set<string>();
+    try {
+      const [tRes, pRes, keys] = await Promise.all([
         supabase
           .from("interviews")
           .select(
@@ -628,20 +673,25 @@ export function PostProductionDashboard() {
           .eq("interview_status", "completed")
           .eq("post_interview_eligible", true)
           .eq("project_candidates.is_deleted", false),
-        supabase.from("post_production").select("candidate_id, project_candidate_id"),
+        fetchPostProductionExistingKeys(supabase),
       ]);
-    setAddLoading(false);
-
-    const inPostCand = new Set(
-      (existing ?? [])
-        .map((r) => r.candidate_id as string | null)
-        .filter(Boolean) as string[],
-    );
-    const inPostProj = new Set(
-      (existing ?? [])
-        .map((r) => r.project_candidate_id as string | null)
-        .filter(Boolean) as string[],
-    );
+      invT = tRes.data ?? null;
+      invP = pRes.data ?? null;
+      if (tRes.error) throw tRes.error;
+      if (pRes.error) throw pRes.error;
+      inPostCand = keys.candidateIds;
+      inPostProj = keys.projectCandidateIds;
+    } catch (e) {
+      setAddLoading(false);
+      setError(
+        e instanceof Error
+          ? e.message
+          : "Could not load candidates for post production.",
+      );
+      setTestimonialPicks([]);
+      setProjectPicks([]);
+      return;
+    }
 
     const tMap = new Map<string, TestimonialPick>();
     for (const row of invT ?? []) {
@@ -739,6 +789,8 @@ export function PostProductionDashboard() {
       }
     }
     setProjectPicks([...pMap.values()]);
+    setError(null);
+    setAddLoading(false);
   };
 
   const addFilteredTestimonial = useMemo(() => {
@@ -764,9 +816,30 @@ export function PostProductionDashboard() {
   }, [projectPicks, addSearch]);
 
   const confirmAdd = async () => {
-    if (!canEditCurrentPage) return;
+    if (!canEditCurrentPage) {
+      setToastMessage("You don't have permission to add entries.");
+      return;
+    }
     if (!supabase || !selectedAdd) return;
+
+    const selectedForLog =
+      selectedAdd.kind === "testimonial"
+        ? {
+            kind: "testimonial" as const,
+            interview_id: selectedAdd.pick.interview_id,
+            candidate_id: selectedAdd.pick.candidate_id,
+            name: selectedAdd.pick.full_name ?? selectedAdd.pick.email,
+          }
+        : {
+            kind: "project" as const,
+            project_interview_id: selectedAdd.pick.project_interview_id,
+            project_candidate_id: selectedAdd.pick.project_candidate_id,
+            name: selectedAdd.pick.display_name,
+          };
+    console.log("Adding to post production:", selectedForLog);
+
     setAddSubmitting(true);
+    setError(null);
 
     const {
       data: { session },
@@ -774,19 +847,22 @@ export function PostProductionDashboard() {
     const token = session?.access_token;
     if (!token) {
       setAddSubmitting(false);
-      setError("You must be signed in to add entries.");
+      const msg = "You must be signed in to add entries.";
+      setError(msg);
+      setToastMessage(msg);
       return;
     }
 
+    const savedSelection = selectedAdd;
     const body =
-      selectedAdd.kind === "testimonial"
+      savedSelection.kind === "testimonial"
         ? {
             source: "testimonial" as const,
-            interview_id: selectedAdd.pick.interview_id,
+            interview_id: savedSelection.pick.interview_id,
           }
         : {
             source: "project" as const,
-            project_interview_id: selectedAdd.pick.project_interview_id,
+            project_interview_id: savedSelection.pick.project_interview_id,
           };
 
     let res: Response;
@@ -799,9 +875,12 @@ export function PostProductionDashboard() {
         },
         body: JSON.stringify(body),
       });
-    } catch {
+    } catch (err) {
+      console.error("Post production insert failed:", err);
       setAddSubmitting(false);
-      setError("Network error while adding to post production.");
+      const msg = "Network error while adding to post production.";
+      setError(msg);
+      setToastMessage(msg);
       return;
     }
 
@@ -810,18 +889,45 @@ export function PostProductionDashboard() {
       ok?: boolean;
     };
     setAddSubmitting(false);
+
     if (!res.ok) {
-      setError(
+      console.error("Post production insert failed:", res.status, json);
+      const msg =
         json.error ??
-          (res.status === 409
-            ? "This candidate is already in post production."
-            : POST_PRODUCTION_NOT_ELIGIBLE_ERROR),
+        (res.status === 409
+          ? "This candidate is already in post production."
+          : POST_PRODUCTION_NOT_ELIGIBLE_ERROR);
+      setError(msg);
+      setToastMessage(msg);
+      return;
+    }
+
+    const refreshed = await loadRows();
+    if (!refreshed) {
+      setToastMessage(
+        "Added to post production, but the list could not be refreshed. Try reloading the page.",
       );
       return;
     }
 
+    if (savedSelection.kind === "testimonial") {
+      setTestimonialPicks((prev) =>
+        prev.filter((p) => p.candidate_id !== savedSelection.pick.candidate_id),
+      );
+    } else {
+      setProjectPicks((prev) =>
+        prev.filter(
+          (p) =>
+            p.project_candidate_id !==
+            savedSelection.pick.project_candidate_id,
+        ),
+      );
+    }
+
     setAddOpen(false);
-    void loadRows();
+    setSelectedAdd(null);
+    setAddSearch("");
+    setToastMessage("Added to post production");
   };
 
   const openNameDetail = async (row: PostProductionRow) => {
@@ -1216,6 +1322,15 @@ export function PostProductionDashboard() {
 
   return (
     <>
+      {toastMessage ? (
+        <div
+          className="fixed bottom-6 left-1/2 z-[90] max-w-md -translate-x-1/2 rounded-xl border border-[#e5e5e5] bg-[#1d1d1f] px-4 py-3 text-center text-sm font-medium text-white shadow-lg"
+          role="status"
+        >
+          {toastMessage}
+        </div>
+      ) : null}
+
       <header className="sticky top-14 z-30 bg-[#f5f5f7]/90 px-4 py-4 backdrop-blur-md sm:px-6 sm:py-5 lg:top-0 lg:px-8 lg:py-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
@@ -1801,9 +1916,10 @@ export function PostProductionDashboard() {
                                 ? "bg-[#eff6ff]"
                                 : "hover:bg-[#fafafa]"
                             }`}
-                            onClick={() =>
-                              setSelectedAdd({ kind: "testimonial", pick: p })
-                            }
+                            onClick={() => {
+                              setAddTab("testimonial");
+                              setSelectedAdd({ kind: "testimonial", pick: p });
+                            }}
                           >
                             <span className="font-medium text-[#1d1d1f]">
                               {p.full_name?.trim() || p.email}
@@ -1835,9 +1951,10 @@ export function PostProductionDashboard() {
                                 ? "bg-[#eff6ff]"
                                 : "hover:bg-[#fafafa]"
                             }`}
-                            onClick={() =>
-                              setSelectedAdd({ kind: "project", pick: p })
-                            }
+                            onClick={() => {
+                              setAddTab("project");
+                              setSelectedAdd({ kind: "project", pick: p });
+                            }}
                           >
                             <span className="block font-medium text-[#1d1d1f]">
                               {(p.project_title ?? "").trim() ||
@@ -1863,11 +1980,7 @@ export function PostProductionDashboard() {
                   </button>
                   <button
                     type="button"
-                    disabled={
-                      addSubmitting ||
-                      !selectedAdd ||
-                      selectedAdd.kind !== addTab
-                    }
+                    disabled={addSubmitting || !selectedAdd}
                     className="rounded-xl bg-[#1d1d1f] px-4 py-2 text-sm text-white disabled:opacity-50"
                     onClick={() => void confirmAdd()}
                   >

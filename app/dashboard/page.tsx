@@ -10,12 +10,16 @@ import {
   type InterviewerSelectOption,
 } from "@/lib/interviewer-enum";
 import { fetchTeamRosterNames } from "@/lib/team-roster";
+import {
+  formatDashboardPeriodRangeIST,
+  getISTHour,
+  getPeriodBoundsIST,
+  type DashboardPeriod,
+} from "@/lib/dashboard-ist-dates";
 import { getUserSafe } from "@/lib/supabase-auth";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 
 import { DashboardStatCard } from "./dashboard-stat-card";
-
-type Period = "total" | "monthly" | "weekly";
 
 const INTERVIEWER_THEME: Record<string, { bar: string; avatar: string }> = {
   Anushka: { bar: "#2563eb", avatar: "#2563eb" },
@@ -36,36 +40,6 @@ const INTERVIEWER_THEME_FALLBACK = [
 /** Rows fetched and stored in `recentActivity` for the dashboard preview only. */
 const DASHBOARD_RECENT_ACTIVITY_LIMIT = 3;
 
-type PeriodBounds = { startIso: string; endIso?: string } | null;
-
-function getPeriodBounds(period: Period): PeriodBounds {
-  const now = new Date();
-  if (period === "weekly") {
-    // UTC Saturday 00:00:00.000 → next Saturday (exclusive), i.e. Sat–Fri.
-    const day = now.getUTCDay(); // 0=Sun ... 6=Sat
-    const diff = day === 6 ? 0 : -(day + 1);
-    const startMs = Date.UTC(
-      now.getUTCFullYear(),
-      now.getUTCMonth(),
-      now.getUTCDate() + diff,
-      0,
-      0,
-      0,
-      0,
-    );
-    const endMs = startMs + 7 * 24 * 60 * 60 * 1000;
-    return {
-      startIso: new Date(startMs).toISOString(),
-      endIso: new Date(endMs).toISOString(),
-    };
-  }
-  if (period === "monthly") {
-    const startMs = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1, 0, 0, 0, 0);
-    return { startIso: new Date(startMs).toISOString() };
-  }
-  return null;
-}
-
 function initials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
   if (parts.length === 0) return "?";
@@ -73,7 +47,7 @@ function initials(name: string): string {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
-function periodLabel(p: Period): string {
+function periodLabel(p: DashboardPeriod): string {
   if (p === "total") return "Total";
   if (p === "monthly") return "Monthly";
   return "Weekly";
@@ -154,7 +128,7 @@ const cardChrome =
 
 export default function DashboardPage() {
   const supabase = createBrowserSupabaseClient();
-  const [period, setPeriod] = useState<Period>("total");
+  const [period, setPeriod] = useState<DashboardPeriod>("total");
   const [greetName, setGreetName] = useState("there");
   const [stats, setStats] = useState({
     testimonials: 0,
@@ -204,13 +178,9 @@ export default function DashboardPage() {
 
   const fetchStats = useCallback(async () => {
     setLoading(true);
-    const bounds = getPeriodBounds(period);
+    const bounds = getPeriodBoundsIST(period);
     const rangeStart = bounds?.startIso ?? null;
     const rangeEnd = bounds?.endIso ?? null;
-
-    if (period === "weekly" && rangeStart && rangeEnd) {
-      console.log("WEEK (Sat-Fri)", rangeStart, rangeEnd);
-    }
 
     let entriesQ = supabase
       .from("candidates")
@@ -346,20 +316,6 @@ export default function DashboardPage() {
       completed: fCompleted || 0,
       dispatched: fDispatched || 0,
     });
-
-    if (period === "weekly") {
-      let sampleQ = supabase
-        .from("interviews")
-        .select("id, completed_at, interview_status")
-        .or("interview_status.eq.completed,completed_at.not.is.null")
-        .not("completed_at", "is", null)
-        .order("completed_at", { ascending: false })
-        .limit(5);
-      if (rangeStart) sampleQ = sampleQ.gte("completed_at", rangeStart);
-      if (rangeEnd) sampleQ = sampleQ.lt("completed_at", rangeEnd);
-      const { data: sampleRows } = await sampleQ;
-      console.debug("[Dashboard weekly] completed samples", sampleRows ?? []);
-    }
 
     setLoading(false);
   }, [supabase, period]);
@@ -531,7 +487,12 @@ export default function DashboardPage() {
     [stats],
   );
 
-  const hour = new Date().getHours();
+  const periodRangeLabel = useMemo(
+    () => formatDashboardPeriodRangeIST(period, getPeriodBoundsIST(period)),
+    [period],
+  );
+
+  const hour = getISTHour();
   const greeting = greetingForHour(hour);
 
   return (
@@ -555,7 +516,8 @@ export default function DashboardPage() {
       <main className="flex-1 px-4 pb-10 pt-2 sm:px-6 lg:px-8 lg:pb-12">
         <div className="mx-auto max-w-[1400px] space-y-10">
           <div className="inline-flex rounded-full bg-white p-1 shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
-            {(["total", "monthly", "weekly"] as Period[]).map((p) => (
+            {(["total", "monthly", "weekly"] as const satisfies readonly DashboardPeriod[]).map(
+              (p) => (
               <button
                 key={p}
                 type="button"
@@ -568,8 +530,11 @@ export default function DashboardPage() {
               >
                 {periodLabel(p)}
               </button>
-            ))}
+              ))}
           </div>
+          {periodRangeLabel ? (
+            <p className="text-sm text-[#6e6e73]">{periodRangeLabel}</p>
+          ) : null}
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {dashboardStatItems.map(
