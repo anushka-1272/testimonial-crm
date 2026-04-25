@@ -14,9 +14,11 @@ export type AccessScope =
   | "dispatch"
   | "activity"
   | "post_production"
+  | "interview_library"
   | "settings";
 
 export function canEditScope(role: TeamRole, scope: AccessScope): boolean {
+  if (scope === "interview_library") return true;
   if (role === "admin") return true;
   if (role === "viewer") return false;
   if (role === "interviewer") return scope === "interviews";

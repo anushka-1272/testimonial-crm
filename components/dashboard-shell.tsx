@@ -3,6 +3,7 @@
 import {
   ArrowRight,
   BarChart2,
+  BookMarked,
   Calendar,
   Film,
   FolderKanban,
@@ -74,6 +75,12 @@ const NAV = [
     label: "Post Production",
     icon: Film,
     isActive: (p: string) => p.startsWith("/dashboard/post-production"),
+  },
+  {
+    href: "/dashboard/interview-library",
+    label: "Interview Library",
+    icon: BookMarked,
+    isActive: (p: string) => p.startsWith("/dashboard/interview-library"),
   },
   {
     href: "/dashboard/settings",
@@ -154,6 +161,8 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
     if (path.startsWith("/dashboard/dispatch")) return "dispatch";
     if (path.startsWith("/dashboard/activity")) return "activity";
     if (path.startsWith("/dashboard/post-production")) return "post_production";
+    if (path.startsWith("/dashboard/interview-library"))
+      return "interview_library";
     if (path.startsWith("/dashboard/settings")) return "settings";
     return "dashboard";
   }
