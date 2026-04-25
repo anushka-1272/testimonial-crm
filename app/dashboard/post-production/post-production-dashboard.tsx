@@ -126,8 +126,6 @@ export type PostProductionRow = {
     is_deleted?: boolean | null;
   } | null;
   project_candidates?: ProjectCandidateRow | ProjectCandidateRow[] | null;
-  /** Latest completed interview is no longer marked post-interview eligible. */
-  eligibility_mismatch?: boolean;
 };
 
 type LinkField = "raw_video_link" | "edited_video_link" | "youtube_link";
@@ -135,7 +133,7 @@ type LinkField = "raw_video_link" | "edited_video_link" | "youtube_link";
 const PP_SELECT =
   "id, created_at, candidate_id, project_candidate_id, source_type, candidate_name, raw_video_link, edited_video_link, pre_edit_review, pre_edit_review_by, post_edit_review, post_edit_review_by, edited_by, youtube_link, youtube_status, summary, cx_mail_sent, cx_mail_sent_at, updated_at, interview_language, candidates ( domain, job_role, is_deleted ), project_candidates ( id, email, full_name, whatsapp_number, project_title, problem_statement, target_user, ai_usage, demo_link, status, poc_assigned, poc_assigned_at, interview_type, is_deleted )";
 
-async function attachPostProductionEligibilityMismatch(
+async function filterPostProductionEligibleRows(
   supabase: SupabaseClient,
   rows: PostProductionRow[],
 ): Promise<PostProductionRow[]> {
@@ -220,20 +218,23 @@ async function attachPostProductionEligibilityMismatch(
     }
   }
 
-  return rows.map((r) => ({
-    ...r,
-    eligibility_mismatch:
-      Boolean(
-        r.candidate_id &&
-          r.source_type === "testimonial" &&
-          staleCand.has(r.candidate_id),
-      ) ||
-      Boolean(
-        r.project_candidate_id &&
-          r.source_type === "project" &&
-          staleProj.has(r.project_candidate_id),
-      ),
-  }));
+  return rows.filter((r) => {
+    if (
+      r.candidate_id &&
+      r.source_type === "testimonial" &&
+      staleCand.has(r.candidate_id)
+    ) {
+      return false;
+    }
+    if (
+      r.project_candidate_id &&
+      r.source_type === "project" &&
+      staleProj.has(r.project_candidate_id)
+    ) {
+      return false;
+    }
+    return true;
+  });
 }
 
 function normalizePostProductionRow(
@@ -315,6 +316,7 @@ type TestimonialPick = {
   email: string;
   interview_date: string | null;
   interviewer: string;
+  post_interview_eligible: boolean;
 };
 
 type ProjectPick = {
@@ -324,6 +326,7 @@ type ProjectPick = {
   email: string;
   project_title: string | null;
   interview_date: string | null;
+  post_interview_eligible: boolean;
 };
 
 type AddSelection =
@@ -456,7 +459,7 @@ export function PostProductionDashboard() {
         }
         return true;
       });
-    setRows(await attachPostProductionEligibilityMismatch(supabase, base));
+    setRows(await filterPostProductionEligibleRows(supabase, base));
     setError(null);
     return true;
   }, [supabase]);
@@ -729,6 +732,7 @@ export function PostProductionDashboard() {
           email: cand.email,
           interview_date: dateIso,
           interviewer,
+          post_interview_eligible: r.post_interview_eligible === true,
         });
       }
     }
@@ -785,6 +789,7 @@ export function PostProductionDashboard() {
           email,
           project_title: cand.project_title,
           interview_date: dateIso,
+          post_interview_eligible: r.post_interview_eligible === true,
         });
       }
     }
@@ -815,12 +820,21 @@ export function PostProductionDashboard() {
     );
   }, [projectPicks, addSearch]);
 
+  const selectedAddIsEligible =
+    selectedAdd?.pick.post_interview_eligible === true;
+
   const confirmAdd = async () => {
     if (!canEditCurrentPage) {
       setToastMessage("You don't have permission to add entries.");
       return;
     }
     if (!supabase || !selectedAdd) return;
+    if (!selectedAddIsEligible) {
+      const msg = "Not eligible for post production";
+      setError(msg);
+      setToastMessage(msg);
+      return;
+    }
 
     const selectedForLog =
       selectedAdd.kind === "testimonial"
@@ -1615,13 +1629,6 @@ export function PostProductionDashboard() {
                                   {row.candidate_name?.trim() || "—"}
                                 </span>
                               )}
-                              {row.eligibility_mismatch ? (
-                                <p className="mt-1 max-w-[130px] text-[11px] font-medium leading-snug text-amber-800">
-                                  Interview record is no longer marked
-                                  post-interview eligible — review before
-                                  continuing.
-                                </p>
-                              ) : null}
                             </td>
                             <td className={`${td} ${ppCol.source}`}>
                               {sourceBadge(row.source_type)}
@@ -1980,7 +1987,12 @@ export function PostProductionDashboard() {
                   </button>
                   <button
                     type="button"
-                    disabled={addSubmitting || !selectedAdd}
+                    disabled={addSubmitting || !selectedAdd || !selectedAddIsEligible}
+                    title={
+                      selectedAdd && !selectedAddIsEligible
+                        ? "Not eligible for post production"
+                        : undefined
+                    }
                     className="rounded-xl bg-[#1d1d1f] px-4 py-2 text-sm text-white disabled:opacity-50"
                     onClick={() => void confirmAdd()}
                   >

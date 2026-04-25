@@ -76,12 +76,13 @@ export async function POST(request: Request) {
         "id, candidate_id, interview_status, post_interview_eligible, interview_language, interview_type, candidates!inner ( full_name, email, is_deleted )",
       )
       .eq("id", body.interview_id)
+      .eq("post_interview_eligible", true)
       .maybeSingle();
 
     if (ivErr || !iv) {
       return NextResponse.json(
-        { error: ivErr?.message ?? "Interview not found" },
-        { status: ivErr ? 500 : 404 },
+        { error: ivErr?.message ?? POST_PRODUCTION_NOT_ELIGIBLE_ERROR },
+        { status: ivErr ? 500 : 400 },
       );
     }
 
@@ -203,12 +204,13 @@ export async function POST(request: Request) {
       "id, project_candidate_id, interview_status, post_interview_eligible, project_candidates!inner ( id, email, full_name, project_title, is_deleted )",
     )
     .eq("id", body.project_interview_id)
+    .eq("post_interview_eligible", true)
     .maybeSingle();
 
   if (pErr || !piv) {
     return NextResponse.json(
-      { error: pErr?.message ?? "Project interview not found" },
-      { status: pErr ? 500 : 404 },
+      { error: pErr?.message ?? POST_PRODUCTION_NOT_ELIGIBLE_ERROR },
+      { status: pErr ? 500 : 400 },
     );
   }
 
