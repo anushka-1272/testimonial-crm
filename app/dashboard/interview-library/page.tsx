@@ -4,7 +4,8 @@ import { InterviewLibraryDashboard } from "./interview-library-dashboard";
 
 export const metadata: Metadata = {
   title: "Interview Library | Testimonial CRM",
-  description: "Browse completed testimonial and project interviews.",
+  description:
+    "Eligible completed interviews with a YouTube link (testimonial and project).",
 };
 
 export default function InterviewLibraryPage() {

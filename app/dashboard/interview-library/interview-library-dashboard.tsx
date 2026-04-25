@@ -10,20 +10,9 @@ const TIMEZONE_IST = "Asia/Kolkata";
 const FETCH_CAP = 4000;
 const SUMMARY_PREVIEW = 120;
 
-type PostProductionLite = {
-  candidate_id: string | null;
-  project_candidate_id: string | null;
-  summary: string | null;
-  youtube_link: string | null;
-  youtube_status: string | null;
-  edited_video_link: string | null;
-  raw_video_link: string | null;
-};
-
-export type LibraryStatus = "Draft" | "Edited" | "Uploaded";
-
 export type LibraryRow = {
   key: string;
+  post_interview_eligible: boolean;
   source: "testimonial" | "project";
   name: string;
   email: string;
@@ -32,8 +21,10 @@ export type LibraryRow = {
   role: string | null;
   completedAt: string | null;
   summary: string | null;
-  youtubeLink: string | null;
-  status: LibraryStatus;
+  /** Non-empty YouTube URL from post production */
+  youtubeLink: string;
+  /** `post_production.updated_at` (proxy for link activity; DB has no youtube_link_added_at) */
+  youtubeLinkSortAt: string;
 };
 
 function pad2(n: number) {
@@ -50,12 +41,11 @@ function istDateInputBounds(ymd: string): { startIso: string; endExclusiveIso: s
   return { startIso: start.toISOString(), endExclusiveIso: end.toISOString() };
 }
 
-function statusFromPostProduction(pp: PostProductionLite | undefined): LibraryStatus {
-  if (!pp) return "Draft";
-  const yt = (pp.youtube_link ?? "").trim();
-  if (yt || pp.youtube_status === "live") return "Uploaded";
-  if ((pp.edited_video_link ?? "").trim()) return "Edited";
-  return "Draft";
+function librarySafetyFilter(item: LibraryRow): boolean {
+  return (
+    item.post_interview_eligible === true &&
+    Boolean(item.youtubeLink?.trim())
+  );
 }
 
 function chunk<T>(arr: T[], size: number): T[][] {
@@ -64,43 +54,95 @@ function chunk<T>(arr: T[], size: number): T[][] {
   return out;
 }
 
-async function fetchPostProductionMap(
+type InterviewCandRow = {
+  id: string;
+  candidate_id: string;
+  completed_at: string | null;
+  post_interview_eligible: boolean | null;
+  interview_type: string | null;
+  candidates:
+    | {
+        full_name: string | null;
+        email: string;
+        domain: string | null;
+        job_role: string | null;
+      }
+    | Array<{
+        full_name: string | null;
+        email: string;
+        domain: string | null;
+        job_role: string | null;
+      }>;
+};
+
+type ProjectInterviewRow = {
+  id: string;
+  project_candidate_id: string;
+  completed_at: string | null;
+  post_interview_eligible: boolean | null;
+  interview_type: string | null;
+  project_candidates:
+    | { full_name: string | null; email: string }
+    | Array<{ full_name: string | null; email: string }>;
+};
+
+async function fetchLatestEligibleCompletedInterviews(
   supabase: ReturnType<typeof createBrowserSupabaseClient>,
   candidateIds: string[],
+): Promise<Map<string, InterviewCandRow>> {
+  const map = new Map<string, InterviewCandRow>();
+  for (const batch of chunk(candidateIds, 80)) {
+    if (batch.length === 0) continue;
+    const { data, error } = await supabase
+      .from("interviews")
+      .select(
+        "id, candidate_id, completed_at, post_interview_eligible, interview_type, candidates!inner ( full_name, email, domain, job_role, is_deleted )",
+      )
+      .in("candidate_id", batch)
+      .eq("post_interview_eligible", true)
+      .not("completed_at", "is", null)
+      .or("interview_status.eq.completed,completed_at.not.is.null")
+      .eq("candidates.is_deleted", false);
+    if (error) throw error;
+    for (const raw of data ?? []) {
+      const r = raw as InterviewCandRow;
+      const cid = r.candidate_id;
+      const prev = map.get(cid);
+      const ca = r.completed_at ?? "";
+      const pa = prev?.completed_at ?? "";
+      if (!prev || ca > pa) map.set(cid, r);
+    }
+  }
+  return map;
+}
+
+async function fetchLatestEligibleCompletedProjectInterviews(
+  supabase: ReturnType<typeof createBrowserSupabaseClient>,
   projectCandidateIds: string[],
-): Promise<Map<string, PostProductionLite>> {
-  const map = new Map<string, PostProductionLite>();
-
-  for (const batch of chunk(candidateIds, 150)) {
+): Promise<Map<string, ProjectInterviewRow>> {
+  const map = new Map<string, ProjectInterviewRow>();
+  for (const batch of chunk(projectCandidateIds, 80)) {
     if (batch.length === 0) continue;
     const { data, error } = await supabase
-      .from("post_production")
+      .from("project_interviews")
       .select(
-        "candidate_id, project_candidate_id, summary, youtube_link, youtube_status, edited_video_link, raw_video_link",
+        "id, project_candidate_id, completed_at, post_interview_eligible, interview_type, project_candidates!inner ( full_name, email, is_deleted )",
       )
-      .in("candidate_id", batch);
+      .in("project_candidate_id", batch)
+      .eq("post_interview_eligible", true)
+      .not("completed_at", "is", null)
+      .or("interview_status.eq.completed,completed_at.not.is.null")
+      .eq("project_candidates.is_deleted", false);
     if (error) throw error;
-    for (const row of data ?? []) {
-      const cid = row.candidate_id as string | null;
-      if (cid) map.set(`c:${cid}`, row as PostProductionLite);
+    for (const raw of data ?? []) {
+      const r = raw as ProjectInterviewRow;
+      const pid = r.project_candidate_id;
+      const prev = map.get(pid);
+      const ca = r.completed_at ?? "";
+      const pa = prev?.completed_at ?? "";
+      if (!prev || ca > pa) map.set(pid, r);
     }
   }
-
-  for (const batch of chunk(projectCandidateIds, 150)) {
-    if (batch.length === 0) continue;
-    const { data, error } = await supabase
-      .from("post_production")
-      .select(
-        "candidate_id, project_candidate_id, summary, youtube_link, youtube_status, edited_video_link, raw_video_link",
-      )
-      .in("project_candidate_id", batch);
-    if (error) throw error;
-    for (const row of data ?? []) {
-      const pid = row.project_candidate_id as string | null;
-      if (pid) map.set(`p:${pid}`, row as PostProductionLite);
-    }
-  }
-
   return map;
 }
 
@@ -147,130 +189,124 @@ export function InterviewLibraryDashboard() {
     setLoading(true);
     setError(null);
     try {
-      const { data: tRows, error: tErr } = await supabase
-        .from("interviews")
+      const { data: ppRows, error: ppErr } = await supabase
+        .from("post_production")
         .select(
-          "id, candidate_id, completed_at, interview_type, candidates!inner ( full_name, email, domain, job_role, is_deleted )",
+          "id, candidate_id, project_candidate_id, source_type, summary, youtube_link, youtube_status, updated_at",
         )
-        .or("interview_status.eq.completed,completed_at.not.is.null")
-        .not("completed_at", "is", null)
-        .eq("candidates.is_deleted", false)
-        .order("completed_at", { ascending: false })
-        .limit(FETCH_CAP);
+        .not("youtube_link", "is", null)
+        .neq("youtube_link", "")
+        .order("updated_at", { ascending: false })
+        .limit(FETCH_CAP * 2);
 
-      if (tErr) throw tErr;
+      if (ppErr) throw ppErr;
 
-      const { data: pRows, error: pErr } = await supabase
-        .from("project_interviews")
-        .select(
-          "id, project_candidate_id, completed_at, interview_type, project_candidates!inner ( full_name, email, is_deleted )",
-        )
-        .or("interview_status.eq.completed,completed_at.not.is.null")
-        .not("completed_at", "is", null)
-        .eq("project_candidates.is_deleted", false)
-        .order("completed_at", { ascending: false })
-        .limit(FETCH_CAP);
+      type PpRow = {
+        id: string;
+        candidate_id: string | null;
+        project_candidate_id: string | null;
+        source_type: string | null;
+        summary: string | null;
+        youtube_link: string;
+        youtube_status: string | null;
+        updated_at: string;
+      };
 
-      if (pErr) throw pErr;
+      const ppList = (ppRows ?? []).filter((r) => {
+        const yt = String((r as PpRow).youtube_link ?? "").trim();
+        return yt.length > 0;
+      }) as PpRow[];
 
-      const testimonialCandidateIds = [
-        ...new Set(
-          (tRows ?? [])
-            .map((r) => (r as { candidate_id: string }).candidate_id)
-            .filter(Boolean),
-        ),
-      ];
-      const projectCandidateIds = [
-        ...new Set(
-          (pRows ?? [])
-            .map((r) => (r as { project_candidate_id: string }).project_candidate_id)
-            .filter(Boolean),
-        ),
-      ];
-
-      const ppMap = await fetchPostProductionMap(
-        supabase,
-        testimonialCandidateIds,
-        projectCandidateIds,
+      const ppTestimonial = ppList.filter(
+        (r) =>
+          Boolean(r.candidate_id) &&
+          String(r.source_type ?? "testimonial") !== "project",
       );
+      const ppProject = ppList.filter(
+        (r) => Boolean(r.project_candidate_id) && r.source_type === "project",
+      );
+
+      const tCandIds = [
+        ...new Set(ppTestimonial.map((r) => r.candidate_id as string)),
+      ];
+      const pCandIds = [
+        ...new Set(ppProject.map((r) => r.project_candidate_id as string)),
+      ];
+
+      const interviewByCandidate =
+        tCandIds.length > 0
+          ? await fetchLatestEligibleCompletedInterviews(supabase, tCandIds)
+          : new Map<string, InterviewCandRow>();
+      const interviewByProjectCandidate =
+        pCandIds.length > 0
+          ? await fetchLatestEligibleCompletedProjectInterviews(
+              supabase,
+              pCandIds,
+            )
+          : new Map<string, ProjectInterviewRow>();
 
       const out: LibraryRow[] = [];
 
-      for (const raw of tRows ?? []) {
-        const r = raw as {
-          id: string;
-          candidate_id: string;
-          completed_at: string | null;
-          interview_type: string | null;
-          candidates:
-            | {
-                full_name: string | null;
-                email: string;
-                domain: string | null;
-                job_role: string | null;
-              }
-            | Array<{
-                full_name: string | null;
-                email: string;
-                domain: string | null;
-                job_role: string | null;
-              }>;
-        };
-        const c = Array.isArray(r.candidates) ? r.candidates[0] : r.candidates;
+      for (const pp of ppTestimonial) {
+        const yt = pp.youtube_link.trim();
+        if (!yt) continue;
+        const cid = pp.candidate_id as string;
+        const iv = interviewByCandidate.get(cid);
+        if (!iv || iv.post_interview_eligible !== true) continue;
+        const c = Array.isArray(iv.candidates) ? iv.candidates[0] : iv.candidates;
         if (!c) continue;
-        const pp = ppMap.get(`c:${r.candidate_id}`);
         out.push({
-          key: `t-${r.id}`,
+          key: `t-${pp.id}-${iv.id}`,
+          post_interview_eligible: true,
           source: "testimonial",
           name: c.full_name?.trim() || c.email,
           email: c.email,
           interviewType: "testimonial",
           domain: c.domain?.trim() || null,
           role: c.job_role?.trim() || null,
-          completedAt: r.completed_at,
-          summary: pp?.summary?.trim() || null,
-          youtubeLink: pp?.youtube_link?.trim() || null,
-          status: statusFromPostProduction(pp),
+          completedAt: iv.completed_at,
+          summary: pp.summary?.trim() || null,
+          youtubeLink: yt,
+          youtubeLinkSortAt: pp.updated_at,
         });
       }
 
-      for (const raw of pRows ?? []) {
-        const r = raw as {
-          id: string;
-          project_candidate_id: string;
-          completed_at: string | null;
-          interview_type: string | null;
-          project_candidates:
-            | { full_name: string | null; email: string }
-            | Array<{ full_name: string | null; email: string }>;
-        };
-        const c = Array.isArray(r.project_candidates)
-          ? r.project_candidates[0]
-          : r.project_candidates;
+      for (const pp of ppProject) {
+        const yt = pp.youtube_link.trim();
+        if (!yt) continue;
+        const pid = pp.project_candidate_id as string;
+        const piv = interviewByProjectCandidate.get(pid);
+        if (!piv || piv.post_interview_eligible !== true) continue;
+        const c = Array.isArray(piv.project_candidates)
+          ? piv.project_candidates[0]
+          : piv.project_candidates;
         if (!c) continue;
-        const pp = ppMap.get(`p:${r.project_candidate_id}`);
         out.push({
-          key: `p-${r.id}`,
+          key: `p-${pp.id}-${piv.id}`,
+          post_interview_eligible: true,
           source: "project",
           name: c.full_name?.trim() || c.email,
           email: c.email,
           interviewType: "project",
           domain: null,
           role: null,
-          completedAt: r.completed_at,
-          summary: pp?.summary?.trim() || null,
-          youtubeLink: pp?.youtube_link?.trim() || null,
-          status: statusFromPostProduction(pp),
+          completedAt: piv.completed_at,
+          summary: pp.summary?.trim() || null,
+          youtubeLink: yt,
+          youtubeLinkSortAt: pp.updated_at,
         });
       }
 
       out.sort((a, b) => {
-        const ta = a.completedAt ? new Date(a.completedAt).getTime() : 0;
-        const tb = b.completedAt ? new Date(b.completedAt).getTime() : 0;
-        return tb - ta;
+        const sa = new Date(a.youtubeLinkSortAt).getTime();
+        const sb = new Date(b.youtubeLinkSortAt).getTime();
+        if (sb !== sa) return sb - sa;
+        const ca = a.completedAt ? new Date(a.completedAt).getTime() : 0;
+        const cb = b.completedAt ? new Date(b.completedAt).getTime() : 0;
+        return cb - ca;
       });
 
-      setRows(out);
+      setRows(out.filter(librarySafetyFilter));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load interview library.");
       setRows([]);
@@ -298,7 +334,7 @@ export function InterviewLibraryDashboard() {
     const fromB = dateFrom ? istDateInputBounds(dateFrom) : null;
     const toB = dateTo ? istDateInputBounds(dateTo) : null;
 
-    return rows.filter((r) => {
+    return rows.filter(librarySafetyFilter).filter((r) => {
       if (typeFilter !== "all" && r.interviewType !== typeFilter) return false;
       if (domainFilter !== "all" && typeFilter !== "project") {
         if (r.source === "testimonial") {
@@ -353,8 +389,8 @@ export function InterviewLibraryDashboard() {
             Interview Library
           </h1>
           <p className="mt-1 text-sm text-[#6e6e73]">
-            Completed interviews only · read-only · dates shown in IST (
-            {TIMEZONE_IST})
+            Post-interview eligible, completed, with a YouTube link · read-only ·
+            dates in IST ({TIMEZONE_IST})
           </p>
         </div>
       </header>
@@ -459,13 +495,13 @@ export function InterviewLibraryDashboard() {
         ) : filtered.length === 0 ? (
           <p className="rounded-2xl border border-[#f0f0f0] bg-white py-16 text-center text-sm text-[#6e6e73] shadow-sm">
             {rows.length === 0
-              ? "No completed interviews found"
+              ? "No completed & approved interviews with YouTube link yet."
               : "No interviews match your filters."}
           </p>
         ) : (
           <div className="overflow-hidden rounded-2xl border border-[#f0f0f0] bg-white shadow-sm">
             <div className="w-full overflow-x-auto">
-              <table className="w-full min-w-[1100px] table-fixed border-collapse text-sm">
+              <table className="w-full min-w-[980px] table-fixed border-collapse text-sm">
                 <thead>
                   <tr>
                     <th className={`${th} w-[140px]`}>Name</th>
@@ -476,7 +512,6 @@ export function InterviewLibraryDashboard() {
                     <th className={`${th} w-[110px]`}>Completed</th>
                     <th className={`${th} min-w-[200px]`}>Summary</th>
                     <th className={`${th} w-[100px]`}>YouTube</th>
-                    <th className={`${th} w-[100px]`}>Status</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -532,32 +567,15 @@ export function InterviewLibraryDashboard() {
                           )}
                         </td>
                         <td className={td}>
-                          {r.youtubeLink ? (
-                            <a
-                              href={r.youtubeLink}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1 font-medium text-[#3b82f6] hover:underline"
-                            >
-                              Open
-                              <ExternalLink className="h-3.5 w-3.5 shrink-0" />
-                            </a>
-                          ) : (
-                            <span className="text-[#aeaeb2]">—</span>
-                          )}
-                        </td>
-                        <td className={td}>
-                          <span
-                            className={
-                              r.status === "Uploaded"
-                                ? "inline-flex rounded-full bg-[#f0fdf4] px-2 py-0.5 text-xs font-medium text-[#15803d]"
-                                : r.status === "Edited"
-                                  ? "inline-flex rounded-full bg-[#fef9c3] px-2 py-0.5 text-xs font-medium text-[#854d0e]"
-                                  : "inline-flex rounded-full bg-[#f4f4f5] px-2 py-0.5 text-xs font-medium text-[#52525b]"
-                            }
+                          <a
+                            href={r.youtubeLink}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 font-medium text-[#3b82f6] hover:underline"
                           >
-                            {r.status}
-                          </span>
+                            Open
+                            <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+                          </a>
                         </td>
                       </tr>
                     );
