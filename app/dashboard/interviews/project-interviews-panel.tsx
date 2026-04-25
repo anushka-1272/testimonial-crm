@@ -8,6 +8,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { useAccessControl } from "@/components/access-control-context";
 import { ProjectCandidateDetailModal } from "@/components/project-candidate-detail-modal";
+import { ZoomDetailsModal } from "@/components/ZoomDetailsModal";
 import { logActivity } from "@/lib/activity-logger";
 import { displayNameFromUser, getUserSafe } from "@/lib/supabase-auth";
 import { formatInterviewerStoredForUi } from "@/lib/interviewer-enum";
@@ -20,7 +21,6 @@ import {
   mergeRosterWithCurrent,
 } from "@/lib/team-roster";
 
-import { AddZoomDetailsModal } from "./add-zoom-details-modal";
 import { AssignInterviewerModal } from "./assign-interviewer-modal";
 import { EditInterviewDetailsModal } from "./edit-interview-details-modal";
 import {
@@ -1192,9 +1192,9 @@ export function ProjectInterviewsPanel({
                       const awaitingZoom =
                         !hasZoom &&
                         ((isDraftRow && hasIv) || isScheduledRow);
-                      const zoomAdded = isScheduledRow && hasZoom;
-                      const needsZoom = !hasZoom;
-                      const zoomLink = i.zoom_link?.trim();
+                      const zoomAdded = hasZoom;
+                      const zoomLink = i.zoom_link?.trim() ?? "";
+                      const canEditZoom = canEditScheduledTab && !awaitingIv;
                       return (
                         <tr key={i.id}>
                           <td className={tdName}>
@@ -1249,6 +1249,43 @@ export function ProjectInterviewsPanel({
                                   Account: {i.zoom_account.trim()}
                                 </p>
                               ) : null}
+                              <div className="flex flex-wrap items-center gap-2">
+                                {zoomLink ? (
+                                  <a
+                                    href={zoomLink}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex rounded-lg border border-[#e5e5e5] bg-white px-2.5 py-1 text-xs font-medium text-[#1d1d1f] transition-colors hover:bg-[#f5f5f7]"
+                                  >
+                                    Join
+                                  </a>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    disabled
+                                    className="inline-flex cursor-not-allowed rounded-lg border border-[#d1d5db] bg-[#f9fafb] px-2.5 py-1 text-xs font-medium text-[#9ca3af]"
+                                  >
+                                    Join
+                                  </button>
+                                )}
+                                <button
+                                  type="button"
+                                  disabled={!canEditZoom}
+                                  title={
+                                    !canEditScheduledTab
+                                      ? "View only"
+                                      : awaitingIv
+                                        ? "Assign interviewer first"
+                                        : undefined
+                                  }
+                                  className="rounded-lg border border-[#1d1d1f] bg-white px-2.5 py-1 text-xs font-medium text-[#1d1d1f] hover:bg-[#fafafa] disabled:cursor-not-allowed disabled:border-[#d1d5db] disabled:text-[#9ca3af]"
+                                  onClick={() =>
+                                    canEditZoom ? setAddZoomFor(i) : undefined
+                                  }
+                                >
+                                  {hasZoom ? "Edit" : "Add Zoom Details"}
+                                </button>
+                              </div>
                             </div>
                           </td>
                           <td className={tdPoc}>
@@ -1286,36 +1323,6 @@ export function ProjectInterviewsPanel({
                                 >
                                   Assign Interviewer
                                 </button>
-                              ) : null}
-                              {needsZoom &&
-                              (isDraftRow || isScheduledRow) ? (
-                                <button
-                                  type="button"
-                                  disabled={isDraftRow && !hasIv}
-                                  title={
-                                    isDraftRow && !hasIv
-                                      ? "Assign interviewer first"
-                                      : undefined
-                                  }
-                                  className="rounded-lg border border-[#1d1d1f] bg-white px-3 py-1.5 text-xs font-medium text-[#1d1d1f] hover:bg-[#fafafa] disabled:cursor-not-allowed disabled:border-[#d1d5db] disabled:text-[#9ca3af]"
-                                  onClick={() =>
-                                    !isDraftRow || hasIv
-                                      ? setAddZoomFor(i)
-                                      : undefined
-                                  }
-                                >
-                                  Add Zoom Details
-                                </button>
-                              ) : null}
-                              {isScheduledRow && zoomLink ? (
-                                <a
-                                  href={zoomLink}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="inline-flex rounded-lg border border-[#e5e5e5] bg-white px-3 py-1.5 text-xs font-medium text-[#1d1d1f] transition-colors hover:bg-[#f5f5f7]"
-                                >
-                                  Join
-                                </a>
                               ) : null}
                               <button
                                 type="button"
@@ -1764,20 +1771,29 @@ export function ProjectInterviewsPanel({
         }}
       />
 
-      <AddZoomDetailsModal
+      <ZoomDetailsModal
         key={addZoomFor?.id ?? "project-add-zoom-closed"}
         open={!!addZoomFor}
-        interview={addZoomFor}
-        supabase={supabase}
+        interviewId={addZoomFor?.id ?? ""}
+        table="project_interviews"
+        existingZoomLink={addZoomFor?.zoom_link ?? null}
+        existingZoomAccount={addZoomFor?.zoom_account ?? null}
         onClose={() => setAddZoomFor(null)}
-        onSaved={() => {
-          setAddZoomFor(null);
-          void loadProjectData();
-          onPipelineChanged();
-        }}
-        onToast={(msg) => {
-          if (onToast) onToast(msg);
-          else onError(msg);
+        onSuccess={({ zoomLink, zoomAccount }) => {
+          const activeId = addZoomFor?.id;
+          if (!activeId) return;
+          setInterviews((prev) =>
+            prev.map((row) =>
+              row.id === activeId
+                ? {
+                    ...row,
+                    zoom_link: zoomLink,
+                    zoom_account: zoomAccount,
+                  }
+                : row,
+            ),
+          );
+          onToast?.("Zoom details saved");
         }}
       />
 

@@ -12,6 +12,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useAccessControl } from "@/components/access-control-context";
 import { CandidateDetailModal } from "@/components/candidate-detail-modal";
+import { ZoomDetailsModal } from "@/components/ZoomDetailsModal";
 import { logActivity } from "@/lib/activity-logger";
 import {
   buildInterviewerSelectOptions,
@@ -41,7 +42,6 @@ import {
 
 import { PostInterviewDrawer } from "./post-interview-drawer";
 import { RescheduleInterviewModal } from "./reschedule-interview-modal";
-import { AddZoomDetailsModal } from "./add-zoom-details-modal";
 import { AssignInterviewerModal } from "./assign-interviewer-modal";
 import { EditInterviewDetailsModal } from "./edit-interview-details-modal";
 import { followupStatusBadgeFromSnapshot } from "./followup-status";
@@ -390,13 +390,20 @@ function interviewLanguageBadge(i: InterviewWithCandidate) {
   );
 }
 
-function zoomStatusColumn(i: InterviewWithCandidate) {
+function zoomStatusColumn(
+  i: InterviewWithCandidate,
+  opts: {
+    canEditScheduledTab: boolean;
+    onOpenZoomModal: (interview: InterviewWithCandidate) => void;
+  },
+) {
   const isDraft = i.interview_status === "draft";
-  const isScheduled = i.interview_status === "scheduled";
   const link = i.zoom_link?.trim();
   const acct = i.zoom_account?.trim();
+  const hasZoom = Boolean(link);
   const awaitingIv = isDraft && !hasAssignedInterviewer(i);
-  const awaitingZoom = isDraft && hasAssignedInterviewer(i);
+  const awaitingZoom = isDraft && hasAssignedInterviewer(i) && !hasZoom;
+  const canOpenZoomModal = opts.canEditScheduledTab && !awaitingIv;
   return (
     <div className="flex flex-col items-start gap-2">
       {awaitingIv ? (
@@ -407,29 +414,52 @@ function zoomStatusColumn(i: InterviewWithCandidate) {
         <span className="inline-flex rounded-full bg-[#fff7ed] px-2.5 py-1 text-xs font-medium text-[#c2410c]">
           Awaiting Zoom
         </span>
-      ) : isScheduled ? (
+      ) : hasZoom ? (
         <span className="inline-flex rounded-full bg-[#f0fdf4] px-2.5 py-1 text-xs font-medium text-[#15803d]">
           Zoom Added
         </span>
       ) : (
         <span className="text-[#6e6e73]">—</span>
       )}
-      {isScheduled && acct ? (
+      {hasZoom && acct ? (
         <p className="text-xs text-[#6e6e73]">Account: {acct}</p>
       ) : null}
-      {isScheduled && link ? (
-        <a
-          href={link}
-          target="_blank"
-          rel="noopener noreferrer"
+      <div className="flex flex-wrap items-center gap-2">
+        {link ? (
+          <a
+            href={link}
+            target="_blank"
+            rel="noopener noreferrer"
+            title={acct ? `Account: ${acct}` : "Join Zoom meeting"}
+            className="inline-flex rounded-lg border border-[#e5e5e5] bg-white px-2.5 py-1 text-xs font-medium text-[#1d1d1f] transition-colors hover:bg-[#f5f5f7]"
+          >
+            Join
+          </a>
+        ) : (
+          <button
+            type="button"
+            disabled
+            className="inline-flex cursor-not-allowed rounded-lg border border-[#d1d5db] bg-[#f9fafb] px-2.5 py-1 text-xs font-medium text-[#9ca3af]"
+          >
+            Join
+          </button>
+        )}
+        <button
+          type="button"
+          disabled={!canOpenZoomModal}
           title={
-            acct ? `Account: ${acct}` : "Join Zoom meeting"
+            !opts.canEditScheduledTab
+              ? "View only"
+              : awaitingIv
+                ? "Assign interviewer first"
+                : undefined
           }
-          className="inline-flex rounded-lg border border-[#e5e5e5] bg-white px-2.5 py-1 text-xs font-medium text-[#1d1d1f] transition-colors hover:bg-[#f5f5f7]"
+          className="rounded-lg border border-[#1d1d1f] bg-white px-2.5 py-1 text-xs font-medium text-[#1d1d1f] hover:bg-[#fafafa] disabled:cursor-not-allowed disabled:border-[#d1d5db] disabled:text-[#9ca3af]"
+          onClick={() => (canOpenZoomModal ? opts.onOpenZoomModal(i) : undefined)}
         >
-          Join
-        </a>
-      ) : null}
+          {link ? "Edit" : "Add Zoom Details"}
+        </button>
+      </div>
     </div>
   );
 }
@@ -2255,7 +2285,10 @@ export function InterviewsBoard() {
                                   {formatInterviewerStoredForUi(i.interviewer)}
                                 </td>
                                 <td className={tdZoomStatus}>
-                                  {zoomStatusColumn(i)}
+                                  {zoomStatusColumn(i, {
+                                    canEditScheduledTab,
+                                    onOpenZoomModal: setAddZoomFor,
+                                  })}
                                 </td>
                                 <td className={tdPocInterview}>
                                   {i.poc?.trim() ||
@@ -2298,29 +2331,6 @@ export function InterviewsBoard() {
                                         }
                                       >
                                         Assign Interviewer
-                                      </button>
-                                    ) : null}
-                                    {isDraftRow ? (
-                                      <button
-                                        type="button"
-                                        disabled={
-                                          !canEditScheduledTab || !hasIv
-                                        }
-                                        title={
-                                          !canEditScheduledTab
-                                            ? "View only"
-                                            : !hasIv
-                                              ? "Assign interviewer first"
-                                              : undefined
-                                        }
-                                        className="rounded-lg border border-[#1d1d1f] bg-white px-3 py-1.5 text-xs font-medium text-[#1d1d1f] hover:bg-[#fafafa] disabled:cursor-not-allowed disabled:border-[#d1d5db] disabled:text-[#9ca3af]"
-                                        onClick={() =>
-                                          canEditScheduledTab && hasIv
-                                            ? setAddZoomFor(i)
-                                            : undefined
-                                        }
-                                      >
-                                        Add Zoom Details
                                       </button>
                                     ) : null}
                                     <button
@@ -2975,14 +2985,30 @@ export function InterviewsBoard() {
         onCreated={() => void loadData()}
       />
 
-      <AddZoomDetailsModal
+      <ZoomDetailsModal
         key={addZoomFor?.id ?? "add-zoom-closed"}
         open={!!addZoomFor}
-        interview={addZoomFor}
-        supabase={supabase}
+        interviewId={addZoomFor?.id ?? ""}
+        table="interviews"
+        existingZoomLink={addZoomFor?.zoom_link ?? null}
+        existingZoomAccount={addZoomFor?.zoom_account ?? null}
         onClose={() => setAddZoomFor(null)}
-        onSaved={() => void loadData()}
-        onToast={(msg) => setToastMessage(msg)}
+        onSuccess={({ zoomLink, zoomAccount }) => {
+          const activeId = addZoomFor?.id;
+          if (!activeId) return;
+          setInterviews((prev) =>
+            prev.map((row) =>
+              row.id === activeId
+                ? {
+                    ...row,
+                    zoom_link: zoomLink,
+                    zoom_account: zoomAccount,
+                  }
+                : row,
+            ),
+          );
+          setToastMessage("Zoom details saved");
+        }}
       />
 
       <AssignInterviewerModal
