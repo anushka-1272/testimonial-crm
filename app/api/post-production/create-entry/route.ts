@@ -134,16 +134,19 @@ export async function POST(request: Request) {
       (iv.interview_language as string | null | undefined)?.trim() ||
       "english";
 
+    const upsertRow = {
+      interview_id: iv.id,
+      candidate_id: iv.candidate_id,
+      project_candidate_id: null,
+      source_type: "testimonial" as const,
+      candidate_name: name,
+      interview_language: lang,
+      created_at: new Date().toISOString(),
+    };
+
     const { data: ins, error: insErr } = await supabase
       .from("post_production")
-      .insert({
-        candidate_id: iv.candidate_id,
-        project_candidate_id: null,
-        source_type: "testimonial",
-        candidate_name: name,
-        interview_language: lang,
-        created_at: new Date().toISOString(),
-      })
+      .upsert(upsertRow, { onConflict: "interview_id" })
       .select("id")
       .single();
 
@@ -173,12 +176,6 @@ export async function POST(request: Request) {
         return NextResponse.json(
           { error: POST_PRODUCTION_NOT_ELIGIBLE_ERROR },
           { status: 400 },
-        );
-      }
-      if (insErr.code === "23505") {
-        return NextResponse.json(
-          { error: "This candidate is already in post production." },
-          { status: 409 },
         );
       }
       return NextResponse.json({ error: msg }, { status: 500 });
@@ -271,16 +268,19 @@ export async function POST(request: Request) {
     pc.email.split("@")[0] ||
     "Candidate";
 
+  const upsertProjectRow = {
+    interview_id: piv.id,
+    candidate_id: null,
+    project_candidate_id: piv.project_candidate_id,
+    source_type: "project" as const,
+    candidate_name: name,
+    interview_language: "english",
+    created_at: new Date().toISOString(),
+  };
+
   const { data: insP, error: insPErr } = await supabase
     .from("post_production")
-    .insert({
-      candidate_id: null,
-      project_candidate_id: piv.project_candidate_id,
-      source_type: "project",
-      candidate_name: name,
-      interview_language: "english",
-      created_at: new Date().toISOString(),
-    })
+    .upsert(upsertProjectRow, { onConflict: "interview_id" })
     .select("id")
     .single();
 
@@ -310,12 +310,6 @@ export async function POST(request: Request) {
       return NextResponse.json(
         { error: POST_PRODUCTION_NOT_ELIGIBLE_ERROR },
         { status: 400 },
-      );
-    }
-    if (insPErr.code === "23505") {
-      return NextResponse.json(
-        { error: "This project candidate is already in post production." },
-        { status: 409 },
       );
     }
     return NextResponse.json({ error: msg }, { status: 500 });

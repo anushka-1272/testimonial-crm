@@ -86,19 +86,19 @@ type ProjectInterviewRow = {
     | Array<{ full_name: string | null; email: string }>;
 };
 
-async function fetchLatestEligibleCompletedInterviews(
+async function fetchTestimonialInterviewsByIds(
   supabase: ReturnType<typeof createBrowserSupabaseClient>,
-  candidateIds: string[],
+  interviewIds: string[],
 ): Promise<Map<string, InterviewCandRow>> {
   const map = new Map<string, InterviewCandRow>();
-  for (const batch of chunk(candidateIds, 80)) {
+  for (const batch of chunk(interviewIds, 80)) {
     if (batch.length === 0) continue;
     const { data, error } = await supabase
       .from("interviews")
       .select(
         "id, candidate_id, completed_at, post_interview_eligible, interview_type, candidates!inner ( full_name, email, domain, job_role, is_deleted )",
       )
-      .in("candidate_id", batch)
+      .in("id", batch)
       .eq("post_interview_eligible", true)
       .not("completed_at", "is", null)
       .or("interview_status.eq.completed,completed_at.not.is.null")
@@ -106,29 +106,25 @@ async function fetchLatestEligibleCompletedInterviews(
     if (error) throw error;
     for (const raw of data ?? []) {
       const r = raw as InterviewCandRow;
-      const cid = r.candidate_id;
-      const prev = map.get(cid);
-      const ca = r.completed_at ?? "";
-      const pa = prev?.completed_at ?? "";
-      if (!prev || ca > pa) map.set(cid, r);
+      map.set(r.id, r);
     }
   }
   return map;
 }
 
-async function fetchLatestEligibleCompletedProjectInterviews(
+async function fetchProjectInterviewsByIds(
   supabase: ReturnType<typeof createBrowserSupabaseClient>,
-  projectCandidateIds: string[],
+  interviewIds: string[],
 ): Promise<Map<string, ProjectInterviewRow>> {
   const map = new Map<string, ProjectInterviewRow>();
-  for (const batch of chunk(projectCandidateIds, 80)) {
+  for (const batch of chunk(interviewIds, 80)) {
     if (batch.length === 0) continue;
     const { data, error } = await supabase
       .from("project_interviews")
       .select(
         "id, project_candidate_id, completed_at, post_interview_eligible, interview_type, project_candidates!inner ( full_name, email, is_deleted )",
       )
-      .in("project_candidate_id", batch)
+      .in("id", batch)
       .eq("post_interview_eligible", true)
       .not("completed_at", "is", null)
       .or("interview_status.eq.completed,completed_at.not.is.null")
@@ -136,14 +132,28 @@ async function fetchLatestEligibleCompletedProjectInterviews(
     if (error) throw error;
     for (const raw of data ?? []) {
       const r = raw as ProjectInterviewRow;
-      const pid = r.project_candidate_id;
-      const prev = map.get(pid);
-      const ca = r.completed_at ?? "";
-      const pa = prev?.completed_at ?? "";
-      if (!prev || ca > pa) map.set(pid, r);
+      map.set(r.id, r);
     }
   }
   return map;
+}
+
+function dedupePostProductionByInterviewId<
+  T extends { interview_id: string | null; updated_at: string },
+>(rows: T[]): T[] {
+  const m = new Map<string, T>();
+  for (const r of rows) {
+    const iid = (r.interview_id ?? "").trim();
+    if (!iid) continue;
+    const prev = m.get(iid);
+    if (
+      !prev ||
+      new Date(r.updated_at).getTime() > new Date(prev.updated_at).getTime()
+    ) {
+      m.set(iid, r);
+    }
+  }
+  return [...m.values()];
 }
 
 function formatCompletedAt(iso: string | null): string {
@@ -192,7 +202,7 @@ export function InterviewLibraryDashboard() {
       const { data: ppRows, error: ppErr } = await supabase
         .from("post_production")
         .select(
-          "id, candidate_id, project_candidate_id, source_type, summary, youtube_link, youtube_status, updated_at",
+          "id, interview_id, candidate_id, project_candidate_id, source_type, summary, youtube_link, youtube_status, updated_at",
         )
         .not("youtube_link", "is", null)
         .neq("youtube_link", "")
@@ -203,6 +213,7 @@ export function InterviewLibraryDashboard() {
 
       type PpRow = {
         id: string;
+        interview_id: string | null;
         candidate_id: string | null;
         project_candidate_id: string | null;
         source_type: string | null;
@@ -212,37 +223,42 @@ export function InterviewLibraryDashboard() {
         updated_at: string;
       };
 
-      const ppList = (ppRows ?? []).filter((r) => {
+      const ppListRaw = (ppRows ?? []).filter((r) => {
         const yt = String((r as PpRow).youtube_link ?? "").trim();
         return yt.length > 0;
       }) as PpRow[];
 
+      const ppList = dedupePostProductionByInterviewId(ppListRaw);
+
       const ppTestimonial = ppList.filter(
         (r) =>
+          Boolean(r.interview_id) &&
           Boolean(r.candidate_id) &&
           String(r.source_type ?? "testimonial") !== "project",
       );
       const ppProject = ppList.filter(
-        (r) => Boolean(r.project_candidate_id) && r.source_type === "project",
+        (r) =>
+          Boolean(r.interview_id) &&
+          Boolean(r.project_candidate_id) &&
+          r.source_type === "project",
       );
 
-      const tCandIds = [
-        ...new Set(ppTestimonial.map((r) => r.candidate_id as string)),
+      const tIvIds = [
+        ...new Set(
+          ppTestimonial.map((r) => r.interview_id as string),
+        ),
       ];
-      const pCandIds = [
-        ...new Set(ppProject.map((r) => r.project_candidate_id as string)),
+      const pIvIds = [
+        ...new Set(ppProject.map((r) => r.interview_id as string)),
       ];
 
-      const interviewByCandidate =
-        tCandIds.length > 0
-          ? await fetchLatestEligibleCompletedInterviews(supabase, tCandIds)
+      const interviewById =
+        tIvIds.length > 0
+          ? await fetchTestimonialInterviewsByIds(supabase, tIvIds)
           : new Map<string, InterviewCandRow>();
-      const interviewByProjectCandidate =
-        pCandIds.length > 0
-          ? await fetchLatestEligibleCompletedProjectInterviews(
-              supabase,
-              pCandIds,
-            )
+      const projectInterviewById =
+        pIvIds.length > 0
+          ? await fetchProjectInterviewsByIds(supabase, pIvIds)
           : new Map<string, ProjectInterviewRow>();
 
       const out: LibraryRow[] = [];
@@ -250,13 +266,13 @@ export function InterviewLibraryDashboard() {
       for (const pp of ppTestimonial) {
         const yt = pp.youtube_link.trim();
         if (!yt) continue;
-        const cid = pp.candidate_id as string;
-        const iv = interviewByCandidate.get(cid);
+        const iid = pp.interview_id as string;
+        const iv = interviewById.get(iid);
         if (!iv || iv.post_interview_eligible !== true) continue;
         const c = Array.isArray(iv.candidates) ? iv.candidates[0] : iv.candidates;
         if (!c) continue;
         out.push({
-          key: `t-${pp.id}-${iv.id}`,
+          key: `t-${iid}`,
           post_interview_eligible: true,
           source: "testimonial",
           name: c.full_name?.trim() || c.email,
@@ -274,15 +290,15 @@ export function InterviewLibraryDashboard() {
       for (const pp of ppProject) {
         const yt = pp.youtube_link.trim();
         if (!yt) continue;
-        const pid = pp.project_candidate_id as string;
-        const piv = interviewByProjectCandidate.get(pid);
+        const iid = pp.interview_id as string;
+        const piv = projectInterviewById.get(iid);
         if (!piv || piv.post_interview_eligible !== true) continue;
         const c = Array.isArray(piv.project_candidates)
           ? piv.project_candidates[0]
           : piv.project_candidates;
         if (!c) continue;
         out.push({
-          key: `p-${pp.id}-${piv.id}`,
+          key: `p-${iid}`,
           post_interview_eligible: true,
           source: "project",
           name: c.full_name?.trim() || c.email,
@@ -297,7 +313,8 @@ export function InterviewLibraryDashboard() {
         });
       }
 
-      out.sort((a, b) => {
+      const uniqueOut = [...new Map(out.map((r) => [r.key, r])).values()];
+      uniqueOut.sort((a, b) => {
         const sa = new Date(a.youtubeLinkSortAt).getTime();
         const sb = new Date(b.youtubeLinkSortAt).getTime();
         if (sb !== sa) return sb - sa;
@@ -306,7 +323,7 @@ export function InterviewLibraryDashboard() {
         return cb - ca;
       });
 
-      setRows(out.filter(librarySafetyFilter));
+      setRows(uniqueOut.filter(librarySafetyFilter));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load interview library.");
       setRows([]);

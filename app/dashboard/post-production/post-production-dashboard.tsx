@@ -102,6 +102,8 @@ function testimonialDomainBucket(
 export type PostProductionRow = {
   id: string;
   created_at: string;
+  /** `interviews.id` (testimonial) or `project_interviews.id` (project) */
+  interview_id: string | null;
   candidate_id: string | null;
   project_candidate_id: string | null;
   source_type: SourceType;
@@ -131,109 +133,83 @@ export type PostProductionRow = {
 type LinkField = "raw_video_link" | "edited_video_link" | "youtube_link";
 
 const PP_SELECT =
-  "id, created_at, candidate_id, project_candidate_id, source_type, candidate_name, raw_video_link, edited_video_link, pre_edit_review, pre_edit_review_by, post_edit_review, post_edit_review_by, edited_by, youtube_link, youtube_status, summary, cx_mail_sent, cx_mail_sent_at, updated_at, interview_language, candidates ( domain, job_role, is_deleted ), project_candidates ( id, email, full_name, whatsapp_number, project_title, problem_statement, target_user, ai_usage, demo_link, status, poc_assigned, poc_assigned_at, interview_type, is_deleted )";
+  "id, created_at, interview_id, candidate_id, project_candidate_id, source_type, candidate_name, raw_video_link, edited_video_link, pre_edit_review, pre_edit_review_by, post_edit_review, post_edit_review_by, edited_by, youtube_link, youtube_status, summary, cx_mail_sent, cx_mail_sent_at, updated_at, interview_language, candidates ( domain, job_role, is_deleted ), project_candidates ( id, email, full_name, whatsapp_number, project_title, problem_statement, target_user, ai_usage, demo_link, status, poc_assigned, poc_assigned_at, interview_type, is_deleted )";
 
+function chunkIds<T>(arr: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
+}
+
+/** Hide rows whose linked interview is no longer eligible (per interview_id, not “latest per candidate”). */
 async function filterPostProductionEligibleRows(
   supabase: SupabaseClient,
   rows: PostProductionRow[],
 ): Promise<PostProductionRow[]> {
-  const staleCand = new Set<string>();
-  const staleProj = new Set<string>();
+  const staleInterviewIds = new Set<string>();
 
-  const tCids = [
+  const tIvIds = [
     ...new Set(
       rows
-        .filter((r) => r.candidate_id && r.source_type === "testimonial")
-        .map((r) => r.candidate_id as string),
+        .filter(
+          (r) =>
+            r.source_type === "testimonial" &&
+            r.interview_id &&
+            String(r.interview_id).trim(),
+        )
+        .map((r) => r.interview_id as string),
     ),
   ];
-  if (tCids.length) {
+  for (const batch of chunkIds(tIvIds, 80)) {
+    if (batch.length === 0) continue;
     const { data: ivs } = await supabase
       .from("interviews")
-      .select("candidate_id, post_interview_eligible, completed_at")
-      .in("candidate_id", tCids)
+      .select("id, post_interview_eligible")
+      .in("id", batch)
       .eq("interview_status", "completed");
-    const byCand = new Map<
-      string,
-      { completed_at: string; eligible: boolean }[]
-    >();
-    for (const row of ivs ?? []) {
-      const cid = row.candidate_id as string;
-      const arr = byCand.get(cid) ?? [];
-      arr.push({
-        completed_at: String(row.completed_at ?? ""),
-        eligible: row.post_interview_eligible === true,
-      });
-      byCand.set(cid, arr);
-    }
-    for (const cid of tCids) {
-      const arr = byCand.get(cid) ?? [];
-      if (!arr.length) {
-        staleCand.add(cid);
-        continue;
-      }
-      const latest = arr.reduce((a, b) =>
-        a.completed_at >= b.completed_at ? a : b,
-      );
-      if (!latest.eligible) staleCand.add(cid);
+    const ok = new Set(
+      (ivs ?? [])
+        .filter((row) => row.post_interview_eligible === true)
+        .map((row) => row.id as string),
+    );
+    for (const id of batch) {
+      if (!ok.has(id)) staleInterviewIds.add(id);
     }
   }
 
-  const pIds = [
+  const pIvIds = [
     ...new Set(
       rows
-        .filter((r) => r.project_candidate_id && r.source_type === "project")
-        .map((r) => r.project_candidate_id as string),
+        .filter(
+          (r) =>
+            r.source_type === "project" &&
+            r.interview_id &&
+            String(r.interview_id).trim(),
+        )
+        .map((r) => r.interview_id as string),
     ),
   ];
-  if (pIds.length) {
+  for (const batch of chunkIds(pIvIds, 80)) {
+    if (batch.length === 0) continue;
     const { data: pivs } = await supabase
       .from("project_interviews")
-      .select("project_candidate_id, post_interview_eligible, completed_at")
-      .in("project_candidate_id", pIds)
+      .select("id, post_interview_eligible")
+      .in("id", batch)
       .eq("interview_status", "completed");
-    const byPc = new Map<
-      string,
-      { completed_at: string; eligible: boolean }[]
-    >();
-    for (const row of pivs ?? []) {
-      const pid = row.project_candidate_id as string;
-      const arr = byPc.get(pid) ?? [];
-      arr.push({
-        completed_at: String(row.completed_at ?? ""),
-        eligible: row.post_interview_eligible === true,
-      });
-      byPc.set(pid, arr);
-    }
-    for (const pid of pIds) {
-      const arr = byPc.get(pid) ?? [];
-      if (!arr.length) {
-        staleProj.add(pid);
-        continue;
-      }
-      const latest = arr.reduce((a, b) =>
-        a.completed_at >= b.completed_at ? a : b,
-      );
-      if (!latest.eligible) staleProj.add(pid);
+    const ok = new Set(
+      (pivs ?? [])
+        .filter((row) => row.post_interview_eligible === true)
+        .map((row) => row.id as string),
+    );
+    for (const id of batch) {
+      if (!ok.has(id)) staleInterviewIds.add(id);
     }
   }
 
   return rows.filter((r) => {
-    if (
-      r.candidate_id &&
-      r.source_type === "testimonial" &&
-      staleCand.has(r.candidate_id)
-    ) {
-      return false;
-    }
-    if (
-      r.project_candidate_id &&
-      r.source_type === "project" &&
-      staleProj.has(r.project_candidate_id)
-    ) {
-      return false;
-    }
-    return true;
+    const iid = r.interview_id?.trim();
+    if (iid) return !staleInterviewIds.has(iid);
+    return false;
   });
 }
 
@@ -246,6 +222,7 @@ function normalizePostProductionRow(
   return {
     ...r,
     source_type,
+    interview_id: (r.interview_id as string | null | undefined) ?? null,
     project_candidate_id:
       (r.project_candidate_id as string | null | undefined) ?? null,
   } as PostProductionRow;
@@ -342,14 +319,16 @@ const POST_PRODUCTION_KEYS_PAGE = 1000;
 async function fetchPostProductionExistingKeys(supabase: SupabaseClient): Promise<{
   candidateIds: Set<string>;
   projectCandidateIds: Set<string>;
+  interviewIds: Set<string>;
 }> {
   const candidateIds = new Set<string>();
   const projectCandidateIds = new Set<string>();
+  const interviewIds = new Set<string>();
   let from = 0;
   for (;;) {
     const { data, error } = await supabase
       .from("post_production")
-      .select("candidate_id, project_candidate_id")
+      .select("candidate_id, project_candidate_id, interview_id")
       .order("id", { ascending: true })
       .range(from, from + POST_PRODUCTION_KEYS_PAGE - 1);
     if (error) throw error;
@@ -357,13 +336,15 @@ async function fetchPostProductionExistingKeys(supabase: SupabaseClient): Promis
     for (const r of batch) {
       const cid = r.candidate_id as string | null;
       const pid = r.project_candidate_id as string | null;
+      const iid = r.interview_id as string | null | undefined;
       if (cid) candidateIds.add(cid);
       if (pid) projectCandidateIds.add(pid);
+      if (iid) interviewIds.add(iid);
     }
     if (batch.length < POST_PRODUCTION_KEYS_PAGE) break;
     from += POST_PRODUCTION_KEYS_PAGE;
   }
-  return { candidateIds, projectCandidateIds };
+  return { candidateIds, projectCandidateIds, interviewIds };
 }
 
 function escapeCsvCell(v: unknown): string {
@@ -416,6 +397,9 @@ export function PostProductionDashboard() {
   const [addLoading, setAddLoading] = useState(false);
   const [selectedAdd, setSelectedAdd] = useState<AddSelection | null>(null);
   const [addSubmitting, setAddSubmitting] = useState(false);
+  const [existingInterviewIds, setExistingInterviewIds] = useState<
+    Set<string>
+  >(() => new Set());
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const [linkEdit, setLinkEdit] = useState<{
@@ -459,7 +443,14 @@ export function PostProductionDashboard() {
         }
         return true;
       });
-    setRows(await filterPostProductionEligibleRows(supabase, base));
+    const seenIv = new Set<string>();
+    const deduped = base.filter((r) => {
+      const k = (r.interview_id ?? "").trim() || r.id;
+      if (seenIv.has(k)) return false;
+      seenIv.add(k);
+      return true;
+    });
+    setRows(await filterPostProductionEligibleRows(supabase, deduped));
     setError(null);
     return true;
   }, [supabase]);
@@ -656,8 +647,7 @@ export function PostProductionDashboard() {
     setAddLoading(true);
     let invT: unknown[] | null = null;
     let invP: unknown[] | null = null;
-    let inPostCand = new Set<string>();
-    let inPostProj = new Set<string>();
+    let inPostInterview = new Set<string>();
     try {
       const [tRes, pRes, keys] = await Promise.all([
         supabase
@@ -682,8 +672,8 @@ export function PostProductionDashboard() {
       invP = pRes.data ?? null;
       if (tRes.error) throw tRes.error;
       if (pRes.error) throw pRes.error;
-      inPostCand = keys.candidateIds;
-      inPostProj = keys.projectCandidateIds;
+      inPostInterview = keys.interviewIds;
+      setExistingInterviewIds(keys.interviewIds);
     } catch (e) {
       setAddLoading(false);
       setError(
@@ -693,6 +683,7 @@ export function PostProductionDashboard() {
       );
       setTestimonialPicks([]);
       setProjectPicks([]);
+      setExistingInterviewIds(new Set());
       return;
     }
 
@@ -711,7 +702,7 @@ export function PostProductionDashboard() {
           | null;
       };
       const cid = r.candidate_id;
-      if (!cid || inPostCand.has(cid)) continue;
+      if (!cid || inPostInterview.has(r.id)) continue;
       if (!canMoveToPostProduction(r)) continue;
       const c = r.candidates;
       const cand = Array.isArray(c) ? c[0] : c;
@@ -762,7 +753,7 @@ export function PostProductionDashboard() {
           | null;
       };
       const pcid = r.project_candidate_id;
-      if (!pcid || inPostProj.has(pcid)) continue;
+      if (!pcid || inPostInterview.has(r.id)) continue;
       if (!canMoveToPostProduction(r)) continue;
       const c = r.project_candidates;
       const cand = Array.isArray(c) ? c[0] : c;
@@ -823,6 +814,15 @@ export function PostProductionDashboard() {
   const selectedAddIsEligible =
     selectedAdd?.pick.post_interview_eligible === true;
 
+  const selectedInterviewAlreadyInPost = useMemo(() => {
+    if (!selectedAdd) return false;
+    const id =
+      selectedAdd.kind === "testimonial"
+        ? selectedAdd.pick.interview_id
+        : selectedAdd.pick.project_interview_id;
+    return existingInterviewIds.has(id);
+  }, [selectedAdd, existingInterviewIds]);
+
   const confirmAdd = async () => {
     if (!canEditCurrentPage) {
       setToastMessage("You don't have permission to add entries.");
@@ -831,6 +831,22 @@ export function PostProductionDashboard() {
     if (!supabase || !selectedAdd) return;
     if (!selectedAddIsEligible) {
       const msg = "Not eligible for post production";
+      setError(msg);
+      setToastMessage(msg);
+      return;
+    }
+
+    const selectedInterviewId =
+      selectedAdd.kind === "testimonial"
+        ? selectedAdd.pick.interview_id
+        : selectedAdd.pick.project_interview_id;
+    const { data: existingRow } = await supabase
+      .from("post_production")
+      .select("id")
+      .eq("interview_id", selectedInterviewId)
+      .maybeSingle();
+    if (existingRow) {
+      const msg = "This interview is already in post production.";
       setError(msg);
       setToastMessage(msg);
       return;
@@ -909,12 +925,18 @@ export function PostProductionDashboard() {
       const msg =
         json.error ??
         (res.status === 409
-          ? "This candidate is already in post production."
+          ? "This interview is already in post production."
           : POST_PRODUCTION_NOT_ELIGIBLE_ERROR);
       setError(msg);
       setToastMessage(msg);
       return;
     }
+
+    const addedInterviewId =
+      savedSelection.kind === "testimonial"
+        ? savedSelection.pick.interview_id
+        : savedSelection.pick.project_interview_id;
+    setExistingInterviewIds((prev) => new Set(prev).add(addedInterviewId));
 
     const refreshed = await loadRows();
     if (!refreshed) {
@@ -926,14 +948,14 @@ export function PostProductionDashboard() {
 
     if (savedSelection.kind === "testimonial") {
       setTestimonialPicks((prev) =>
-        prev.filter((p) => p.candidate_id !== savedSelection.pick.candidate_id),
+        prev.filter((p) => p.interview_id !== savedSelection.pick.interview_id),
       );
     } else {
       setProjectPicks((prev) =>
         prev.filter(
           (p) =>
-            p.project_candidate_id !==
-            savedSelection.pick.project_candidate_id,
+            p.project_interview_id !==
+            savedSelection.pick.project_interview_id,
         ),
       );
     }
@@ -1987,11 +2009,18 @@ export function PostProductionDashboard() {
                   </button>
                   <button
                     type="button"
-                    disabled={addSubmitting || !selectedAdd || !selectedAddIsEligible}
+                    disabled={
+                      addSubmitting ||
+                      !selectedAdd ||
+                      !selectedAddIsEligible ||
+                      selectedInterviewAlreadyInPost
+                    }
                     title={
-                      selectedAdd && !selectedAddIsEligible
-                        ? "Not eligible for post production"
-                        : undefined
+                      selectedInterviewAlreadyInPost
+                        ? "This interview is already in post production."
+                        : selectedAdd && !selectedAddIsEligible
+                          ? "Not eligible for post production"
+                          : undefined
                     }
                     className="rounded-xl bg-[#1d1d1f] px-4 py-2 text-sm text-white disabled:opacity-50"
                     onClick={() => void confirmAdd()}
