@@ -473,6 +473,22 @@ function formatDateTime(iso: string | null | undefined) {
   }
 }
 
+function formatAssignedOnIst(iso: string | null | undefined) {
+  if (!iso?.trim()) return "--";
+  try {
+    return new Intl.DateTimeFormat("en-IN", {
+      timeZone: "Asia/Kolkata",
+      day: "2-digit",
+      month: "short",
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    }).format(new Date(iso.trim()));
+  } catch {
+    return "--";
+  }
+}
+
 function formatDateOnly(iso: string | null | undefined) {
   if (!iso) return "—";
   try {
@@ -670,7 +686,7 @@ export function InterviewsBoard() {
         supabase
           .from("candidates")
           .select(
-            "id, created_at, full_name, email, whatsapp_number, interview_type, poc_assigned, poc_assigned_at, linkedin_track, linkedin_track_status, followup_status, followup_count, callback_datetime, not_interested_reason, not_interested_at",
+            "id, created_at, full_name, email, whatsapp_number, interview_type, poc_assigned, poc_assigned_at, assigned_at, linkedin_track, linkedin_track_status, followup_status, followup_count, callback_datetime, not_interested_reason, not_interested_at",
           )
           .eq("is_deleted", false)
           .eq("eligibility_status", "eligible")
@@ -730,6 +746,7 @@ export function InterviewsBoard() {
           interview_type: r.interview_type as EligibleCandidate["interview_type"],
           poc_assigned: r.poc_assigned as string | null,
           poc_assigned_at: r.poc_assigned_at as string | null,
+          assigned_at: (r.assigned_at as string | null | undefined) ?? null,
           linkedin_track: onTrack,
           linkedin_track_status: onTrack
             ? normalizeLinkedInTrackStatus(
@@ -1212,6 +1229,7 @@ export function InterviewsBoard() {
       .update({
         poc_assigned: name,
         poc_assigned_at: name ? new Date().toISOString() : null,
+        assigned_at: name ? new Date().toISOString() : null,
       })
       .eq("id", candidate.id)
       .eq("is_deleted", false);
@@ -1427,6 +1445,7 @@ export function InterviewsBoard() {
   const thTrack = `${thBase} min-w-[130px] text-left`;
   const thLinkedInStatus = `${thBase} min-w-[140px] text-left`;
   const thPocAssigned = `${thBase} min-w-[160px] text-left`;
+  const thAssignedOn = `${thBase} min-w-[140px] text-left`;
   const thFollowUp = `${thBase} min-w-[150px] text-left`;
   const thActions = `${thBase} min-w-[220px] text-right max-lg:min-w-[170px] max-lg:px-2 max-lg:py-2 max-lg:text-[10px]`;
 
@@ -1437,6 +1456,7 @@ export function InterviewsBoard() {
   const tdTrack = `${tdBase} min-w-[130px] text-left align-top`;
   const tdLinkedInStatus = `${tdBase} min-w-[140px] text-left align-top`;
   const tdPocAssigned = `${tdBase} min-w-[160px] text-left`;
+  const tdAssignedOn = `${tdBase} min-w-[140px] text-left text-[#6e6e73]`;
   const tdFollowUp = `${tdBase} min-w-[150px] text-left align-top`;
   const tdActions = `${tdBase} min-w-[220px] text-right max-lg:min-w-[170px] max-lg:px-2 max-lg:py-2 max-lg:text-xs`;
 
@@ -1687,6 +1707,7 @@ export function InterviewsBoard() {
                           <th className={thInterviewType}>Interview type</th>
                           <th className={thTrack}>Track</th>
                           <th className={thPocAssigned}>POC assigned</th>
+                          <th className={thAssignedOn}>Assigned On</th>
                           <th className={thFollowUp}>Follow-up</th>
                           <th className={thActions}>Actions</th>
                         </tr>
@@ -1694,7 +1715,7 @@ export function InterviewsBoard() {
                       <tbody>
                         {eligiblePage.slice.length === 0 ? (
                           <tr>
-                            <td className={tdBase} colSpan={7}>
+                            <td className={tdBase} colSpan={8}>
                               {emptyState}
                             </td>
                           </tr>
@@ -1817,6 +1838,11 @@ export function InterviewsBoard() {
                                         />
                                       </button>
                                     </div>
+                                  )}
+                                </td>
+                                <td className={tdAssignedOn}>
+                                  {formatAssignedOnIst(
+                                    c.assigned_at ?? c.poc_assigned_at ?? null,
                                   )}
                                 </td>
                                 <td className={tdFollowUp}>

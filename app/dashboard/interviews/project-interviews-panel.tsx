@@ -55,6 +55,22 @@ function formatDateTime(iso: string | null | undefined) {
   }
 }
 
+function formatAssignedOnIst(iso: string | null | undefined) {
+  if (!iso?.trim()) return "--";
+  try {
+    return new Intl.DateTimeFormat("en-IN", {
+      timeZone: "Asia/Kolkata",
+      day: "2-digit",
+      month: "short",
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    }).format(new Date(iso.trim()));
+  } catch {
+    return "--";
+  }
+}
+
 function projectDisplayName(pc: ProjectCandidateRow): string {
   const fn = pc.full_name?.trim();
   if (fn) return fn;
@@ -332,7 +348,7 @@ export function ProjectInterviewsPanel({
     const { data: pc, error: eCandidates } = await supabase
       .from("project_candidates")
       .select(
-        "id, created_at, email, full_name, whatsapp_number, project_title, problem_statement, target_user, ai_usage, demo_link, status, poc_assigned, poc_assigned_at, interview_type, followup_status, followup_count, callback_datetime, not_interested_reason, not_interested_at",
+        "id, created_at, email, full_name, whatsapp_number, project_title, problem_statement, target_user, ai_usage, demo_link, status, poc_assigned, poc_assigned_at, assigned_at, interview_type, followup_status, followup_count, callback_datetime, not_interested_reason, not_interested_at",
       )
       .eq("is_deleted", false)
       .order("created_at", { ascending: true });
@@ -757,6 +773,7 @@ export function ProjectInterviewsPanel({
       .update({
         poc_assigned: name,
         poc_assigned_at: name ? new Date().toISOString() : null,
+        assigned_at: name ? new Date().toISOString() : null,
       })
       .eq("id", pc.id)
       .eq("is_deleted", false);
@@ -841,7 +858,9 @@ export function ProjectInterviewsPanel({
   const thProjTitle = `${thBase} min-w-[180px] text-left`;
   const tdProjTitle = `${tdBase} min-w-[180px] text-left text-[#6e6e73]`;
   const thPoc = `${thBase} min-w-[160px] text-left`;
+  const thAssignedOn = `${thBase} min-w-[140px] text-left`;
   const tdPoc = `${tdBase} min-w-[160px] text-left`;
+  const tdAssignedOn = `${tdBase} min-w-[140px] text-left text-[#6e6e73]`;
   const thFollowUp = `${thBase} min-w-[150px] text-left`;
   const tdFollowUp = `${tdBase} min-w-[150px] text-left`;
   const thActions = `${thBase} min-w-[120px] text-right`;
@@ -974,13 +993,14 @@ export function ProjectInterviewsPanel({
           </label>
           <div className={tableWrap}>
             <div className="w-full overflow-x-auto">
-              <table className="w-full min-w-[900px] table-auto border-collapse">
+              <table className="w-full min-w-[1040px] table-auto border-collapse">
                 <thead>
                   <tr>
                     <th className={thName}>Name</th>
                     <th className={thEmail}>Email</th>
                     <th className={thProjTitle}>Project title</th>
                     <th className={thPoc}>POC assigned</th>
+                    <th className={thAssignedOn}>Assigned On</th>
                     <th className={thFollowUp}>Follow-up</th>
                     <th className={thActions}>Actions</th>
                   </tr>
@@ -988,7 +1008,7 @@ export function ProjectInterviewsPanel({
                 <tbody>
                   {pendingPage.slice.length === 0 ? (
                     <tr>
-                      <td className={tdBase} colSpan={6}>
+                      <td className={tdBase} colSpan={7}>
                         {emptyState}
                       </td>
                     </tr>
@@ -1066,6 +1086,11 @@ export function ProjectInterviewsPanel({
                                   />
                                 </button>
                               </div>
+                            )}
+                          </td>
+                          <td className={tdAssignedOn}>
+                            {formatAssignedOnIst(
+                              c.assigned_at ?? c.poc_assigned_at ?? null,
                             )}
                           </td>
                           <td className={tdFollowUp}>

@@ -91,6 +91,7 @@ export type EligibleCandidate = {
   interview_type: "testimonial" | "project" | null;
   poc_assigned: string | null;
   poc_assigned_at: string | null;
+  assigned_at?: string | null;
   linkedin_track: boolean;
   linkedin_track_status: LinkedInTrackStatus | null;
   followup_status: FollowupStatus;
@@ -114,6 +115,7 @@ export type ProjectCandidateRow = {
   status: string;
   poc_assigned: string | null;
   poc_assigned_at: string | null;
+  assigned_at?: string | null;
   interview_type: string | null;
   is_deleted?: boolean | null;
   /** Follow-up calling (pending pipeline); mirrors `candidates` follow-up fields */
