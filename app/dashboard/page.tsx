@@ -11,9 +11,11 @@ import {
 } from "@/lib/interviewer-enum";
 import { fetchTeamRosterNames } from "@/lib/team-roster";
 import {
+  defaultIstMonthlyInput,
+  defaultIstWeeklyDateInput,
   formatDashboardPeriodRangeIST,
   getISTHour,
-  getPeriodBoundsIST,
+  resolveDashboardStatsBounds,
   type DashboardPeriod,
 } from "@/lib/dashboard-ist-dates";
 import { getUserSafe } from "@/lib/supabase-auth";
@@ -129,6 +131,8 @@ const cardChrome =
 export default function DashboardPage() {
   const supabase = createBrowserSupabaseClient();
   const [period, setPeriod] = useState<DashboardPeriod>("total");
+  const [weeklyDateInput, setWeeklyDateInput] = useState(defaultIstWeeklyDateInput);
+  const [monthlyInput, setMonthlyInput] = useState(defaultIstMonthlyInput);
   const [greetName, setGreetName] = useState("there");
   const [stats, setStats] = useState({
     testimonials: 0,
@@ -178,7 +182,11 @@ export default function DashboardPage() {
 
   const fetchStats = useCallback(async () => {
     setLoading(true);
-    const bounds = getPeriodBoundsIST(period);
+    const bounds = resolveDashboardStatsBounds(
+      period,
+      weeklyDateInput,
+      monthlyInput,
+    );
     const rangeStart = bounds?.startIso ?? null;
     const rangeEnd = bounds?.endIso ?? null;
 
@@ -318,7 +326,7 @@ export default function DashboardPage() {
     });
 
     setLoading(false);
-  }, [supabase, period]);
+  }, [supabase, period, weeklyDateInput, monthlyInput]);
 
   const fetchRecentActivity = useCallback(async () => {
     setRecentLoading(true);
@@ -487,10 +495,14 @@ export default function DashboardPage() {
     [stats],
   );
 
-  const periodRangeLabel = useMemo(
-    () => formatDashboardPeriodRangeIST(period, getPeriodBoundsIST(period)),
-    [period],
-  );
+  const periodRangeLabel = useMemo(() => {
+    const bounds = resolveDashboardStatsBounds(
+      period,
+      weeklyDateInput,
+      monthlyInput,
+    );
+    return formatDashboardPeriodRangeIST(period, bounds);
+  }, [period, weeklyDateInput, monthlyInput]);
 
   const hour = getISTHour();
   const greeting = greetingForHour(hour);
@@ -515,22 +527,51 @@ export default function DashboardPage() {
 
       <main className="flex-1 px-4 pb-10 pt-2 sm:px-6 lg:px-8 lg:pb-12">
         <div className="mx-auto max-w-[1400px] space-y-10">
-          <div className="inline-flex rounded-full bg-white p-1 shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
-            {(["total", "monthly", "weekly"] as const satisfies readonly DashboardPeriod[]).map(
-              (p) => (
-              <button
-                key={p}
-                type="button"
-                onClick={() => setPeriod(p)}
-                className={`rounded-full px-4 py-1.5 text-sm transition-all duration-200 ease-in-out ${
-                  period === p
-                    ? "bg-[#1d1d1f] font-medium text-white"
-                    : "text-[#6e6e73] hover:text-[#1d1d1f]"
-                }`}
-              >
-                {periodLabel(p)}
-              </button>
+          <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-end">
+            <div className="inline-flex rounded-full bg-white p-1 shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
+              {(
+                ["total", "monthly", "weekly"] as const satisfies readonly DashboardPeriod[]
+              ).map((p) => (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => setPeriod(p)}
+                  className={`rounded-full px-4 py-1.5 text-sm transition-all duration-200 ease-in-out ${
+                    period === p
+                      ? "bg-[#1d1d1f] font-medium text-white"
+                      : "text-[#6e6e73] hover:text-[#1d1d1f]"
+                  }`}
+                >
+                  {periodLabel(p)}
+                </button>
               ))}
+            </div>
+            {period === "weekly" ? (
+              <label className="flex min-w-[200px] flex-col gap-1">
+                <span className="text-xs font-medium text-[#6e6e73]">
+                  Select week
+                </span>
+                <input
+                  type="date"
+                  value={weeklyDateInput}
+                  onChange={(e) => setWeeklyDateInput(e.target.value)}
+                  className="rounded-xl border border-[#e5e5e5] bg-white px-3 py-2 text-sm text-[#1d1d1f] shadow-sm"
+                />
+              </label>
+            ) : null}
+            {period === "monthly" ? (
+              <label className="flex min-w-[200px] flex-col gap-1">
+                <span className="text-xs font-medium text-[#6e6e73]">
+                  Select month
+                </span>
+                <input
+                  type="month"
+                  value={monthlyInput}
+                  onChange={(e) => setMonthlyInput(e.target.value)}
+                  className="rounded-xl border border-[#e5e5e5] bg-white px-3 py-2 text-sm text-[#1d1d1f] shadow-sm"
+                />
+              </label>
+            ) : null}
           </div>
           {periodRangeLabel ? (
             <p className="text-sm text-[#6e6e73]">{periodRangeLabel}</p>

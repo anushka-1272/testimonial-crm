@@ -12,6 +12,15 @@ export type DashboardPeriodBounds = {
   endIso?: string;
 } | null;
 
+/** Optional anchors for dashboard weekly/monthly stats (IST). */
+export type DashboardPeriodBoundsOptions = {
+  /** Any instant on the IST calendar day that falls inside the target week (Sat–Fri). */
+  weeklyAnchorDate?: Date;
+  /** IST calendar month (1–12) and year for monthly bounds. */
+  monthlyYear?: number;
+  monthlyMonth?: number;
+};
+
 const pad2 = (n: number) => String(n).padStart(2, "0");
 
 /** Calendar year / month / day for an instant, in Asia/Kolkata. */
@@ -101,6 +110,14 @@ export function getMonthBoundsIST(date: Date = new Date()): {
   endIso: string;
 } {
   const { year, month } = getISTYmd(date);
+  return getMonthBoundsForISTYearMonth(year, month);
+}
+
+/** IST calendar month (month = 1–12). */
+export function getMonthBoundsForISTYearMonth(
+  year: number,
+  month: number,
+): { startIso: string; endIso: string } {
   const start = istMidnightInstant(year, month, 1);
   let ny = year;
   let nm = month + 1;
@@ -115,15 +132,85 @@ export function getMonthBoundsIST(date: Date = new Date()): {
   };
 }
 
-export function getPeriodBoundsIST(
+/** `YYYY-MM-DD` from `<input type="date">` → noon on that IST civil day (week anchor). */
+export function parseWeeklyDateInputToAnchor(ymd: string): Date | null {
+  const t = ymd.trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(t)) return null;
+  return new Date(`${t}T12:00:00+05:30`);
+}
+
+/** Default `<input type="date">` value for “current” IST day. */
+export function defaultIstWeeklyDateInput(): string {
+  const { year, month, day } = getISTYmd(new Date());
+  return `${year}-${pad2(month)}-${pad2(day)}`;
+}
+
+/** Default `<input type="month">` value (`YYYY-MM`) for current IST month. */
+export function defaultIstMonthlyInput(): string {
+  const { year, month } = getISTYmd(new Date());
+  return `${year}-${pad2(month)}`;
+}
+
+/** Parse `<input type="month">` value. Month is 1–12. */
+export function parseMonthlyInput(value: string): {
+  year: number;
+  month: number;
+} | null {
+  const m = /^(\d{4})-(\d{2})$/.exec(value.trim());
+  if (!m) return null;
+  const year = Number(m[1]);
+  const month = Number(m[2]);
+  if (!Number.isFinite(year) || month < 1 || month > 12) return null;
+  return { year, month };
+}
+
+/** Single place to resolve bounds for dashboard stats (IST). */
+export function resolveDashboardStatsBounds(
   period: DashboardPeriod,
+  weeklyDateInput: string,
+  monthlyInput: string,
 ): DashboardPeriodBounds {
   if (period === "weekly") {
-    const { startIso, endIso } = getWeekBoundsIST();
+    const anchor =
+      parseWeeklyDateInputToAnchor(weeklyDateInput) ?? new Date();
+    return getPeriodBoundsIST("weekly", { weeklyAnchorDate: anchor });
+  }
+  if (period === "monthly") {
+    const pm = parseMonthlyInput(monthlyInput);
+    if (pm) {
+      return getPeriodBoundsIST("monthly", {
+        monthlyYear: pm.year,
+        monthlyMonth: pm.month,
+      });
+    }
+    return getPeriodBoundsIST("monthly");
+  }
+  return null;
+}
+
+export function getPeriodBoundsIST(
+  period: DashboardPeriod,
+  options?: DashboardPeriodBoundsOptions,
+): DashboardPeriodBounds {
+  if (period === "weekly") {
+    const anchor = options?.weeklyAnchorDate ?? new Date();
+    const { startIso, endIso } = getWeekBoundsIST(anchor);
     return { startIso, endIso };
   }
   if (period === "monthly") {
-    const { startIso, endIso } = getMonthBoundsIST();
+    if (
+      options?.monthlyYear != null &&
+      options?.monthlyMonth != null &&
+      options.monthlyMonth >= 1 &&
+      options.monthlyMonth <= 12
+    ) {
+      const { startIso, endIso } = getMonthBoundsForISTYearMonth(
+        options.monthlyYear,
+        options.monthlyMonth,
+      );
+      return { startIso, endIso };
+    }
+    const { startIso, endIso } = getMonthBoundsIST(new Date());
     return { startIso, endIso };
   }
   return null;
