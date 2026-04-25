@@ -264,6 +264,16 @@ function formatInterviewDateTimeIst(iso: string | null): string {
   }
 }
 
+function trimOrNull(v: string | null | undefined): string | null {
+  const t = (v ?? "").trim();
+  return t.length > 0 ? t : null;
+}
+
+function truncateText(value: string, max: number): { text: string; truncated: boolean } {
+  if (value.length <= max) return { text: value, truncated: false };
+  return { text: `${value.slice(0, max)}...`, truncated: true };
+}
+
 function sourceBadge(sourceType: SourceType) {
   const label = sourceType === "project" ? "Project" : "Testimonial";
   if (sourceType === "project") {
@@ -459,9 +469,21 @@ export function PostProductionDashboard() {
         date: string | null;
         interviewer: string | null;
         zoomAccount: string | null;
+        name: string | null;
+        email: string | null;
+        domain: string | null;
+        role: string | null;
+        language: string | null;
+        projectTitle: string | null;
+        problemStatement: string | null;
+        demoLink: string | null;
+        achievement: string | null;
       }
     >
   >({});
+  const [expandedTextKeys, setExpandedTextKeys] = useState<Set<string>>(
+    () => new Set(),
+  );
   const [postProductionTeam, setPostProductionTeam] = useState<string[]>([]);
   const [reviewBy, setReviewBy] = useState("");
   const reviewRootRef = useRef<HTMLDivElement>(null);
@@ -1048,6 +1070,15 @@ export function PostProductionDashboard() {
         date: null,
         interviewer: null,
         zoomAccount: null,
+        name: null,
+        email: null,
+        domain: null,
+        role: null,
+        language: null,
+        projectTitle: null,
+        problemStatement: null,
+        demoLink: null,
+        achievement: null,
       },
     }));
 
@@ -1062,15 +1093,46 @@ export function PostProductionDashboard() {
               date: null,
               interviewer: null,
               zoomAccount: null,
+              name: null,
+              email: null,
+              domain: null,
+              role: null,
+              language: null,
+              projectTitle: null,
+              problemStatement: null,
+              demoLink: null,
+              achievement: null,
             },
           }));
           return;
         }
         const { data } = await supabase
           .from("project_interviews")
-          .select("scheduled_date, completed_at, interviewer, zoom_account")
+          .select(
+            "scheduled_date, completed_at, interviewer, zoom_account, project_candidates ( full_name, email, project_title, problem_statement, demo_link )",
+          )
           .eq("id", projectInterviewId)
           .maybeSingle();
+        const projectCandidateRaw = data?.project_candidates as
+          | {
+              full_name: string | null;
+              email: string | null;
+              project_title: string | null;
+              problem_statement: string | null;
+              demo_link: string | null;
+            }
+          | {
+              full_name: string | null;
+              email: string | null;
+              project_title: string | null;
+              problem_statement: string | null;
+              demo_link: string | null;
+            }[]
+          | null
+          | undefined;
+        const projectCandidate = Array.isArray(projectCandidateRaw)
+          ? projectCandidateRaw[0] ?? null
+          : projectCandidateRaw ?? null;
         setInterviewDetailsByRow((prev) => ({
           ...prev,
           [row.id]: {
@@ -1083,6 +1145,17 @@ export function PostProductionDashboard() {
               (data?.interviewer as string | null | undefined)?.trim() || null,
             zoomAccount:
               (data?.zoom_account as string | null | undefined)?.trim() || null,
+            name:
+              trimOrNull(projectCandidate?.full_name) ||
+              trimOrNull(row.candidate_name),
+            email: trimOrNull(projectCandidate?.email),
+            domain: null,
+            role: null,
+            language: null,
+            projectTitle: trimOrNull(projectCandidate?.project_title),
+            problemStatement: trimOrNull(projectCandidate?.problem_statement),
+            demoLink: trimOrNull(projectCandidate?.demo_link),
+            achievement: null,
           },
         }));
         return;
@@ -1096,6 +1169,15 @@ export function PostProductionDashboard() {
             date: null,
             interviewer: null,
             zoomAccount: null,
+            name: trimOrNull(row.candidate_name),
+            email: null,
+            domain: null,
+            role: null,
+            language: trimOrNull(row.interview_language),
+            projectTitle: null,
+            problemStatement: null,
+            demoLink: null,
+            achievement: null,
           },
         }));
         return;
@@ -1103,9 +1185,29 @@ export function PostProductionDashboard() {
 
       const { data } = await supabase
         .from("interviews")
-        .select("scheduled_date, completed_at, interviewer, zoom_account")
+        .select(
+          "scheduled_date, completed_at, interviewer, zoom_account, interview_language, achievement, candidates ( full_name, email, domain, job_role )",
+        )
         .eq("id", row.interview_id)
         .maybeSingle();
+      const candidateRaw = data?.candidates as
+        | {
+            full_name: string | null;
+            email: string | null;
+            domain: string | null;
+            job_role: string | null;
+          }
+        | {
+            full_name: string | null;
+            email: string | null;
+            domain: string | null;
+            job_role: string | null;
+          }[]
+        | null
+        | undefined;
+      const candidate = Array.isArray(candidateRaw)
+        ? candidateRaw[0] ?? null
+        : candidateRaw ?? null;
       setInterviewDetailsByRow((prev) => ({
         ...prev,
         [row.id]: {
@@ -1118,6 +1220,19 @@ export function PostProductionDashboard() {
             (data?.interviewer as string | null | undefined)?.trim() || null,
           zoomAccount:
             (data?.zoom_account as string | null | undefined)?.trim() || null,
+          name: trimOrNull(candidate?.full_name) || trimOrNull(row.candidate_name),
+          email: trimOrNull(candidate?.email),
+          domain: trimOrNull(candidate?.domain),
+          role: trimOrNull(candidate?.job_role),
+          language:
+            trimOrNull(
+              (data?.interview_language as string | null | undefined) ??
+                row.interview_language,
+            ) || trimOrNull(row.interview_language),
+          projectTitle: null,
+          problemStatement: null,
+          demoLink: null,
+          achievement: trimOrNull(data?.achievement as string | null | undefined),
         },
       }));
     } catch {
@@ -1128,9 +1243,27 @@ export function PostProductionDashboard() {
           date: null,
           interviewer: null,
           zoomAccount: null,
+          name: trimOrNull(row.candidate_name),
+          email: null,
+          domain: null,
+          role: null,
+          language: trimOrNull(row.interview_language),
+          projectTitle: null,
+          problemStatement: null,
+          demoLink: null,
+          achievement: null,
         },
       }));
     }
+  };
+
+  const toggleExpandedText = (key: string) => {
+    setExpandedTextKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
   };
 
   const patchRow = async (
@@ -1777,6 +1910,14 @@ export function PostProductionDashboard() {
                         const nameClickable = Boolean(row.candidate_name?.trim());
                         const details = interviewDetailsByRow[row.id];
                         const isExpanded = expandedRowId === row.id;
+                        const problemKey = `${row.id}:problem`;
+                        const achievementKey = `${row.id}:achievement`;
+                        const expandedProblem = expandedTextKeys.has(problemKey);
+                        const expandedAchievement = expandedTextKeys.has(achievementKey);
+                        const problemText = details?.problemStatement?.trim() ?? "";
+                        const achievementText = details?.achievement?.trim() ?? "";
+                        const problemPreview = truncateText(problemText, 120);
+                        const achievementPreview = truncateText(achievementText, 170);
                         return (
                           <tr key={row.id}>
                             <td className={`${td} ${ppCol.name}`}>
@@ -1795,29 +1936,143 @@ export function PostProductionDashboard() {
                                 </span>
                               )}
                               {isExpanded ? (
-                                <div className="mt-1 rounded-md border border-[#e5e7eb] bg-[#fafafa] px-2 py-1.5 text-[11px] text-[#4b5563]">
+                                <div className="mt-1 space-y-2 rounded-md border border-[#e5e7eb] bg-[#fafafa] px-2 py-1.5 text-[11px] text-[#4b5563]">
                                   {details?.loading ? (
                                     <span>Loading...</span>
                                   ) : (
-                                    <div className="space-y-0.5">
-                                      <p>
-                                        <span className="font-medium text-[#374151]">
-                                          Interview Date:
-                                        </span>{" "}
-                                        {formatInterviewDateTimeIst(details?.date ?? null)}
-                                      </p>
-                                      <p>
-                                        <span className="font-medium text-[#374151]">
-                                          Interviewer:
-                                        </span>{" "}
-                                        {details?.interviewer?.trim() || "—"}
-                                      </p>
-                                      <p>
-                                        <span className="font-medium text-[#374151]">
-                                          Zoom Account:
-                                        </span>{" "}
-                                        {details?.zoomAccount?.trim() || "—"}
-                                      </p>
+                                    <div className="space-y-2">
+                                      <div className="rounded border border-[#e5e7eb] bg-white px-2 py-1.5">
+                                        <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-[#6b7280]">
+                                          Interview Details
+                                        </p>
+                                        <p>
+                                          <span className="font-medium text-[#374151]">
+                                            Date:
+                                          </span>{" "}
+                                          {formatInterviewDateTimeIst(details?.date ?? null)}
+                                        </p>
+                                        <p>
+                                          <span className="font-medium text-[#374151]">
+                                            Interviewer:
+                                          </span>{" "}
+                                          {details?.interviewer?.trim() || "—"}
+                                        </p>
+                                        <p>
+                                          <span className="font-medium text-[#374151]">
+                                            Zoom Account:
+                                          </span>{" "}
+                                          {details?.zoomAccount?.trim() || "—"}
+                                        </p>
+                                      </div>
+
+                                      <div className="rounded border border-[#e5e7eb] bg-white px-2 py-1.5">
+                                        <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-[#6b7280]">
+                                          Candidate Details
+                                        </p>
+                                        <p>
+                                          <span className="font-medium text-[#374151]">
+                                            Name:
+                                          </span>{" "}
+                                          {details?.name?.trim() || row.candidate_name?.trim() || "—"}
+                                        </p>
+                                        <p>
+                                          <span className="font-medium text-[#374151]">
+                                            Email:
+                                          </span>{" "}
+                                          {details?.email?.trim() || "—"}
+                                        </p>
+
+                                        {row.source_type === "testimonial" ? (
+                                          <>
+                                            <p>
+                                              <span className="font-medium text-[#374151]">
+                                                Domain:
+                                              </span>{" "}
+                                              {details?.domain?.trim() || "—"}
+                                            </p>
+                                            <p>
+                                              <span className="font-medium text-[#374151]">
+                                                Role:
+                                              </span>{" "}
+                                              {details?.role?.trim() || "—"}
+                                            </p>
+                                            <p>
+                                              <span className="font-medium text-[#374151]">
+                                                Language:
+                                              </span>{" "}
+                                              {details?.language?.trim() || row.interview_language?.trim() || "—"}
+                                            </p>
+                                            {achievementText ? (
+                                              <div className="mt-1 rounded border-l-2 border-[#60a5fa] bg-[#eff6ff] px-2 py-1 italic text-[#1f2937]">
+                                                <span className="not-italic font-medium text-[#1e3a8a]">
+                                                  Achievement:
+                                                </span>{" "}
+                                                {expandedAchievement
+                                                  ? achievementText
+                                                  : achievementPreview.text}
+                                                {achievementPreview.truncated ? (
+                                                  <button
+                                                    type="button"
+                                                    className="ml-1 font-medium text-[#2563eb] not-italic hover:underline"
+                                                    onClick={() =>
+                                                      toggleExpandedText(achievementKey)
+                                                    }
+                                                  >
+                                                    {expandedAchievement ? "View less" : "View more"}
+                                                  </button>
+                                                ) : null}
+                                              </div>
+                                            ) : null}
+                                          </>
+                                        ) : (
+                                          <>
+                                            <p>
+                                              <span className="font-medium text-[#374151]">
+                                                Project Title:
+                                              </span>{" "}
+                                              {details?.projectTitle?.trim() || "—"}
+                                            </p>
+                                            <p>
+                                              <span className="font-medium text-[#374151]">
+                                                Problem Statement:
+                                              </span>{" "}
+                                              {problemText
+                                                ? expandedProblem
+                                                  ? problemText
+                                                  : problemPreview.text
+                                                : "—"}
+                                              {problemText && problemPreview.truncated ? (
+                                                <button
+                                                  type="button"
+                                                  className="ml-1 font-medium text-[#2563eb] hover:underline"
+                                                  onClick={() =>
+                                                    toggleExpandedText(problemKey)
+                                                  }
+                                                >
+                                                  {expandedProblem ? "View less" : "View more"}
+                                                </button>
+                                              ) : null}
+                                            </p>
+                                            <p>
+                                              <span className="font-medium text-[#374151]">
+                                                Demo Link:
+                                              </span>{" "}
+                                              {details?.demoLink ? (
+                                                <a
+                                                  href={details.demoLink}
+                                                  target="_blank"
+                                                  rel="noopener noreferrer"
+                                                  className="text-[#2563eb] hover:underline"
+                                                >
+                                                  Open demo
+                                                </a>
+                                              ) : (
+                                                "—"
+                                              )}
+                                            </p>
+                                          </>
+                                        )}
+                                      </div>
                                     </div>
                                   )}
                                 </div>
