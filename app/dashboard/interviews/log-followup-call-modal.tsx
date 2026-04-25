@@ -17,6 +17,101 @@ import type {
   ProjectLogFollowupRow,
 } from "./types";
 
+type InterviewPickRow = {
+  id: string;
+  post_interview_eligible: boolean | null;
+  interview_status: string;
+  scheduled_date: string | null;
+};
+
+function pickInterviewRowForNotEligible(
+  rows: InterviewPickRow[] | null | undefined,
+): InterviewPickRow | null {
+  if (!rows?.length) return null;
+  const eligible = rows.find((r) => r.post_interview_eligible === true);
+  if (eligible) return eligible;
+  const done = rows.find((r) => r.interview_status === "completed");
+  if (done) return done;
+  const sorted = rows.slice().sort((a, b) => {
+    const ta = a.scheduled_date ? new Date(a.scheduled_date).getTime() : 0;
+    const tb = b.scheduled_date ? new Date(b.scheduled_date).getTime() : 0;
+    return tb - ta;
+  });
+  return sorted[0] ?? null;
+}
+
+async function markInterviewNotEligibleForFollowup(opts: {
+  supabase: SupabaseClient;
+  completedAt: string;
+  mode: "testimonial" | "project";
+  candidateId?: string;
+  projectCandidateId?: string;
+}): Promise<void> {
+  const { supabase, completedAt, mode } = opts;
+  if (mode === "testimonial" && opts.candidateId) {
+    const { data, error } = await supabase
+      .from("interviews")
+      .select("id, post_interview_eligible, interview_status, scheduled_date")
+      .eq("candidate_id", opts.candidateId)
+      .eq("interview_type", "testimonial")
+      .neq("interview_status", "cancelled");
+    if (error) {
+      console.error(
+        "[LogFollowupCallModal] interviews select (not_eligible):",
+        error.message,
+      );
+      return;
+    }
+    const pick = pickInterviewRowForNotEligible(data as InterviewPickRow[]);
+    if (!pick) return;
+    const { error: upErr } = await supabase
+      .from("interviews")
+      .update({
+        interview_status: "completed",
+        completed_at: completedAt,
+        post_interview_eligible: false,
+      })
+      .eq("id", pick.id);
+    if (upErr) {
+      console.error(
+        "[LogFollowupCallModal] interviews → not_eligible:",
+        upErr.message,
+      );
+    }
+    return;
+  }
+  if (mode === "project" && opts.projectCandidateId) {
+    const { data, error } = await supabase
+      .from("project_interviews")
+      .select("id, post_interview_eligible, interview_status, scheduled_date")
+      .eq("project_candidate_id", opts.projectCandidateId)
+      .neq("interview_status", "cancelled");
+    if (error) {
+      console.error(
+        "[LogFollowupCallModal] project_interviews select (not_eligible):",
+        error.message,
+      );
+      return;
+    }
+    const pick = pickInterviewRowForNotEligible(data as InterviewPickRow[]);
+    if (!pick) return;
+    const { error: upErr } = await supabase
+      .from("project_interviews")
+      .update({
+        interview_status: "completed",
+        completed_at: completedAt,
+        post_interview_eligible: false,
+      })
+      .eq("id", pick.id);
+    if (upErr) {
+      console.error(
+        "[LogFollowupCallModal] project_interviews → not_eligible:",
+        upErr.message,
+      );
+    }
+  }
+}
+
 type Props = {
   open: boolean;
   /** Testimonial eligible-tab candidate (`candidates.id`) */
@@ -64,6 +159,11 @@ const OUTCOMES: {
     hint: "Candidate has already completed interview",
   },
   {
+    value: "not_eligible",
+    label: "Not Eligible",
+    hint: "Completed but not eligible for post production",
+  },
+  {
     value: "not_interested",
     label: "Not Interested",
     hint: "End pipeline",
@@ -85,6 +185,8 @@ function statusLabelForActivity(outcome: FollowupCallOutcome): string {
       return "scheduled";
     case "already_completed":
       return "already completed (interview done)";
+    case "not_eligible":
+      return "not eligible for post production";
     case "not_interested":
       return "not interested";
     case "wrong_number":
@@ -171,6 +273,10 @@ export function LogFollowupCallModal({
         break;
       case "already_completed":
         newStatus = "already_completed";
+        newCallbackAt = null;
+        break;
+      case "not_eligible":
+        newStatus = "not_eligible";
         newCallbackAt = null;
         break;
       case "not_interested":
@@ -261,6 +367,17 @@ export function LogFollowupCallModal({
             piErr.message,
           );
         }
+      }
+
+      if (outcome === "not_eligible") {
+        const completedAtIso = new Date().toISOString();
+        await markInterviewNotEligibleForFollowup({
+          supabase,
+          completedAt: completedAtIso,
+          mode: isProject ? "project" : "testimonial",
+          candidateId: isProject ? undefined : candidate!.id,
+          projectCandidateId: isProject ? projectCandidate!.id : undefined,
+        });
       }
 
       const entityType = isProject ? "project_candidate" : "candidate";
@@ -420,6 +537,7 @@ export function LogFollowupCallModal({
                       {o.value === "callback" && "📅 "}
                       {o.value === "interested" && "✅ "}
                       {o.value === "already_completed" && "✓ "}
+                      {o.value === "not_eligible" && "⛔ "}
                       {o.value === "not_interested" && "❌ "}
                       {o.value === "wrong_number" && "📵 "}
                       {o.label}

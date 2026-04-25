@@ -210,12 +210,21 @@ function postInterviewEligibleBadge(
 function alreadyCompletedFollowupBadge(
   followupStatus: FollowupStatus | undefined,
 ) {
-  if (followupStatus !== "already_completed") return null;
-  return (
-    <span className="mt-1 inline-flex w-fit rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-800">
-      Already Completed
-    </span>
-  );
+  if (followupStatus === "already_completed") {
+    return (
+      <span className="mt-1 inline-flex w-fit rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-800">
+        Already Completed
+      </span>
+    );
+  }
+  if (followupStatus === "not_eligible") {
+    return (
+      <span className="mt-1 inline-flex w-fit rounded-full bg-[#fef2f2] px-2 py-0.5 text-[11px] font-medium text-[#b91c1c]">
+        Not Eligible
+      </span>
+    );
+  }
+  return null;
 }
 
 function postProductionGateBadgeProject(

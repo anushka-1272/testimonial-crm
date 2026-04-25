@@ -119,6 +119,13 @@ export function resolveFollowupStatusPublicDisplay(
     return { title: "Interview already completed", subtitle: null };
   }
 
+  if (status === "not_eligible") {
+    return {
+      title: "Not eligible for post production",
+      subtitle: "Interview completed; follow-up logged as not eligible",
+    };
+  }
+
   if (count > 0) {
     const attemptLabel = count === 1 ? "1 attempt" : `${count} attempts`;
     return {

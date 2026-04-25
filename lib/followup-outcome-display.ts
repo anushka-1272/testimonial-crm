@@ -12,6 +12,8 @@ export function followupOutcomeDisplayLabel(status: string): string {
       return "Callback";
     case "already_completed":
       return "Already completed";
+    case "not_eligible":
+      return "Not Eligible";
     case "not_interested":
       return "Not interested";
     case "wrong_number":

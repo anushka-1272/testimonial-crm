@@ -57,13 +57,15 @@ export type FollowupStatus =
   | "not_interested"
   | "scheduled"
   | "interested"
-  | "already_completed";
+  | "already_completed"
+  | "not_eligible";
 
 export type FollowupCallOutcome =
   | "no_answer"
   | "callback"
   | "interested"
   | "already_completed"
+  | "not_eligible"
   | "not_interested"
   | "wrong_number";
 

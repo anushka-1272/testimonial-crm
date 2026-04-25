@@ -476,6 +476,7 @@ function normalizeFollowupStatus(v: unknown): FollowupStatus {
     "scheduled",
     "interested",
     "already_completed",
+    "not_eligible",
   ];
   if (typeof v === "string" && (allowed as string[]).includes(v)) {
     return v as FollowupStatus;
@@ -487,6 +488,7 @@ function canShowEligibleScheduleButton(c: EligibleCandidate): boolean {
   if (c.followup_status === "not_interested") return false;
   if (c.followup_status === "wrong_number") return false;
   if (c.followup_status === "already_completed") return false;
+  if (c.followup_status === "not_eligible") return false;
   if (c.followup_status === "no_answer" && c.followup_count >= 3)
     return false;
   return true;
@@ -513,6 +515,13 @@ function followupStatusBadge(c: EligibleCandidate) {
     return (
       <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-800">
         Already Completed
+      </span>
+    );
+  }
+  if (c.followup_status === "not_eligible") {
+    return (
+      <span className="inline-flex rounded-full bg-[#fef2f2] px-2.5 py-1 text-xs font-medium text-[#b91c1c]">
+        Not Eligible
       </span>
     );
   }
