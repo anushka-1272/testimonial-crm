@@ -395,28 +395,6 @@ function projectCandidateFromRow(
 const cardChrome =
   "rounded-2xl bg-white shadow-[0_4px_16px_rgba(0,0,0,0.08)] border border-[#f0f0f0]";
 
-function youtubeStatusBadge(status: YoutubeStatus) {
-  if (status === "live") {
-    return (
-      <span className="inline-flex rounded-full bg-[#f0fdf4] px-2.5 py-1 text-xs font-medium text-[#16a34a]">
-        Live
-      </span>
-    );
-  }
-  if (status === "unlisted") {
-    return (
-      <span className="inline-flex rounded-full bg-[#fef9c3] px-2.5 py-1 text-xs font-medium text-[#854d0e]">
-        Unlisted
-      </span>
-    );
-  }
-  return (
-    <span className="inline-flex rounded-full bg-[#f4f4f5] px-2.5 py-1 text-xs font-medium text-[#52525b]">
-      Private
-    </span>
-  );
-}
-
 type TestimonialPick = {
   interview_id: string;
   candidate_id: string;
@@ -1935,90 +1913,64 @@ export function PostProductionDashboard() {
                               {renderReviewCell(row, "post")}
                             </td>
                             <td className={`${td} ${ppCol.editedBy}`}>
-                              {row.edited_by?.trim() ? (
-                                <div className="flex flex-col gap-1">
-                                  <span className="inline-flex w-fit rounded-full bg-[#f5f5f7] px-2.5 py-1 text-xs font-medium text-[#6e6e73]">
-                                    {row.edited_by}
-                                  </span>
-                                  <select
-                                    disabled={busy}
-                                    className="max-w-[112px] rounded-lg border border-[#e5e5e5] px-2 py-1 text-xs disabled:opacity-50"
-                                    value={
-                                      mergeRosterWithCurrent(
+                              <select
+                                disabled={busy}
+                                className="max-w-[112px] rounded-lg border border-[#e5e5e5] px-2 py-1 text-xs disabled:opacity-50"
+                                value={
+                                  row.edited_by?.trim()
+                                    ? mergeRosterWithCurrent(
                                         postProductionTeam,
                                         row.edited_by,
                                       ).includes(row.edited_by ?? "")
-                                        ? row.edited_by
-                                        : "__custom__"
-                                    }
-                                    onChange={(e) => {
-                                      const v = e.target.value;
-                                      if (v === "__custom__") return;
-                                      void patchRow(row.id, {
-                                        edited_by: v || null,
-                                      });
-                                    }}
-                                  >
-                                    {!mergeRosterWithCurrent(
-                                      postProductionTeam,
-                                      row.edited_by,
-                                    ).includes(row.edited_by ?? "") ? (
-                                      <option value="__custom__">
-                                        {row.edited_by}
-                                      </option>
-                                    ) : null}
-                                    {mergeRosterWithCurrent(
-                                      postProductionTeam,
-                                      row.edited_by,
-                                    ).map((n) => (
-                                      <option key={n} value={n}>
-                                        {n}
-                                      </option>
-                                    ))}
-                                  </select>
-                                </div>
-                              ) : (
-                                <select
-                                  disabled={busy}
-                                  className="max-w-[112px] rounded-lg border border-[#e5e5e5] px-2 py-1 text-xs disabled:opacity-50"
-                                  value=""
-                                  onChange={(e) => {
-                                    const v = e.target.value || null;
-                                    if (v)
-                                      void patchRow(row.id, { edited_by: v });
-                                  }}
-                                >
-                                  <option value="">Assign…</option>
-                                  {postProductionTeam.map((n) => (
-                                    <option key={n} value={n}>
-                                      {n}
-                                    </option>
-                                  ))}
-                                </select>
-                              )}
+                                      ? row.edited_by
+                                      : "__custom__"
+                                    : ""
+                                }
+                                onChange={(e) => {
+                                  const v = e.target.value;
+                                  if (v === "__custom__") return;
+                                  void patchRow(row.id, { edited_by: v || null });
+                                }}
+                              >
+                                <option value="">Assign…</option>
+                                {row.edited_by?.trim() &&
+                                !mergeRosterWithCurrent(
+                                  postProductionTeam,
+                                  row.edited_by,
+                                ).includes(row.edited_by ?? "") ? (
+                                  <option value="__custom__">
+                                    {row.edited_by}
+                                  </option>
+                                ) : null}
+                                {mergeRosterWithCurrent(
+                                  postProductionTeam,
+                                  row.edited_by,
+                                ).map((n) => (
+                                  <option key={n} value={n}>
+                                    {n}
+                                  </option>
+                                ))}
+                              </select>
                             </td>
                             <td className={`${td} ${ppCol.youtube}`}>
                               {renderLinkCell(row, "youtube_link")}
                             </td>
                             <td className={`${td} ${ppCol.status}`}>
-                              <div className="flex flex-col gap-1">
-                                {youtubeStatusBadge(row.youtube_status)}
-                                <select
-                                  disabled={busy}
-                                  className="max-w-[100px] rounded-lg border border-[#e5e5e5] px-2 py-1 text-xs disabled:opacity-50"
-                                  value={row.youtube_status}
-                                  onChange={(e) =>
-                                    void onYoutubeStatusChange(
-                                      row,
-                                      e.target.value as YoutubeStatus,
-                                    )
-                                  }
-                                >
-                                  <option value="private">Private</option>
-                                  <option value="unlisted">Unlisted</option>
-                                  <option value="live">Live</option>
-                                </select>
-                              </div>
+                              <select
+                                disabled={busy}
+                                className="max-w-[100px] rounded-lg border border-[#e5e5e5] px-2 py-1 text-xs disabled:opacity-50"
+                                value={row.youtube_status}
+                                onChange={(e) =>
+                                  void onYoutubeStatusChange(
+                                    row,
+                                    e.target.value as YoutubeStatus,
+                                  )
+                                }
+                              >
+                                <option value="private">Private</option>
+                                <option value="unlisted">Unlisted</option>
+                                <option value="live">Live</option>
+                              </select>
                             </td>
                             <td className={`${td} ${ppCol.summary}`}>
                               <div className="max-w-[90px] space-y-1">
