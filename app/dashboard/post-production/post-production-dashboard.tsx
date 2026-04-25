@@ -137,19 +137,20 @@ export type PostProductionRow = {
         interviewer: string | null;
         zoom_account: string | null;
         interview_language: string | null;
-        achievement: string | null;
         candidates?:
           | {
               full_name: string | null;
               email: string | null;
               domain: string | null;
               job_role: string | null;
+              achievement_summary: string | null;
             }
           | {
               full_name: string | null;
               email: string | null;
               domain: string | null;
               job_role: string | null;
+              achievement_summary: string | null;
             }[]
           | null;
       }
@@ -159,19 +160,20 @@ export type PostProductionRow = {
         interviewer: string | null;
         zoom_account: string | null;
         interview_language: string | null;
-        achievement: string | null;
         candidates?:
           | {
               full_name: string | null;
               email: string | null;
               domain: string | null;
               job_role: string | null;
+              achievement_summary: string | null;
             }
           | {
               full_name: string | null;
               email: string | null;
               domain: string | null;
               job_role: string | null;
+              achievement_summary: string | null;
             }[]
           | null;
       }[]
@@ -227,7 +229,7 @@ export type PostProductionRow = {
 type LinkField = "raw_video_link" | "edited_video_link" | "youtube_link";
 
 const PP_SELECT =
-  "id, created_at, interview_id, project_interview_id, candidate_id, project_candidate_id, source_type, candidate_name, raw_video_link, edited_video_link, pre_edit_review, pre_edit_review_by, post_edit_review, post_edit_review_by, edited_by, youtube_link, youtube_status, summary, cx_mail_sent, cx_mail_sent_at, updated_at, interview_language, candidates ( domain, job_role, is_deleted ), project_candidates ( id, email, full_name, whatsapp_number, project_title, problem_statement, target_user, ai_usage, demo_link, status, poc_assigned, poc_assigned_at, interview_type, is_deleted ), interviews:interview_id ( scheduled_date, completed_at, interviewer, zoom_account, interview_language, achievement, candidates ( full_name, email, domain, job_role ) ), project_interviews:project_interview_id ( scheduled_date, completed_at, interviewer, zoom_account, project_candidates ( full_name, email, project_title, problem_statement, demo_link ) )";
+  "id, created_at, interview_id, project_interview_id, candidate_id, project_candidate_id, source_type, candidate_name, raw_video_link, edited_video_link, pre_edit_review, pre_edit_review_by, post_edit_review, post_edit_review_by, edited_by, youtube_link, youtube_status, summary, cx_mail_sent, cx_mail_sent_at, updated_at, interview_language, candidates ( domain, job_role, is_deleted ), project_candidates ( id, email, full_name, whatsapp_number, project_title, problem_statement, target_user, ai_usage, demo_link, status, poc_assigned, poc_assigned_at, interview_type, is_deleted ), interviews:interview_id ( scheduled_date, completed_at, interviewer, zoom_account, interview_language, candidates ( full_name, email, domain, job_role, achievement_summary ) ), project_interviews:project_interview_id ( scheduled_date, completed_at, interviewer, zoom_account, project_candidates ( full_name, email, project_title, problem_statement, demo_link ) )";
 
 function chunkIds<T>(arr: T[], size: number): T[][] {
   const out: T[][] = [];
@@ -1216,7 +1218,7 @@ export function PostProductionDashboard() {
           : null,
         achievement: isProject
           ? null
-          : trimOrNull(interview?.achievement),
+          : trimOrNull(interviewCandidate?.achievement_summary),
       },
     }));
   };
