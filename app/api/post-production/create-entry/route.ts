@@ -136,6 +136,7 @@ export async function POST(request: Request) {
 
     const upsertRow = {
       interview_id: iv.id,
+      project_interview_id: null,
       candidate_id: iv.candidate_id,
       project_candidate_id: null,
       source_type: "testimonial" as const,
@@ -269,7 +270,8 @@ export async function POST(request: Request) {
     "Candidate";
 
   const upsertProjectRow = {
-    interview_id: piv.id,
+    interview_id: null,
+    project_interview_id: piv.id,
     candidate_id: null,
     project_candidate_id: piv.project_candidate_id,
     source_type: "project" as const,
@@ -280,7 +282,7 @@ export async function POST(request: Request) {
 
   const { data: insP, error: insPErr } = await supabase
     .from("post_production")
-    .upsert(upsertProjectRow, { onConflict: "interview_id" })
+    .upsert(upsertProjectRow, { onConflict: "project_interview_id" })
     .select("id")
     .single();
 

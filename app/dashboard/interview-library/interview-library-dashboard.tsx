@@ -139,18 +139,27 @@ async function fetchProjectInterviewsByIds(
 }
 
 function dedupePostProductionByInterviewId<
-  T extends { interview_id: string | null; updated_at: string },
+  T extends {
+    interview_id: string | null;
+    project_interview_id?: string | null;
+    source_type?: string | null;
+    updated_at: string;
+  },
 >(rows: T[]): T[] {
   const m = new Map<string, T>();
   for (const r of rows) {
-    const iid = (r.interview_id ?? "").trim();
-    if (!iid) continue;
-    const prev = m.get(iid);
+    const linkedId =
+      r.source_type === "project"
+        ? (r.project_interview_id ?? r.interview_id ?? "").trim()
+        : (r.interview_id ?? r.project_interview_id ?? "").trim();
+    if (!linkedId) continue;
+    const key = `${r.source_type ?? "testimonial"}:${linkedId}`;
+    const prev = m.get(key);
     if (
       !prev ||
       new Date(r.updated_at).getTime() > new Date(prev.updated_at).getTime()
     ) {
-      m.set(iid, r);
+      m.set(key, r);
     }
   }
   return [...m.values()];
@@ -202,7 +211,7 @@ export function InterviewLibraryDashboard() {
       const { data: ppRows, error: ppErr } = await supabase
         .from("post_production")
         .select(
-          "id, interview_id, candidate_id, project_candidate_id, source_type, summary, youtube_link, youtube_status, updated_at",
+          "id, interview_id, project_interview_id, candidate_id, project_candidate_id, source_type, summary, youtube_link, youtube_status, updated_at",
         )
         .not("youtube_link", "is", null)
         .neq("youtube_link", "")
@@ -214,6 +223,7 @@ export function InterviewLibraryDashboard() {
       type PpRow = {
         id: string;
         interview_id: string | null;
+        project_interview_id: string | null;
         candidate_id: string | null;
         project_candidate_id: string | null;
         source_type: string | null;
@@ -238,7 +248,7 @@ export function InterviewLibraryDashboard() {
       );
       const ppProject = ppList.filter(
         (r) =>
-          Boolean(r.interview_id) &&
+          Boolean(r.project_interview_id ?? r.interview_id) &&
           Boolean(r.project_candidate_id) &&
           r.source_type === "project",
       );
@@ -249,7 +259,9 @@ export function InterviewLibraryDashboard() {
         ),
       ];
       const pIvIds = [
-        ...new Set(ppProject.map((r) => r.interview_id as string)),
+        ...new Set(
+          ppProject.map((r) => (r.project_interview_id ?? r.interview_id) as string),
+        ),
       ];
 
       const interviewById =
@@ -290,7 +302,7 @@ export function InterviewLibraryDashboard() {
       for (const pp of ppProject) {
         const yt = pp.youtube_link.trim();
         if (!yt) continue;
-        const iid = pp.interview_id as string;
+        const iid = (pp.project_interview_id ?? pp.interview_id) as string;
         const piv = projectInterviewById.get(iid);
         if (!piv || piv.post_interview_eligible !== true) continue;
         const c = Array.isArray(piv.project_candidates)
