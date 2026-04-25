@@ -4,6 +4,7 @@ import { parseISO } from "date-fns";
 import { ExternalLink, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { modalOverlayClass, modalPanelClass } from "@/lib/modal-responsive";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 
 const TIMEZONE_IST = "Asia/Kolkata";
@@ -12,6 +13,9 @@ const SUMMARY_PREVIEW = 120;
 
 export type LibraryRow = {
   key: string;
+  interviewId: string;
+  candidateId: string | null;
+  projectCandidateId: string | null;
   post_interview_eligible: boolean;
   source: "testimonial" | "project";
   name: string;
@@ -26,6 +30,33 @@ export type LibraryRow = {
   /** `post_production.updated_at` (proxy for link activity; DB has no youtube_link_added_at) */
   youtubeLinkSortAt: string;
 };
+
+type LibraryDetailData =
+  | {
+      source: "testimonial";
+      name: string | null;
+      phone: string | null;
+      email: string | null;
+      role: string | null;
+      salary: string | null;
+      achievementType: string | null;
+      achievementTitle: string | null;
+      quantifiedResult: string | null;
+      howProgramHelped: string | null;
+      proofLink: string | null;
+      linkedin: string | null;
+      instagram: string | null;
+      aiScore: number | null;
+      aiReason: string | null;
+    }
+  | {
+      source: "project";
+      name: string | null;
+      email: string | null;
+      projectTitle: string | null;
+      problemStatement: string | null;
+      demoLink: string | null;
+    };
 
 function pad2(n: number) {
   return String(n).padStart(2, "0");
@@ -198,6 +229,13 @@ export function InterviewLibraryDashboard() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [expandedSummary, setExpandedSummary] = useState<Set<string>>(() => new Set());
+  const [detailRow, setDetailRow] = useState<LibraryRow | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
+  const [detailData, setDetailData] = useState<LibraryDetailData | null>(null);
+  const [expandedTextKeys, setExpandedTextKeys] = useState<Set<string>>(
+    () => new Set(),
+  );
 
   const load = useCallback(async () => {
     if (!supabase) {
@@ -285,6 +323,9 @@ export function InterviewLibraryDashboard() {
         if (!c) continue;
         out.push({
           key: `t-${iid}`,
+          interviewId: iid,
+          candidateId: iv.candidate_id,
+          projectCandidateId: null,
           post_interview_eligible: true,
           source: "testimonial",
           name: c.full_name?.trim() || c.email,
@@ -311,6 +352,9 @@ export function InterviewLibraryDashboard() {
         if (!c) continue;
         out.push({
           key: `p-${iid}`,
+          interviewId: iid,
+          candidateId: null,
+          projectCandidateId: piv.project_candidate_id,
           post_interview_eligible: true,
           source: "project",
           name: c.full_name?.trim() || c.email,
@@ -347,6 +391,113 @@ export function InterviewLibraryDashboard() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (!detailRow || !supabase) return;
+    let cancelled = false;
+    setDetailLoading(true);
+    setDetailError(null);
+    setDetailData(null);
+
+    void (async () => {
+      if (detailRow.source === "testimonial") {
+        if (!detailRow.candidateId) {
+          if (!cancelled) {
+            setDetailError("Candidate details unavailable.");
+            setDetailLoading(false);
+          }
+          return;
+        }
+        const { data, error } = await supabase
+          .from("candidates")
+          .select(
+            "full_name, email, whatsapp_number, role_before_program, salary_before_program, achievement_type, achievement_title, quantified_result, how_program_helped, proof_document_url, linkedin_url, instagram_url, ai_eligibility_score, ai_eligibility_reason, is_deleted",
+          )
+          .eq("id", detailRow.candidateId)
+          .eq("is_deleted", false)
+          .maybeSingle();
+
+        if (cancelled) return;
+        setDetailLoading(false);
+        if (error) {
+          setDetailError(error.message);
+          return;
+        }
+        setDetailData({
+          source: "testimonial",
+          name: (data?.full_name as string | null | undefined) ?? detailRow.name,
+          phone: (data?.whatsapp_number as string | null | undefined) ?? null,
+          email: (data?.email as string | null | undefined) ?? detailRow.email,
+          role: (data?.role_before_program as string | null | undefined) ?? detailRow.role,
+          salary: (data?.salary_before_program as string | null | undefined) ?? null,
+          achievementType:
+            (data?.achievement_type as string | null | undefined) ?? null,
+          achievementTitle:
+            (data?.achievement_title as string | null | undefined) ?? null,
+          quantifiedResult:
+            (data?.quantified_result as string | null | undefined) ?? null,
+          howProgramHelped:
+            (data?.how_program_helped as string | null | undefined) ?? null,
+          proofLink: (data?.proof_document_url as string | null | undefined) ?? null,
+          linkedin: (data?.linkedin_url as string | null | undefined) ?? null,
+          instagram: (data?.instagram_url as string | null | undefined) ?? null,
+          aiScore: (data?.ai_eligibility_score as number | null | undefined) ?? null,
+          aiReason: (data?.ai_eligibility_reason as string | null | undefined) ?? null,
+        });
+        return;
+      }
+
+      if (!detailRow.projectCandidateId) {
+        if (!cancelled) {
+          setDetailError("Project candidate details unavailable.");
+          setDetailLoading(false);
+        }
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("project_candidates")
+        .select(
+          "full_name, email, project_title, problem_statement, demo_link, is_deleted",
+        )
+        .eq("id", detailRow.projectCandidateId)
+        .eq("is_deleted", false)
+        .maybeSingle();
+
+      if (cancelled) return;
+      setDetailLoading(false);
+      if (error) {
+        setDetailError(error.message);
+        return;
+      }
+      setDetailData({
+        source: "project",
+        name: (data?.full_name as string | null | undefined) ?? detailRow.name,
+        email: (data?.email as string | null | undefined) ?? detailRow.email,
+        projectTitle:
+          (data?.project_title as string | null | undefined) ?? null,
+        problemStatement:
+          (data?.problem_statement as string | null | undefined) ?? null,
+        demoLink: (data?.demo_link as string | null | undefined) ?? null,
+      });
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [detailRow, supabase]);
+
+  useEffect(() => {
+    if (!detailRow) return;
+    const onKeyDown = (ev: KeyboardEvent) => {
+      if (ev.key === "Escape") {
+        setDetailRow(null);
+        setExpandedTextKeys(new Set());
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [detailRow]);
 
   const domainOptions = useMemo(() => {
     const s = new Set<string>();
@@ -553,7 +704,16 @@ export function InterviewLibraryDashboard() {
                       : sum;
                     return (
                       <tr key={r.key}>
-                        <td className={`${td} font-medium`}>{r.name}</td>
+                        <td className={`${td} font-medium`}>
+                          <button
+                            type="button"
+                            className="max-w-full truncate text-left text-[#3b82f6] hover:underline"
+                            onClick={() => setDetailRow(r)}
+                            title={r.name}
+                          >
+                            {r.name}
+                          </button>
+                        </td>
                         <td className={`${td} break-all text-[#6e6e73]`}>{r.email}</td>
                         <td className={td}>
                           <span
@@ -615,6 +775,202 @@ export function InterviewLibraryDashboard() {
           </div>
         )}
       </main>
+
+      {detailRow ? (
+        <div className={modalOverlayClass}>
+          <button
+            type="button"
+            className="absolute inset-0"
+            aria-label="Close"
+            onClick={() => {
+              setDetailRow(null);
+              setExpandedTextKeys(new Set());
+            }}
+          />
+          <div
+            className={`${modalPanelClass} max-h-[85vh] max-w-[720px] overflow-y-auto p-6 shadow-xl`}
+            role="dialog"
+            aria-modal="true"
+          >
+            <div className="mb-4 flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-semibold text-[#1d1d1f]">
+                  {detailData?.name?.trim() || detailRow.name || "—"}
+                </h2>
+                <p className="mt-1 text-sm text-[#6e6e73]">
+                  {detailRow.source === "project" ? "Project" : "Testimonial"}
+                </p>
+              </div>
+              <button
+                type="button"
+                className="rounded-lg px-2 py-1 text-sm font-medium text-[#6e6e73] hover:bg-[#f5f5f7] hover:text-[#1d1d1f]"
+                onClick={() => {
+                  setDetailRow(null);
+                  setExpandedTextKeys(new Set());
+                }}
+              >
+                Close
+              </button>
+            </div>
+
+            {detailLoading ? (
+              <p className="text-sm text-[#6e6e73]">Loading details...</p>
+            ) : detailError ? (
+              <p className="rounded-xl border border-[#f0f0f0] bg-[#f5f5f7] px-3 py-2 text-sm text-[#1d1d1f]">
+                {detailError}
+              </p>
+            ) : detailData ? (
+              <div className="space-y-4 text-sm">
+                <section className="rounded-xl border border-[#f0f0f0] bg-white p-4">
+                  <h3 className="mb-3 text-sm font-semibold text-[#1d1d1f]">
+                    Basic Info
+                  </h3>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <p><span className="font-medium">Name:</span> {detailData.name?.trim() || "—"}</p>
+                    {detailData.source === "testimonial" ? (
+                      <p><span className="font-medium">Phone:</span> {detailData.phone?.trim() || "—"}</p>
+                    ) : null}
+                    <p><span className="font-medium">Email:</span> {detailData.email?.trim() || "—"}</p>
+                    {detailData.source === "testimonial" ? (
+                      <p><span className="font-medium">Role:</span> {detailData.role?.trim() || "—"}</p>
+                    ) : null}
+                    {detailData.source === "testimonial" ? (
+                      <p className="sm:col-span-2"><span className="font-medium">Salary:</span> {detailData.salary?.trim() || "—"}</p>
+                    ) : null}
+                    {detailData.source === "project" ? (
+                      <p className="sm:col-span-2"><span className="font-medium">Project Title:</span> {detailData.projectTitle?.trim() || "—"}</p>
+                    ) : null}
+                  </div>
+                </section>
+
+                {detailData.source === "testimonial" ? (
+                  <>
+                    <section className="rounded-xl border border-[#f0f0f0] bg-white p-4">
+                      <h3 className="mb-3 text-sm font-semibold text-[#1d1d1f]">
+                        Achievement
+                      </h3>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <p><span className="font-medium">Achievement Type:</span> {detailData.achievementType?.trim() || "—"}</p>
+                        <p><span className="font-medium">Achievement Title:</span> {detailData.achievementTitle?.trim() || "—"}</p>
+                        <p className="sm:col-span-2"><span className="font-medium">Quantified Result:</span> {detailData.quantifiedResult?.trim() || "—"}</p>
+                      </div>
+                    </section>
+
+                    <section className="rounded-xl border border-[#f0f0f0] bg-white p-4">
+                      <h3 className="mb-3 text-sm font-semibold text-[#1d1d1f]">
+                        Program Impact
+                      </h3>
+                      <p className="whitespace-pre-wrap">
+                        {detailData.howProgramHelped?.trim() || "—"}
+                      </p>
+                    </section>
+
+                    <section className="rounded-xl border border-[#f0f0f0] bg-white p-4">
+                      <h3 className="mb-3 text-sm font-semibold text-[#1d1d1f]">Links</h3>
+                      <div className="grid gap-3 sm:grid-cols-3">
+                        <div>
+                          <p className="font-medium">Proof</p>
+                          {detailData.proofLink?.trim() ? (
+                            <a
+                              href={detailData.proofLink.trim()}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="mt-1 inline-flex rounded-xl bg-[#1d1d1f] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#2d2d2f]"
+                            >
+                              View Proof
+                            </a>
+                          ) : (
+                            <p className="text-[#6e6e73]">—</p>
+                          )}
+                        </div>
+                        <div>
+                          <p className="font-medium">LinkedIn</p>
+                          {detailData.linkedin?.trim() ? (
+                            <a href={detailData.linkedin.trim()} target="_blank" rel="noopener noreferrer" className="text-[#3b82f6] hover:underline">
+                              Open profile
+                            </a>
+                          ) : <p className="text-[#6e6e73]">—</p>}
+                        </div>
+                        <div>
+                          <p className="font-medium">Instagram</p>
+                          {detailData.instagram?.trim() ? (
+                            <a href={detailData.instagram.trim()} target="_blank" rel="noopener noreferrer" className="text-[#3b82f6] hover:underline">
+                              Open profile
+                            </a>
+                          ) : <p className="text-[#6e6e73]">—</p>}
+                        </div>
+                      </div>
+                    </section>
+
+                    <section className="rounded-xl border border-[#f0f0f0] bg-white p-4">
+                      <h3 className="mb-3 text-sm font-semibold text-[#1d1d1f]">
+                        AI Evaluation
+                      </h3>
+                      <p>
+                        <span className="font-medium">AI Score:</span>{" "}
+                        {detailData.aiScore == null ? "—" : detailData.aiScore}
+                      </p>
+                      <p className="mt-1 whitespace-pre-wrap text-[#4b5563]">
+                        <span className="font-medium text-[#1d1d1f]">AI Reason:</span>{" "}
+                        {detailData.aiReason?.trim() || "—"}
+                      </p>
+                    </section>
+                  </>
+                ) : (
+                  <>
+                    <section className="rounded-xl border border-[#f0f0f0] bg-white p-4">
+                      <h3 className="mb-3 text-sm font-semibold text-[#1d1d1f]">
+                        Candidate Details
+                      </h3>
+                      <p>
+                        <span className="font-medium">Problem Statement:</span>{" "}
+                        {(() => {
+                          const full = detailData.problemStatement?.trim() ?? "";
+                          if (!full) return "—";
+                          const key = `${detailRow.key}:problem`;
+                          const expanded = expandedTextKeys.has(key);
+                          if (expanded || full.length <= 120) return full;
+                          return (
+                            <>
+                              {full.slice(0, 120)}...
+                              <button
+                                type="button"
+                                className="ml-1 font-medium text-[#2563eb] hover:underline"
+                                onClick={() =>
+                                  setExpandedTextKeys((prev) => new Set(prev).add(key))
+                                }
+                              >
+                                View more
+                              </button>
+                            </>
+                          );
+                        })()}
+                      </p>
+                      <p className="mt-2">
+                        <span className="font-medium">Demo Link:</span>{" "}
+                        {detailData.demoLink?.trim() ? (
+                          <a
+                            href={detailData.demoLink.trim()}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-[#3b82f6] hover:underline"
+                          >
+                            Open demo
+                          </a>
+                        ) : (
+                          "—"
+                        )}
+                      </p>
+                    </section>
+                  </>
+                )}
+              </div>
+            ) : (
+              <p className="text-sm text-[#6e6e73]">Details unavailable.</p>
+            )}
+          </div>
+        </div>
+      ) : null}
     </>
   );
 }
