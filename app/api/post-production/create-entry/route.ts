@@ -141,11 +141,18 @@ export async function POST(request: Request) {
         source_type: "testimonial",
         candidate_name: name,
         interview_language: lang,
+        created_at: new Date().toISOString(),
       })
       .select("id")
       .single();
 
     if (insErr) {
+      console.error("Post production insert failed", {
+        source: "testimonial",
+        interview_id: iv.id,
+        candidate_id: iv.candidate_id,
+        error: insErr,
+      });
       const msg = insErr.message ?? "Insert failed";
       if (
         msg.includes("not eligible") ||
@@ -270,11 +277,18 @@ export async function POST(request: Request) {
       source_type: "project",
       candidate_name: name,
       interview_language: "english",
+      created_at: new Date().toISOString(),
     })
     .select("id")
     .single();
 
   if (insPErr) {
+    console.error("Post production insert failed", {
+      source: "project",
+      project_interview_id: piv.id,
+      project_candidate_id: piv.project_candidate_id,
+      error: insPErr,
+    });
     const msg = insPErr.message ?? "Insert failed";
     if (
       msg.includes("not eligible") ||

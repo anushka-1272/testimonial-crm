@@ -1150,7 +1150,8 @@ export function InterviewsBoard() {
             interview_id: i.id,
           }),
         });
-      } catch {
+      } catch (e) {
+        console.error("Post production insert failed", e);
         setPostProdBusyId(null);
         setError("Network error while adding to post production.");
         return;
@@ -1158,6 +1159,11 @@ export function InterviewsBoard() {
       const json = (await res.json().catch(() => ({}))) as { error?: string };
       setPostProdBusyId(null);
       if (!res.ok) {
+        console.error("Post production insert failed", {
+          status: res.status,
+          body: json,
+          interview_id: i.id,
+        });
         setError(json.error ?? "Could not add to post production.");
         return;
       }
