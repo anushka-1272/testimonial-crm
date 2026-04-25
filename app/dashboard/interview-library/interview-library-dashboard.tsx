@@ -97,12 +97,22 @@ type InterviewCandRow = {
         email: string;
         domain: string | null;
         job_role: string | null;
+        role_before_program: string | null;
+        achievement_type: string | null;
+        achievement_title: string | null;
+        quantified_result: string | null;
+        how_program_helped: string | null;
       }
     | Array<{
         full_name: string | null;
         email: string;
         domain: string | null;
         job_role: string | null;
+        role_before_program: string | null;
+        achievement_type: string | null;
+        achievement_title: string | null;
+        quantified_result: string | null;
+        how_program_helped: string | null;
       }>;
 };
 
@@ -127,7 +137,7 @@ async function fetchTestimonialInterviewsByIds(
     const { data, error } = await supabase
       .from("interviews")
       .select(
-        "id, candidate_id, completed_at, post_interview_eligible, interview_type, candidates!inner ( full_name, email, domain, job_role, is_deleted )",
+        "id, candidate_id, completed_at, post_interview_eligible, interview_type, candidates!inner ( full_name, email, domain, job_role, role_before_program, achievement_type, achievement_title, quantified_result, how_program_helped, is_deleted )",
       )
       .in("id", batch)
       .eq("post_interview_eligible", true)
@@ -321,6 +331,12 @@ export function InterviewLibraryDashboard() {
         if (!iv || iv.post_interview_eligible !== true) continue;
         const c = Array.isArray(iv.candidates) ? iv.candidates[0] : iv.candidates;
         if (!c) continue;
+        const mappedSummary =
+          pp.summary?.trim() ||
+          c.how_program_helped?.trim() ||
+          c.quantified_result?.trim() ||
+          c.achievement_title?.trim() ||
+          null;
         out.push({
           key: `t-${iid}`,
           interviewId: iid,
@@ -332,9 +348,9 @@ export function InterviewLibraryDashboard() {
           email: c.email,
           interviewType: "testimonial",
           domain: c.domain?.trim() || null,
-          role: c.job_role?.trim() || null,
+          role: c.job_role?.trim() || c.role_before_program?.trim() || null,
           completedAt: iv.completed_at,
-          summary: pp.summary?.trim() || null,
+          summary: mappedSummary,
           youtubeLink: yt,
           youtubeLinkSortAt: pp.updated_at,
         });
