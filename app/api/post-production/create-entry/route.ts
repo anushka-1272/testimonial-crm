@@ -145,11 +145,13 @@ export async function POST(request: Request) {
       created_at: new Date().toISOString(),
     };
 
-    const { data: ins, error: insErr } = await supabase
+    const { data: upserted, error: insErr } = await supabase
       .from("post_production")
-      .upsert(upsertRow, { onConflict: "interview_id" })
-      .select("id")
-      .single();
+      .upsert(upsertRow, {
+        onConflict: "interview_id",
+        ignoreDuplicates: true,
+      })
+      .select("id");
 
     if (insErr) {
       console.error("Post production insert failed", {
@@ -182,18 +184,40 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: msg }, { status: 500 });
     }
 
-    await logActivity({
-      supabase,
-      user,
-      action_type: "post_production",
-      entity_type: "post_production",
-      entity_id: ins?.id ?? null,
-      candidate_name: name,
-      description: ACTIVITY_ADDED_ELIGIBLE_TO_POST_PRODUCTION,
-      metadata: { interview_id: iv.id, source: "testimonial" },
-    });
+    let postProdId: string | null = upserted?.[0]?.id ?? null;
+    if (!postProdId) {
+      const { data: existing, error: loadErr } = await supabase
+        .from("post_production")
+        .select("id")
+        .eq("interview_id", iv.id)
+        .maybeSingle();
+      if (loadErr) {
+        return NextResponse.json({ error: loadErr.message }, { status: 500 });
+      }
+      postProdId = existing?.id ?? null;
+    }
+    if (!postProdId) {
+      return NextResponse.json(
+        { error: "Could not create or load post production row" },
+        { status: 500 },
+      );
+    }
 
-    return NextResponse.json({ ok: true, id: ins?.id });
+    const insertedNew = Boolean(upserted?.[0]?.id);
+    if (insertedNew) {
+      await logActivity({
+        supabase,
+        user,
+        action_type: "post_production",
+        entity_type: "post_production",
+        entity_id: postProdId,
+        candidate_name: name,
+        description: ACTIVITY_ADDED_ELIGIBLE_TO_POST_PRODUCTION,
+        metadata: { interview_id: iv.id, source: "testimonial" },
+      });
+    }
+
+    return NextResponse.json({ ok: true, id: postProdId });
   }
 
   const { data: piv, error: pErr } = await supabase
@@ -280,11 +304,13 @@ export async function POST(request: Request) {
     created_at: new Date().toISOString(),
   };
 
-  const { data: insP, error: insPErr } = await supabase
+  const { data: upsertedP, error: insPErr } = await supabase
     .from("post_production")
-    .upsert(upsertProjectRow, { onConflict: "project_interview_id" })
-    .select("id")
-    .single();
+    .upsert(upsertProjectRow, {
+      onConflict: "project_interview_id",
+      ignoreDuplicates: true,
+    })
+    .select("id");
 
   if (insPErr) {
     console.error("Post production insert failed", {
@@ -317,16 +343,38 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 
-  await logActivity({
-    supabase,
-    user,
-    action_type: "post_production",
-    entity_type: "post_production",
-    entity_id: insP?.id ?? null,
-    candidate_name: name,
-    description: ACTIVITY_ADDED_ELIGIBLE_TO_POST_PRODUCTION,
-    metadata: { project_interview_id: piv.id, source: "project" },
-  });
+  let postProdProjectId: string | null = upsertedP?.[0]?.id ?? null;
+  if (!postProdProjectId) {
+    const { data: existingP, error: loadPErr } = await supabase
+      .from("post_production")
+      .select("id")
+      .eq("project_interview_id", piv.id)
+      .maybeSingle();
+    if (loadPErr) {
+      return NextResponse.json({ error: loadPErr.message }, { status: 500 });
+    }
+    postProdProjectId = existingP?.id ?? null;
+  }
+  if (!postProdProjectId) {
+    return NextResponse.json(
+      { error: "Could not create or load post production row" },
+      { status: 500 },
+    );
+  }
 
-  return NextResponse.json({ ok: true, id: insP?.id });
+  const insertedProjectNew = Boolean(upsertedP?.[0]?.id);
+  if (insertedProjectNew) {
+    await logActivity({
+      supabase,
+      user,
+      action_type: "post_production",
+      entity_type: "post_production",
+      entity_id: postProdProjectId,
+      candidate_name: name,
+      description: ACTIVITY_ADDED_ELIGIBLE_TO_POST_PRODUCTION,
+      metadata: { project_interview_id: piv.id, source: "project" },
+    });
+  }
+
+  return NextResponse.json({ ok: true, id: postProdProjectId });
 }
