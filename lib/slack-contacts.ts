@@ -27,6 +27,27 @@ export async function slackEmailForTeamMember(
 ): Promise<string | null> {
   const n = name?.trim();
   if (!n) return null;
+  const lower = n.toLowerCase();
+
+  const { data: teamRows, error: teamErr } = await supabase
+    .from("team_members")
+    .select("email, full_name")
+    .eq("status", "active")
+    .not("email", "is", null);
+
+  if (!teamErr && teamRows?.length) {
+    for (const row of teamRows as Array<{
+      email?: string | null;
+      full_name?: string | null;
+    }>) {
+      const email = row.email?.trim();
+      if (!email) continue;
+      const fn = row.full_name?.trim().toLowerCase() ?? "";
+      const local = email.split("@")[0]?.toLowerCase() ?? "";
+      if (fn === lower || local === lower) return email;
+    }
+  }
+
   const { data } = await supabase
     .from("team_roster")
     .select("email")
@@ -36,7 +57,7 @@ export async function slackEmailForTeamMember(
     .order("display_order", { ascending: true })
     .limit(1);
 
-  const email = (data?.[0] as { email?: string | null } | undefined)?.email;
-  if (email?.trim()) return email.trim();
+  const legacy = (data?.[0] as { email?: string | null } | undefined)?.email;
+  if (legacy?.trim()) return legacy.trim();
   return POC_INTERVIEWER_SLACK_EMAILS[n] ?? null;
 }

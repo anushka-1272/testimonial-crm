@@ -28,6 +28,18 @@ function normalizeNames(rows: Array<{ name: string | null | undefined }>): strin
   return out;
 }
 
+export function teamMemberDisplayName(row: {
+  full_name: string | null | undefined;
+  email: string | null | undefined;
+}): string {
+  const n = row.full_name?.trim() ?? "";
+  if (n) return n;
+  const email = row.email?.trim() ?? "";
+  if (!email) return "";
+  const local = email.split("@")[0] ?? "";
+  return local || email;
+}
+
 export function mergeRosterWithCurrent(
   names: string[],
   current: string | null | undefined,
@@ -40,24 +52,47 @@ export function mergeRosterWithCurrent(
   return list;
 }
 
+/**
+ * Active roster names from `team_members` (Settings → Team), keyed by `role` and `status = 'active'`.
+ */
 export async function fetchTeamRosterNames(
   supabase: SupabaseClient,
   role: TeamRosterRole,
   onlyActive = true,
 ): Promise<string[]> {
   let query = supabase
-    .from("team_roster")
-    .select("name")
-    .eq("role_type", role)
-    .order("display_order", { ascending: true })
+    .from("team_members")
+    .select("full_name, email")
+    .eq("role", role)
     .order("created_at", { ascending: true });
 
   if (onlyActive) {
-    query = query.eq("is_active", true);
+    query = query.eq("status", "active");
   }
 
   const { data, error } = await query;
+
+  console.log("[fetchTeamRosterNames] team_members response", {
+    role,
+    onlyActive,
+    error: error?.message ?? null,
+    rowCount: data?.length ?? 0,
+    raw: data,
+  });
+
   if (error) return [];
 
-  return normalizeNames((data ?? []) as Array<{ name: string | null }>);
+  const rows = (data ?? []) as Array<{
+    full_name: string | null;
+    email: string | null;
+  }>;
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const row of rows) {
+    const name = teamMemberDisplayName(row);
+    if (!name || seen.has(name)) continue;
+    seen.add(name);
+    out.push(name);
+  }
+  return out;
 }

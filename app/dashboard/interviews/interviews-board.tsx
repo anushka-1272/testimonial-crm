@@ -813,6 +813,13 @@ export function InterviewsBoard() {
           void loadData();
         },
       )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "team_members" },
+        () => {
+          void loadRoster();
+        },
+      )
       .subscribe();
 
     void (async () => {
@@ -824,11 +831,15 @@ export function InterviewsBoard() {
     return () => {
       void supabase.removeChannel(ch);
     };
-  }, [supabase, loadData]);
+  }, [supabase, loadData, loadRoster]);
 
   useEffect(() => {
     void loadRoster();
   }, [loadRoster]);
+
+  useEffect(() => {
+    if (activeTab === "completed") void loadRoster();
+  }, [activeTab, loadRoster]);
 
   useEffect(() => {
     if (activeTab !== "eligible") setPocEditingId(null);

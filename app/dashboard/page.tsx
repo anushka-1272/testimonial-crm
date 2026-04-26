@@ -415,6 +415,13 @@ export default function DashboardPage() {
           void fetchStats();
         },
       )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "team_members" },
+        () => {
+          void fetchStats();
+        },
+      )
       .subscribe();
     return () => {
       void supabase.removeChannel(ch);

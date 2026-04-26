@@ -7,7 +7,6 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import {
   buildInterviewerSelectOptions,
-  normalizeStoredInterviewerValue,
   type InterviewerSelectOption,
 } from "@/lib/interviewer-enum";
 import { logActivity } from "@/lib/activity-logger";
@@ -78,11 +77,8 @@ export function AssignInterviewerModal({
       const options = buildInterviewerSelectOptions(names, current);
       if (!active) return;
       setInterviewerOptions(options);
-      const enumFromDb = normalizeStoredInterviewerValue(current);
       const initial =
-        (enumFromDb && options.some((o) => o.value === enumFromDb)
-          ? enumFromDb
-          : null) ??
+        (current && options.some((o) => o.value === current) ? current : null) ??
         options[0]?.value ??
         "";
       setInterviewer(initial);

@@ -1,109 +1,68 @@
 /**
- * PostgreSQL `public.interviewer` enum labels (see supabase/migrations/001 + 026).
- * UI roster names may differ; always persist `value` here, never arbitrary display text.
+ * Interviewer dropdowns use `team_members` display names for both label and value.
+ * Legacy rows may still store historical labels; filters and display handle free text.
  */
-export const INTERVIEWER_ENUM_VALUES = [
-  "Harika",
-  "Gargi",
-  "Mudit",
-  "Anushka",
-  "Anushka Roy",
-] as const;
-
-export type InterviewerEnumValue = (typeof INTERVIEWER_ENUM_VALUES)[number];
-
-const ENUM_SET = new Set<string>(INTERVIEWER_ENUM_VALUES);
-
 export type InterviewerSelectOption = {
-  /** Exact DB enum label */
-  value: InterviewerEnumValue;
-  /** Shown in the select (usually roster `name`) */
+  value: string;
   label: string;
 };
 
-/** Roster / free-text → canonical enum (null = cannot map). */
-export function rosterNameToInterviewerEnum(
-  rosterName: string,
-): InterviewerEnumValue | null {
-  const t = rosterName.trim();
-  if (!t) return null;
-  if (ENUM_SET.has(t)) return t as InterviewerEnumValue;
-  const lower = t.toLowerCase();
-  for (const ev of INTERVIEWER_ENUM_VALUES) {
-    if (ev.toLowerCase() === lower) return ev;
-  }
-  return null;
+function mergeInterviewerNamesForDropdown(
+  rosterNames: string[],
+  currentStored: string | null | undefined,
+): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  const push = (raw: string | null | undefined) => {
+    const t = raw?.trim() ?? "";
+    if (!t || seen.has(t)) return;
+    seen.add(t);
+    out.push(t);
+  };
+  for (const n of rosterNames) push(n);
+  push(currentStored ?? null);
+  out.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+  return out;
 }
 
-/**
- * Normalize whatever is stored on `interviews.interviewer` / `project_interviews.interviewer`
- * to a valid enum label when possible (exact, case-insensitive, or legacy aliases).
- */
+/** Trimmed stored interviewer string, or null if empty. */
 export function normalizeStoredInterviewerValue(
   raw: string | null | undefined,
-): InterviewerEnumValue | null {
-  const fromRoster = rosterNameToInterviewerEnum(raw ?? "");
-  if (fromRoster) return fromRoster;
+): string | null {
   const t = raw?.trim();
-  if (!t) return null;
-  const lower = t.toLowerCase();
-  if (lower === "anushka roy") {
-    return ENUM_SET.has("Anushka Roy")
-      ? "Anushka Roy"
-      : ("Anushka" as InterviewerEnumValue);
-  }
-  return null;
+  return t || null;
 }
 
-export function interviewerDisplayLabel(
-  enumVal: InterviewerEnumValue,
-): string {
-  return enumVal;
-}
-
-/** Completed-tab filter: `filter` is an enum value or `"all"`. */
 export function interviewerRowMatchesFilter(
   filter: string,
   rowStored: string | null | undefined,
 ): boolean {
   if (filter === "all") return true;
-  const normalized = normalizeStoredInterviewerValue(rowStored);
+  const f = filter.trim();
   const raw = rowStored?.trim() ?? "";
-  return normalized === filter || raw === filter;
+  if (!f) return true;
+  return (
+    raw === f ||
+    raw.toLowerCase() === f.toLowerCase()
+  );
 }
 
 /**
- * Dropdown options: `value` = enum for Supabase; `label` = roster display name.
- * Includes current stored enum even if absent from roster (read-only legacy rows).
+ * Dropdown options: `value` and `label` are the same display name (team_members).
+ * Includes current stored value even if not on the roster (legacy / removed member).
  */
 export function buildInterviewerSelectOptions(
   rosterNames: string[],
   currentStored: string | null | undefined,
 ): InterviewerSelectOption[] {
-  const byValue = new Map<InterviewerEnumValue, string>();
-  for (const rosterName of rosterNames) {
-    const ev = rosterNameToInterviewerEnum(rosterName);
-    if (!ev) continue;
-    if (!byValue.has(ev)) byValue.set(ev, rosterName.trim());
-  }
-  const cur = normalizeStoredInterviewerValue(currentStored);
-  if (cur && !byValue.has(cur)) {
-    byValue.set(cur, interviewerDisplayLabel(cur));
-  }
-  const out: InterviewerSelectOption[] = [];
-  for (const ev of INTERVIEWER_ENUM_VALUES) {
-    const label = byValue.get(ev);
-    if (label) out.push({ value: ev, label });
-  }
-  return out;
+  const names = mergeInterviewerNamesForDropdown(rosterNames, currentStored);
+  return names.map((name) => ({ value: name, label: name }));
 }
 
-/** Shown in tables when `stored` might be legacy or already canonical. */
+/** Shown in tables when `stored` may be any name saved from the roster. */
 export function formatInterviewerStoredForUi(
   stored: string | null | undefined,
 ): string {
-  const ev = normalizeStoredInterviewerValue(stored);
-  if (ev) return interviewerDisplayLabel(ev);
   const t = stored?.trim();
   return t || "—";
 }
