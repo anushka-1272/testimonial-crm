@@ -40,7 +40,6 @@ import {
   mergeRosterWithCurrent,
 } from "@/lib/team-roster";
 
-import { PostInterviewDrawer } from "./post-interview-drawer";
 import { RescheduleInterviewModal } from "./reschedule-interview-modal";
 import { AssignInterviewerModal } from "./assign-interviewer-modal";
 import { EditInterviewDetailsModal } from "./edit-interview-details-modal";
@@ -57,7 +56,6 @@ import type {
   FollowupStatus,
   InterviewWithCandidate,
   LinkedInTrackStatus,
-  ProjectInterviewWithProjectCandidate,
 } from "./types";
 
 const PAGE_SIZE = 20;
@@ -619,11 +617,8 @@ export function InterviewsBoard() {
   );
   const [scheduleProjectFor, setScheduleProjectFor] =
     useState<ScheduleProjectCandidate | null>(null);
-  const [postFor, setPostFor] = useState<
-    InterviewWithCandidate | ProjectInterviewWithProjectCandidate | null
-  >(null);
   const [rescheduleCtx, setRescheduleCtx] = useState<{
-    interview: InterviewWithCandidate | ProjectInterviewWithProjectCandidate;
+    interview: InterviewWithCandidate;
     mode: "from_scheduled" | "from_rescheduled";
   } | null>(null);
   const [addZoomFor, setAddZoomFor] = useState<InterviewWithCandidate | null>(
@@ -664,6 +659,7 @@ export function InterviewsBoard() {
     null,
   );
   const [postProdBusyId, setPostProdBusyId] = useState<string | null>(null);
+  const [completeBusyId, setCompleteBusyId] = useState<string | null>(null);
   const [liBusyId, setLiBusyId] = useState<string | null>(null);
   const [linkedInListPage, setLinkedInListPage] = useState(0);
   const [pocRoster, setPocRoster] = useState<string[]>([]);
@@ -1216,6 +1212,46 @@ export function InterviewsBoard() {
       }
       setToastMessage("Added to post production.");
       void loadData();
+    },
+    [supabase, loadData],
+  );
+
+  const handleMarkCompleted = useCallback(
+    async (interview: InterviewWithCandidate) => {
+      if (!supabase) return;
+      setError(null);
+      setCompleteBusyId(interview.id);
+      try {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        const token = session?.access_token;
+        if (!token) {
+          setError("You must be signed in.");
+          return;
+        }
+
+        const response = await fetch(`/api/interviews/${interview.id}/complete`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+        const payload = (await response.json().catch(() => ({}))) as {
+          error?: string;
+        };
+        if (!response.ok) {
+          setError(payload.error ?? "Could not mark interview as completed.");
+          return;
+        }
+        setToastMessage("Interview marked completed.");
+        await loadData();
+      } catch (e) {
+        console.error("Mark completed failed", e);
+        setError("Network error while marking interview completed.");
+      } finally {
+        setCompleteBusyId(null);
+      }
     },
     [supabase, loadData],
   );
@@ -2267,9 +2303,10 @@ export function InterviewsBoard() {
                           </tr>
                         ) : (
                           scheduledPage.slice.map((i) => {
-                            const isDraftRow = i.interview_status === "draft";
-                            const isScheduledRow =
-                              i.interview_status === "scheduled";
+                            const status = i.interview_status?.trim().toLowerCase();
+                            const isDraftRow = status === "draft";
+                            const isScheduledRow = status === "scheduled";
+                            const hasZoomLink = Boolean(i.zoom_link?.trim());
                             const hasIv = hasAssignedInterviewer(i);
                             return (
                               <tr key={i.id}>
@@ -2372,31 +2409,41 @@ export function InterviewsBoard() {
                                             : undefined
                                       }
                                       className="rounded-lg bg-[#ea580c] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#c2410c] disabled:cursor-not-allowed disabled:bg-[#d1d5db] disabled:text-[#6b7280]"
-                                      onClick={() =>
+                                      onClick={() => {
+                                        if (!canEditScheduledTab || !isScheduledRow) return;
                                         setRescheduleCtx({
                                           interview: i,
                                           mode: "from_scheduled",
-                                        })
-                                      }
+                                        });
+                                      }}
                                     >
                                       Reschedule
                                     </button>
                                     <button
                                       type="button"
                                       disabled={
-                                        !canEditScheduledTab || !isScheduledRow
+                                        !canEditScheduledTab ||
+                                        !isScheduledRow ||
+                                        !hasZoomLink ||
+                                        completeBusyId === i.id
                                       }
                                       title={
                                         !canEditScheduledTab
                                           ? "View only"
                                           : !isScheduledRow
                                             ? "Disabled until scheduled"
+                                            : !hasZoomLink
+                                              ? "Add Zoom details first"
                                             : undefined
                                       }
                                       className="rounded-lg bg-[#16a34a] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#15803d] disabled:cursor-not-allowed disabled:bg-[#d1d5db] disabled:text-[#6b7280]"
-                                      onClick={() => setPostFor(i)}
+                                      onClick={() =>
+                                        void handleMarkCompleted(i)
+                                      }
                                     >
-                                      Mark completed
+                                      {completeBusyId === i.id
+                                        ? "Marking..."
+                                        : "Mark completed"}
                                     </button>
                                   </div>
                                 </td>
@@ -2532,15 +2579,28 @@ export function InterviewsBoard() {
                                   </button>
                                   <button
                                     type="button"
-                                    disabled={!canEditRescheduledTab}
-                                    className="rounded-lg bg-[#16a34a] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#15803d]"
+                                    disabled={
+                                      !canEditRescheduledTab ||
+                                      !Boolean(i.zoom_link?.trim()) ||
+                                      completeBusyId === i.id
+                                    }
+                                    title={
+                                      !canEditRescheduledTab
+                                        ? "View only"
+                                        : !i.zoom_link?.trim()
+                                          ? "Add Zoom details first"
+                                          : undefined
+                                    }
+                                    className="rounded-lg bg-[#16a34a] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#15803d] disabled:cursor-not-allowed disabled:bg-[#d1d5db] disabled:text-[#6b7280]"
                                     onClick={() =>
                                       canEditRescheduledTab
-                                        ? setPostFor(i)
+                                        ? void handleMarkCompleted(i)
                                         : undefined
                                     }
                                   >
-                                    Mark completed
+                                    {completeBusyId === i.id
+                                      ? "Marking..."
+                                      : "Mark completed"}
                                   </button>
                                 </div>
                               </td>
@@ -3073,15 +3133,6 @@ export function InterviewsBoard() {
         onSaved={() => void loadData()}
       />
 
-      <PostInterviewDrawer
-        key={postFor?.id ?? "post-closed"}
-        open={!!postFor}
-        interview={postFor}
-        supabase={supabase}
-        onClose={() => setPostFor(null)}
-        onSaved={() => void loadData()}
-        onToast={(msg) => setToastMessage(msg)}
-      />
     </>
   );
 }
