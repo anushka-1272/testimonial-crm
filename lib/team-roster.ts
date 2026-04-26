@@ -52,34 +52,27 @@ export function mergeRosterWithCurrent(
   return list;
 }
 
-/**
- * Active roster names from `team_members` (Settings → Team), keyed by `role` and `status = 'active'`.
- */
-export async function fetchTeamRosterNames(
+async function fetchTeamMemberNames(
   supabase: SupabaseClient,
   role: TeamRosterRole,
-  onlyActive = true,
+  onlyActive: boolean,
 ): Promise<string[]> {
   let query = supabase
     .from("team_members")
-    .select("full_name, email")
+    .select("full_name, email, status")
     .eq("role", role)
     .order("created_at", { ascending: true });
 
   if (onlyActive) {
-    query = query.eq("status", "active");
+    // Interviewers often need assigning before the member finishes onboarding; include invited.
+    if (role === "interviewer") {
+      query = query.in("status", ["active", "invited"]);
+    } else {
+      query = query.eq("status", "active");
+    }
   }
 
   const { data, error } = await query;
-
-  console.log("[fetchTeamRosterNames] team_members response", {
-    role,
-    onlyActive,
-    error: error?.message ?? null,
-    rowCount: data?.length ?? 0,
-    raw: data,
-  });
-
   if (error) return [];
 
   const rows = (data ?? []) as Array<{
@@ -95,4 +88,67 @@ export async function fetchTeamRosterNames(
     out.push(name);
   }
   return out;
+}
+
+async function fetchLegacyTeamRosterNames(
+  supabase: SupabaseClient,
+  role: TeamRosterRole,
+  onlyActive: boolean,
+): Promise<string[]> {
+  let query = supabase
+    .from("team_roster")
+    .select("name")
+    .eq("role_type", role)
+    .order("display_order", { ascending: true })
+    .order("created_at", { ascending: true });
+
+  if (onlyActive) {
+    query = query.eq("is_active", true);
+  }
+
+  const { data, error } = await query;
+  if (error) return [];
+  return normalizeNames((data ?? []) as Array<{ name: string | null }>);
+}
+
+function mergeUniqueNameLists(primary: string[], secondary: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  const push = (raw: string) => {
+    const t = raw.trim();
+    if (!t || seen.has(t)) return;
+    seen.add(t);
+    out.push(t);
+  };
+  for (const n of primary) push(n);
+  for (const n of secondary) push(n);
+  return out;
+}
+
+/**
+ * Roster names for dropdowns: `team_members` first (Settings → Team), then `team_roster`
+ * so legacy seed rows (e.g. Anushka, Anushka Roy) still appear if not yet mirrored in team_members.
+ */
+export async function fetchTeamRosterNames(
+  supabase: SupabaseClient,
+  role: TeamRosterRole,
+  onlyActive = true,
+): Promise<string[]> {
+  const [fromMembers, fromRoster] = await Promise.all([
+    fetchTeamMemberNames(supabase, role, onlyActive),
+    fetchLegacyTeamRosterNames(supabase, role, onlyActive),
+  ]);
+
+  const merged = mergeUniqueNameLists(fromMembers, fromRoster);
+
+  console.log("[fetchTeamRosterNames] merged team_members + team_roster", {
+    role,
+    onlyActive,
+    fromMembersCount: fromMembers.length,
+    fromRosterCount: fromRoster.length,
+    mergedCount: merged.length,
+    merged,
+  });
+
+  return merged;
 }
