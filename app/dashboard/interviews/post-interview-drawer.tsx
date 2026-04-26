@@ -694,77 +694,76 @@ export function PostInterviewDrawer({
               />
             </label>
 
-            {eligible === true && (
-              <>
-                <div>
-                  <span className="text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
-                    Reward item
-                    <span className="ml-1 font-normal normal-case text-[#dc2626]">
-                      *
-                    </span>
+            <div>
+              <span className="text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
+                Reward item
+                {eligible === true ? (
+                  <span className="ml-1 font-normal normal-case text-[#dc2626]">
+                    *
                   </span>
-                  <div
-                    className={`mt-2 grid gap-2 ${isProject ? "grid-cols-3" : "grid-cols-4"}`}
-                  >
-                    {rewardCards.map(({ id, icon, label }) => {
-                      const selected = rewardChoice === id;
-                      return (
-                        <button
-                          key={id}
-                          type="button"
-                          onClick={() => {
-                            setRewardChoice(id);
-                            if (id !== "other") setRewardOtherText("");
-                          }}
-                          className={`flex flex-col items-center justify-center rounded-xl border p-3 text-center transition-colors ${
-                            selected
-                              ? "border-black bg-black text-white"
-                              : "border-gray-200 bg-white text-gray-700 hover:border-gray-300"
-                          }`}
-                        >
-                          <span className="text-lg leading-none" aria-hidden>
-                            {icon}
-                          </span>
-                          <span className="mt-1 text-[11px] font-medium leading-tight">
-                            {label}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <p className="mt-2 text-xs text-gray-500">
-                    Auto-selected based on interview type. You can change this.
-                  </p>
-                  {rewardChoice === "other" ? (
-                    <input
-                      type="text"
-                      className={inp}
-                      placeholder="Specify item..."
-                      value={rewardOtherText}
-                      onChange={(e) => setRewardOtherText(e.target.value)}
-                    />
-                  ) : null}
-                </div>
-
-                {shippingRequired(rewardChoice) ? (
-                  <label className="block text-sm">
-                    <span className="text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
-                      Shipping address
-                      <span className="ml-1 font-normal normal-case text-[#dc2626]">
-                        *
-                      </span>
-                    </span>
-                    <textarea
-                      rows={3}
-                      placeholder="Full mailing address for dispatch"
-                      className={inp}
-                      value={shippingAddress}
-                      onChange={(e) => setShippingAddress(e.target.value)}
-                    />
-                  </label>
                 ) : null}
-              </>
-            )}
+              </span>
+              <div
+                className={`mt-2 grid gap-2 ${isProject ? "grid-cols-3" : "grid-cols-4"} ${eligible === true ? "" : "opacity-60"}`}
+              >
+                {rewardCards.map(({ id, icon, label }) => {
+                  const selected = rewardChoice === id;
+                  return (
+                    <button
+                      key={id}
+                      type="button"
+                      disabled={eligible !== true}
+                      onClick={() => {
+                        setRewardChoice(id);
+                        if (id !== "other") setRewardOtherText("");
+                      }}
+                      className={`flex flex-col items-center justify-center rounded-xl border p-3 text-center transition-colors ${
+                        selected
+                          ? "border-black bg-black text-white"
+                          : "border-gray-200 bg-white text-gray-700 hover:border-gray-300"
+                      } disabled:cursor-not-allowed disabled:border-gray-200 disabled:bg-gray-100 disabled:text-gray-400`}
+                    >
+                      <span className="text-lg leading-none" aria-hidden>
+                        {icon}
+                      </span>
+                      <span className="mt-1 text-[11px] font-medium leading-tight">
+                        {label}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="mt-2 text-xs text-gray-500">
+                Auto-selected based on interview type. You can change this.
+              </p>
+              {rewardChoice === "other" && eligible === true ? (
+                <input
+                  type="text"
+                  className={inp}
+                  placeholder="Specify item..."
+                  value={rewardOtherText}
+                  onChange={(e) => setRewardOtherText(e.target.value)}
+                />
+              ) : null}
+            </div>
+
+            {eligible === true && shippingRequired(rewardChoice) ? (
+              <label className="block text-sm">
+                <span className="text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
+                  Shipping address
+                  <span className="ml-1 font-normal normal-case text-[#dc2626]">
+                    *
+                  </span>
+                </span>
+                <textarea
+                  rows={3}
+                  placeholder="Full mailing address for dispatch"
+                  className={inp}
+                  value={shippingAddress}
+                  onChange={(e) => setShippingAddress(e.target.value)}
+                />
+              </label>
+            ) : null}
           </div>
 
           <div className="border-t border-[#f5f5f5] px-5 py-3">
