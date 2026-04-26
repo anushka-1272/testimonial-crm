@@ -13,7 +13,6 @@ import {
   ScheduleInterviewModal,
   type ScheduleProjectCandidate,
 } from "../interviews/schedule-interview-modal";
-import { isPostRescheduleDraftRow } from "../interviews/interview-reschedule-workflow";
 import type { ProjectInterviewWithProjectCandidate } from "../interviews/types";
 
 const cardChrome =
@@ -22,7 +21,6 @@ const cardChrome =
 type ProjectPipelineStats = {
   pending: number;
   scheduled: number;
-  rescheduled: number;
   completed: number;
 };
 
@@ -38,7 +36,7 @@ async function loadProjectPipelineStats(
       .order("created_at", { ascending: true }),
     supabase
       .from("project_interviews")
-      .select("project_candidate_id, interview_status, previous_scheduled_date"),
+      .select("project_candidate_id, interview_status, completed_at"),
   ]);
 
   const interviews = piRows ?? [];
@@ -67,20 +65,18 @@ async function loadProjectPipelineStats(
   }
 
   const scheduled = interviews.filter((r) => {
-    if (r.interview_status === "scheduled") return true;
-    if (r.interview_status === "draft" && !isPostRescheduleDraftRow(r))
-      return true;
-    return false;
+    const done =
+      r.interview_status === "completed" ||
+      Boolean((r as { completed_at?: string | null }).completed_at?.trim());
+    if (done) return false;
+    const st = (r.interview_status ?? "").trim().toLowerCase();
+    if (st === "cancelled") return false;
+    return true;
   }).length;
-  const rescheduled = interviews.filter(
-    (r) =>
-      r.interview_status === "rescheduled" ||
-      isPostRescheduleDraftRow(r),
-  ).length;
   const completed = interviews.filter((r) => r.interview_status === "completed")
     .length;
 
-  return { pending, scheduled, rescheduled, completed };
+  return { pending, scheduled, completed };
 }
 
 export function ProjectInterviewsPage() {
@@ -97,7 +93,6 @@ export function ProjectInterviewsPage() {
   const [stats, setStats] = useState<ProjectPipelineStats>({
     pending: 0,
     scheduled: 0,
-    rescheduled: 0,
     completed: 0,
   });
   const [statsTick, setStatsTick] = useState(0);
@@ -118,7 +113,6 @@ export function ProjectInterviewsPage() {
           setStats({
             pending: 0,
             scheduled: 0,
-            rescheduled: 0,
             completed: 0,
           });
         }
@@ -192,7 +186,7 @@ export function ProjectInterviewsPage() {
           </div>
         ) : null}
 
-        <section className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
+        <section className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-3 lg:gap-4">
           {(
             [
               {
@@ -206,12 +200,6 @@ export function ProjectInterviewsPage() {
                 label: "Scheduled",
                 value: stats.scheduled,
                 accent: "bg-[#2563eb]",
-              },
-              {
-                key: "rescheduled",
-                label: "Rescheduled",
-                value: stats.rescheduled,
-                accent: "bg-[#ea580c]",
               },
               {
                 key: "completed",

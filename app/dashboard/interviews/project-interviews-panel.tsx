@@ -23,7 +23,6 @@ import {
 
 import { AssignInterviewerModal } from "./assign-interviewer-modal";
 import { EditInterviewDetailsModal } from "./edit-interview-details-modal";
-import { isPostRescheduleDraftRow } from "./interview-reschedule-workflow";
 import {
   followupStatusBadgeFromSnapshot,
   getFollowUpStatus,
@@ -43,7 +42,7 @@ const PAGE_SIZE = 20;
 /** Interview rows only — join `project_candidates` client-side so a failed embed never blocks loading candidates. */
 const PROJECT_INTERVIEW_COLUMNS = `id, created_at, project_candidate_id, scheduled_date, previous_scheduled_date, reschedule_reason, completed_at, interviewer, interviewer_assigned_at, zoom_link, zoom_account, language, invitation_sent, poc, remarks, reminder_count, interview_status, post_interview_eligible, reward_item, category, funnel, comments, interview_type`;
 
-type ProjectSubTab = "pending" | "scheduled" | "rescheduled" | "completed";
+type ProjectSubTab = "pending" | "scheduled" | "completed";
 
 type TabFilters = { search: string; page: number };
 
@@ -293,7 +292,6 @@ type Props = {
 const defaultFilters = (): Record<ProjectSubTab, TabFilters> => ({
   pending: { search: "", page: 0 },
   scheduled: { search: "", page: 0 },
-  rescheduled: { search: "", page: 0 },
   completed: { search: "", page: 0 },
 });
 
@@ -554,30 +552,18 @@ export function ProjectInterviewsPanel({
   const byStatus = useMemo(() => {
     const m = {
       scheduled: [] as ProjectInterviewWithProjectCandidate[],
-      rescheduled: [] as ProjectInterviewWithProjectCandidate[],
       completed: [] as ProjectInterviewWithProjectCandidate[],
     };
     for (const i of interviews) {
-      switch (i.interview_status) {
-        case "draft":
-          if (isPostRescheduleDraftRow(i)) {
-            m.rescheduled.push(i);
-          } else {
-            m.scheduled.push(i);
-          }
-          break;
-        case "scheduled":
-          m.scheduled.push(i);
-          break;
-        case "rescheduled":
-          m.rescheduled.push(i);
-          break;
-        case "completed":
-          m.completed.push(i);
-          break;
-        default:
-          break;
+      const done =
+        i.interview_status === "completed" || Boolean(i.completed_at?.trim());
+      if (done) {
+        m.completed.push(i);
+        continue;
       }
+      const st = (i.interview_status ?? "").trim().toLowerCase();
+      if (st === "cancelled") continue;
+      m.scheduled.push(i);
     }
     return m;
   }, [interviews]);
@@ -588,7 +574,7 @@ export function ProjectInterviewsPanel({
     [interviews],
   );
 
-  /** Candidates currently in Scheduled or Rescheduled tabs — hide from Pending. */
+  /** Candidates currently in the interview pipeline — hide from Pending. */
   const activePipelineCandidateIds = useMemo(
     () =>
       new Set(
@@ -669,14 +655,6 @@ export function ProjectInterviewsPanel({
     [byStatus.scheduled, filters.scheduled.search],
   );
 
-  const rescheduledFiltered = useMemo(
-    () =>
-      [...byStatus.rescheduled.filter((i) =>
-        matchesInterviewSearch(i, filters.rescheduled.search),
-      )].sort(compareProjectInterviewScheduledAsc),
-    [byStatus.rescheduled, filters.rescheduled.search],
-  );
-
   const completedFiltered = useMemo(
     () =>
       [...byStatus.completed.filter((i) =>
@@ -701,10 +679,6 @@ export function ProjectInterviewsPanel({
   const scheduledPage = useMemo(
     () => paginate(scheduledFiltered, filters.scheduled.page),
     [scheduledFiltered, filters.scheduled.page],
-  );
-  const rescheduledPage = useMemo(
-    () => paginate(rescheduledFiltered, filters.rescheduled.page),
-    [rescheduledFiltered, filters.rescheduled.page],
   );
   const completedPage = useMemo(
     () => paginate(completedFiltered, filters.completed.page),
@@ -950,7 +924,6 @@ export function ProjectInterviewsPanel({
             [
               ["pending", "Pending", pendingQueue.length],
               ["scheduled", "Scheduled", scheduledFiltered.length],
-              ["rescheduled", "Rescheduled", rescheduledFiltered.length],
               ["completed", "Completed", completedFiltered.length],
             ] as const
           ).map(([id, label, n]) => (
@@ -1364,7 +1337,9 @@ export function ProjectInterviewsPanel({
                               >
                                 Edit
                               </button>
-                              {isDraftRow && !hasIv ? (
+                              {!hasIv &&
+                              (isDraftRow ||
+                                Boolean(i.previous_scheduled_date?.trim())) ? (
                                 <button
                                   type="button"
                                   className="rounded-lg bg-[#2563eb] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#1d4ed8]"
@@ -1379,7 +1354,9 @@ export function ProjectInterviewsPanel({
                                 onClick={() =>
                                   onRescheduleProjectInterview(
                                     i,
-                                    "from_scheduled",
+                                    i.previous_scheduled_date?.trim()
+                                      ? "from_rescheduled"
+                                      : "from_scheduled",
                                   )
                                 }
                                 disabled={!isScheduledRow}
@@ -1417,195 +1394,6 @@ export function ProjectInterviewsPanel({
               "scheduled",
               scheduledPage.totalPages,
               scheduledPage.total,
-            )}
-          </div>
-        </section>
-      )}
-
-      {subTab === "rescheduled" && (
-        <section className="space-y-4">
-          <label className="flex max-w-md flex-col gap-1">
-            <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
-              Search
-            </span>
-            <input
-              type="search"
-              placeholder="Name, email, or title"
-              className={filterInp}
-              value={filters.rescheduled.search}
-              onChange={(e) =>
-                patchFilter("rescheduled", { search: e.target.value })
-              }
-            />
-          </label>
-          <div className={tableWrap}>
-            <div className="w-full overflow-x-auto">
-              <table className="w-full min-w-[1280px] table-auto border-collapse">
-                <thead>
-                  <tr>
-                    <th className={thName}>Name</th>
-                    <th className={thEmail}>Email</th>
-                    <th className={thProjTitle}>Project title</th>
-                    <th className={thDateTime}>Original date</th>
-                    <th className={thReason}>Reason</th>
-                    <th className={thDateTime}>New date</th>
-                    <th className={thInterviewer}>Interviewer</th>
-                    <th className={thFollowUp}>Follow-up</th>
-                    <th className={thActions}>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rescheduledPage.slice.length === 0 ? (
-                    <tr>
-                      <td className={tdBase} colSpan={9}>
-                        {emptyState}
-                      </td>
-                    </tr>
-                  ) : (
-                    rescheduledPage.slice.map((i) => {
-                      const pc = i.project_candidates;
-                      if (!pc) return null;
-                      const postRescheduleDraft =
-                        isPostRescheduleDraftRow(i);
-                      const hasZoom = Boolean(i.zoom_link?.trim());
-                      const hasIv = hasAssignedProjectInterviewer(i);
-                      return (
-                        <tr key={i.id}>
-                          <td className={tdName}>
-                            <div className="flex min-w-0 flex-col items-start">
-                              <button
-                                type="button"
-                                className={nameLinkBtn}
-                                onClick={() => setDetail(pc)}
-                              >
-                                {projectDisplayName(pc)}
-                              </button>
-                              {alreadyCompletedFollowupBadge(pc.followup_status)}
-                            </div>
-                          </td>
-                          <td className={tdEmail}>
-                            {pc.email?.trim() || "—"}
-                          </td>
-                          <td className={tdProjTitle}>
-                            {pc.project_title?.trim() || "—"}
-                          </td>
-                          <td className={tdDateTime}>
-                            {formatDateTime(i.previous_scheduled_date)}
-                          </td>
-                          <td
-                            className={`${tdReason} max-w-[220px] truncate`}
-                            title={i.reschedule_reason ?? undefined}
-                          >
-                            {i.reschedule_reason?.trim() || "—"}
-                          </td>
-                          <td className={tdDateTime}>
-                            {formatDateTime(i.scheduled_date)}
-                          </td>
-                          <td className={tdInterviewer}>
-                            {formatInterviewerStoredForUi(i.interviewer)}
-                          </td>
-                          <td className={tdFollowUp}>
-                            {followupBadgeForProjectCandidate(i.project_candidate_id)}
-                          </td>
-                          <td className={tdActions}>
-                            <div className="flex flex-wrap items-center justify-end gap-2">
-                              {postRescheduleDraft ? (
-                                <>
-                                  <button
-                                    type="button"
-                                    disabled={!canEditScheduledTab}
-                                    title={
-                                      !canEditScheduledTab
-                                        ? "View only"
-                                        : undefined
-                                    }
-                                    className="rounded-lg border border-[#d4d4d8] bg-white px-3 py-1.5 text-xs font-medium text-[#1d1d1f] hover:bg-[#fafafa] disabled:cursor-not-allowed disabled:border-[#d1d5db] disabled:text-[#9ca3af]"
-                                    onClick={() =>
-                                      canEditScheduledTab
-                                        ? setEditInterviewFor(i)
-                                        : undefined
-                                    }
-                                  >
-                                    Edit
-                                  </button>
-                                  {!hasIv ? (
-                                    <button
-                                      type="button"
-                                      disabled={!canEditScheduledTab}
-                                      title={
-                                        !canEditScheduledTab
-                                          ? "View only"
-                                          : undefined
-                                      }
-                                      className="rounded-lg bg-[#2563eb] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#1d4ed8] disabled:cursor-not-allowed disabled:bg-[#d1d5db] disabled:text-[#6b7280]"
-                                      onClick={() =>
-                                        canEditScheduledTab
-                                          ? setAssignInterviewerFor(i)
-                                          : undefined
-                                      }
-                                    >
-                                      Assign Interviewer
-                                    </button>
-                                  ) : null}
-                                  {hasIv && !hasZoom ? (
-                                    <button
-                                      type="button"
-                                      disabled={!canEditScheduledTab}
-                                      title={
-                                        !canEditScheduledTab
-                                          ? "View only"
-                                          : undefined
-                                      }
-                                      className="rounded-lg border border-[#1d1d1f] bg-white px-3 py-1.5 text-xs font-medium text-[#1d1d1f] hover:bg-[#fafafa] disabled:cursor-not-allowed disabled:border-[#d1d5db] disabled:text-[#9ca3af]"
-                                      onClick={() =>
-                                        canEditScheduledTab
-                                          ? setAddZoomFor(i)
-                                          : undefined
-                                      }
-                                    >
-                                      Add Zoom details
-                                    </button>
-                                  ) : null}
-                                </>
-                              ) : null}
-                              <button
-                                type="button"
-                                className="rounded-lg bg-[#1d1d1f] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#2d2d2f]"
-                                onClick={() =>
-                                  onRescheduleProjectInterview(
-                                    i,
-                                    "from_rescheduled",
-                                  )
-                                }
-                              >
-                                Schedule again
-                              </button>
-                              <button
-                                type="button"
-                                className="rounded-lg bg-[#16a34a] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#15803d] disabled:cursor-not-allowed disabled:bg-[#d1d5db] disabled:text-[#6b7280]"
-                                disabled={!hasZoom}
-                                title={
-                                  !hasZoom ? "Add Zoom details first" : undefined
-                                }
-                                onClick={() =>
-                                  hasZoom ? onPostProjectInterview(i) : undefined
-                                }
-                              >
-                                Mark completed
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
-            {renderPagination(
-              "rescheduled",
-              rescheduledPage.totalPages,
-              rescheduledPage.total,
             )}
           </div>
         </section>
