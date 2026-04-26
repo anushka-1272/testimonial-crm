@@ -2305,8 +2305,10 @@ export function InterviewsBoard() {
                           scheduledPage.slice.map((i) => {
                             const status = i.interview_status?.trim().toLowerCase();
                             const isDraftRow = status === "draft";
-                            const isScheduledRow = status === "scheduled";
-                            const hasZoomLink = Boolean(i.zoom_link?.trim());
+                            const isCompletedRow = status === "completed";
+                            const hasZoom = Boolean(
+                              i.zoom_link?.trim() || i.zoom_account?.trim(),
+                            );
                             const hasIv = hasAssignedInterviewer(i);
                             return (
                               <tr key={i.id}>
@@ -2399,18 +2401,22 @@ export function InterviewsBoard() {
                                     <button
                                       type="button"
                                       disabled={
-                                        !canEditScheduledTab || !isScheduledRow
+                                        !canEditScheduledTab || isCompletedRow
                                       }
                                       title={
                                         !canEditScheduledTab
                                           ? "View only"
-                                          : !isScheduledRow
-                                            ? "Disabled until scheduled"
+                                          : isCompletedRow
+                                            ? "Already completed"
                                             : undefined
                                       }
                                       className="rounded-lg bg-[#ea580c] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#c2410c] disabled:cursor-not-allowed disabled:bg-[#d1d5db] disabled:text-[#6b7280]"
                                       onClick={() => {
-                                        if (!canEditScheduledTab || !isScheduledRow) return;
+                                        console.debug(
+                                          "[InterviewsBoard] reschedule click",
+                                          i,
+                                        );
+                                        if (!canEditScheduledTab || isCompletedRow) return;
                                         setRescheduleCtx({
                                           interview: i,
                                           mode: "from_scheduled",
@@ -2423,23 +2429,27 @@ export function InterviewsBoard() {
                                       type="button"
                                       disabled={
                                         !canEditScheduledTab ||
-                                        !isScheduledRow ||
-                                        !hasZoomLink ||
+                                        !hasZoom ||
+                                        isCompletedRow ||
                                         completeBusyId === i.id
                                       }
                                       title={
                                         !canEditScheduledTab
                                           ? "View only"
-                                          : !isScheduledRow
-                                            ? "Disabled until scheduled"
-                                            : !hasZoomLink
+                                          : isCompletedRow
+                                            ? "Already completed"
+                                            : !hasZoom
                                               ? "Add Zoom details first"
                                             : undefined
                                       }
                                       className="rounded-lg bg-[#16a34a] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#15803d] disabled:cursor-not-allowed disabled:bg-[#d1d5db] disabled:text-[#6b7280]"
-                                      onClick={() =>
-                                        void handleMarkCompleted(i)
-                                      }
+                                      onClick={() => {
+                                        console.debug(
+                                          "[InterviewsBoard] mark completed click",
+                                          i,
+                                        );
+                                        void handleMarkCompleted(i);
+                                      }}
                                     >
                                       {completeBusyId === i.id
                                         ? "Marking..."
@@ -2581,20 +2591,35 @@ export function InterviewsBoard() {
                                     type="button"
                                     disabled={
                                       !canEditRescheduledTab ||
-                                      !Boolean(i.zoom_link?.trim()) ||
+                                      !Boolean(
+                                        i.zoom_link?.trim() ||
+                                          i.zoom_account?.trim(),
+                                      ) ||
+                                      i.interview_status?.trim().toLowerCase() ===
+                                        "completed" ||
                                       completeBusyId === i.id
                                     }
                                     title={
                                       !canEditRescheduledTab
                                         ? "View only"
-                                        : !i.zoom_link?.trim()
+                                        : i.interview_status?.trim().toLowerCase() ===
+                                            "completed"
+                                          ? "Already completed"
+                                          : !(
+                                                i.zoom_link?.trim() ||
+                                                i.zoom_account?.trim()
+                                              )
                                           ? "Add Zoom details first"
                                           : undefined
                                     }
                                     className="rounded-lg bg-[#16a34a] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#15803d] disabled:cursor-not-allowed disabled:bg-[#d1d5db] disabled:text-[#6b7280]"
                                     onClick={() =>
                                       canEditRescheduledTab
-                                        ? void handleMarkCompleted(i)
+                                        ? (console.debug(
+                                            "[InterviewsBoard] mark completed click",
+                                            i,
+                                          ),
+                                          void handleMarkCompleted(i))
                                         : undefined
                                     }
                                   >
