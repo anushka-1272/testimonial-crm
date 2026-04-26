@@ -747,23 +747,28 @@ export function PostInterviewDrawer({
               ) : null}
             </div>
 
-            {eligible === true && shippingRequired(rewardChoice) ? (
-              <label className="block text-sm">
-                <span className="text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
-                  Shipping address
+            <label className="block text-sm">
+              <span className="text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
+                Shipping address
+                {eligible === true && shippingRequired(rewardChoice) ? (
                   <span className="ml-1 font-normal normal-case text-[#dc2626]">
                     *
                   </span>
-                </span>
-                <textarea
-                  rows={3}
-                  placeholder="Full mailing address for dispatch"
-                  className={inp}
-                  value={shippingAddress}
-                  onChange={(e) => setShippingAddress(e.target.value)}
-                />
-              </label>
-            ) : null}
+                ) : null}
+              </span>
+              <textarea
+                rows={3}
+                placeholder={
+                  eligible === true && shippingRequired(rewardChoice)
+                    ? "Full mailing address for dispatch"
+                    : "Set Post-interview Eligible = Yes and choose a dispatch reward"
+                }
+                className={inp}
+                disabled={!(eligible === true && shippingRequired(rewardChoice))}
+                value={shippingAddress}
+                onChange={(e) => setShippingAddress(e.target.value)}
+              />
+            </label>
           </div>
 
           <div className="border-t border-[#f5f5f5] px-5 py-3">
