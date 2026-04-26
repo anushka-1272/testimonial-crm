@@ -41,6 +41,9 @@ import {
 } from "@/lib/team-roster";
 
 import { PostInterviewDrawer } from "./post-interview-drawer";
+import {
+  isPostRescheduleDraftRow,
+} from "./interview-reschedule-workflow";
 import { RescheduleInterviewModal } from "./reschedule-interview-modal";
 import { AssignInterviewerModal } from "./assign-interviewer-modal";
 import { EditInterviewDetailsModal } from "./edit-interview-details-modal";
@@ -875,6 +878,12 @@ export function InterviewsBoard() {
     for (const i of interviews) {
       switch (i.interview_status) {
         case "draft":
+          if (isPostRescheduleDraftRow(i)) {
+            m.rescheduled.push(i);
+          } else {
+            m.scheduled.push(i);
+          }
+          break;
         case "scheduled":
           m.scheduled.push(i);
           break;
@@ -974,7 +983,11 @@ export function InterviewsBoard() {
   );
 
   const filterInterviews = useCallback(
-    (rows: InterviewWithCandidate[], f: TableFilters) =>
+    (
+      rows: InterviewWithCandidate[],
+      f: TableFilters,
+      opts?: { applyZoomFilter?: boolean },
+    ) =>
       rows.filter((i) => {
         if (f.interviewType !== "all" && i.interview_type !== f.interviewType)
           return false;
@@ -986,7 +999,8 @@ export function InterviewsBoard() {
           )
         )
           return false;
-        if (f.zoomStatus !== "all") {
+        const applyZoom = opts?.applyZoomFilter !== false;
+        if (applyZoom && f.zoomStatus !== "all") {
           const z = zoomPipelineFilterKey(i);
           if (z !== f.zoomStatus) return false;
         }
@@ -1060,14 +1074,16 @@ export function InterviewsBoard() {
 
   const rescheduledFiltered = useMemo(
     () =>
-      [...filterInterviews(byStatus.rescheduled, filters.rescheduled)].sort(
-        (a, b) => {
-          const dateA = new Date(a.scheduled_date || 0).getTime();
-          const dateB = new Date(b.scheduled_date || 0).getTime();
-          const cmp = dateA - dateB;
-          return cmp !== 0 ? cmp : a.id.localeCompare(b.id);
-        },
-      ),
+      [
+        ...filterInterviews(byStatus.rescheduled, filters.rescheduled, {
+          applyZoomFilter: false,
+        }),
+      ].sort((a, b) => {
+        const dateA = new Date(a.scheduled_date || 0).getTime();
+        const dateB = new Date(b.scheduled_date || 0).getTime();
+        const cmp = dateA - dateB;
+        return cmp !== 0 ? cmp : a.id.localeCompare(b.id);
+      }),
     [byStatus.rescheduled, filters.rescheduled, filterInterviews],
   );
 
@@ -2558,100 +2574,164 @@ export function InterviewsBoard() {
                             </td>
                           </tr>
                         ) : (
-                          rescheduledPage.slice.map((i) => (
-                            <tr key={i.id}>
-                              <td className={tdName}>
-                                <button
-                                  type="button"
-                                  className={nameLinkBtn}
-                                  onClick={() =>
-                                    setDetailCandidateId(i.candidate_id)
-                                  }
+                          rescheduledPage.slice.map((i) => {
+                            const postRescheduleDraft =
+                              isPostRescheduleDraftRow(i);
+                            const hasZoom = Boolean(
+                              i.zoom_link?.trim() || i.zoom_account?.trim(),
+                            );
+                            const hasIv = hasAssignedInterviewer(i);
+                            const isCompletedRow =
+                              i.interview_status?.trim().toLowerCase() ===
+                              "completed";
+                            return (
+                              <tr key={i.id}>
+                                <td className={tdName}>
+                                  <button
+                                    type="button"
+                                    className={nameLinkBtn}
+                                    onClick={() =>
+                                      setDetailCandidateId(i.candidate_id)
+                                    }
+                                  >
+                                    {i.candidates?.full_name?.trim() || "—"}
+                                  </button>
+                                </td>
+                                <td className={tdEmail}>
+                                  {i.candidates?.email}
+                                </td>
+                                <td className={tdInterviewType}>
+                                  <div className="flex items-center justify-center">
+                                    {interviewTypeBadge(i.interview_type)}
+                                  </div>
+                                </td>
+                                <td className={tdDateTime}>
+                                  {formatDateTime(i.previous_scheduled_date)}
+                                </td>
+                                <td
+                                  className={`${tdReason} max-w-[220px] truncate`}
+                                  title={i.reschedule_reason ?? undefined}
                                 >
-                                  {i.candidates?.full_name?.trim() || "—"}
-                                </button>
-                              </td>
-                              <td className={tdEmail}>
-                                {i.candidates?.email}
-                              </td>
-                              <td className={tdInterviewType}>
-                                <div className="flex items-center justify-center">
-                                  {interviewTypeBadge(i.interview_type)}
-                                </div>
-                              </td>
-                              <td className={tdDateTime}>
-                                {formatDateTime(i.previous_scheduled_date)}
-                              </td>
-                              <td
-                                className={`${tdReason} max-w-[220px] truncate`}
-                                title={i.reschedule_reason ?? undefined}
-                              >
-                                {i.reschedule_reason?.trim() || "—"}
-                              </td>
-                              <td className={tdDateTime}>
-                                {formatDateTime(i.scheduled_date)}
-                              </td>
-                              <td className={tdInterviewer}>
-                                {formatInterviewerStoredForUi(i.interviewer)}
-                              </td>
-                              <td className={tdActions}>
-                                <div className="flex flex-wrap items-center justify-end gap-2">
-                                  <button
-                                    type="button"
-                                    disabled={!canEditRescheduledTab}
-                                    className="rounded-lg bg-[#1d1d1f] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#2d2d2f]"
-                                    onClick={() =>
-                                      canEditRescheduledTab
-                                        ? setRescheduleCtx({
-                                            interview: i,
-                                            mode: "from_rescheduled",
-                                          })
-                                        : undefined
-                                    }
-                                  >
-                                    Schedule again
-                                  </button>
-                                  <button
-                                    type="button"
-                                    disabled={
-                                      !canEditRescheduledTab ||
-                                      !Boolean(
-                                        i.zoom_link?.trim() ||
-                                          i.zoom_account?.trim(),
-                                      ) ||
-                                      i.interview_status?.trim().toLowerCase() ===
-                                        "completed"
-                                    }
-                                    title={
-                                      !canEditRescheduledTab
-                                        ? "View only"
-                                        : i.interview_status?.trim().toLowerCase() ===
-                                            "completed"
-                                          ? "Already completed"
-                                          : !(
-                                                i.zoom_link?.trim() ||
-                                                i.zoom_account?.trim()
-                                              )
-                                          ? "Add Zoom details first"
+                                  {i.reschedule_reason?.trim() || "—"}
+                                </td>
+                                <td className={tdDateTime}>
+                                  {formatDateTime(i.scheduled_date)}
+                                </td>
+                                <td className={tdInterviewer}>
+                                  {formatInterviewerStoredForUi(i.interviewer)}
+                                </td>
+                                <td className={tdActions}>
+                                  <div className="flex flex-wrap items-center justify-end gap-2">
+                                    {postRescheduleDraft ? (
+                                      <>
+                                        <button
+                                          type="button"
+                                          disabled={!canEditRescheduledTab}
+                                          title={
+                                            !canEditRescheduledTab
+                                              ? "View only"
+                                              : undefined
+                                          }
+                                          className="rounded-lg border border-[#d4d4d8] bg-white px-3 py-1.5 text-xs font-medium text-[#1d1d1f] hover:bg-[#fafafa] disabled:cursor-not-allowed disabled:border-[#d1d5db] disabled:text-[#9ca3af]"
+                                          onClick={() =>
+                                            canEditRescheduledTab
+                                              ? setEditInterviewFor(i)
+                                              : undefined
+                                          }
+                                        >
+                                          Edit
+                                        </button>
+                                        {!hasIv ? (
+                                          <button
+                                            type="button"
+                                            disabled={!canEditRescheduledTab}
+                                            title={
+                                              !canEditRescheduledTab
+                                                ? "View only"
+                                                : undefined
+                                            }
+                                            className="rounded-lg bg-[#2563eb] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#1d4ed8] disabled:cursor-not-allowed disabled:bg-[#d1d5db] disabled:text-[#6b7280]"
+                                            onClick={() =>
+                                              canEditRescheduledTab
+                                                ? setAssignInterviewerFor(i)
+                                                : undefined
+                                            }
+                                          >
+                                            Assign Interviewer
+                                          </button>
+                                        ) : null}
+                                        {hasIv && !hasZoom ? (
+                                          <button
+                                            type="button"
+                                            disabled={!canEditRescheduledTab}
+                                            title={
+                                              !canEditRescheduledTab
+                                                ? "View only"
+                                                : undefined
+                                            }
+                                            className="rounded-lg border border-[#1d1d1f] bg-white px-3 py-1.5 text-xs font-medium text-[#1d1d1f] hover:bg-[#fafafa] disabled:cursor-not-allowed disabled:border-[#d1d5db] disabled:text-[#9ca3af]"
+                                            onClick={() =>
+                                              canEditRescheduledTab
+                                                ? setAddZoomFor(i)
+                                                : undefined
+                                            }
+                                          >
+                                            Add Zoom details
+                                          </button>
+                                        ) : null}
+                                      </>
+                                    ) : null}
+                                    <button
+                                      type="button"
+                                      disabled={!canEditRescheduledTab}
+                                      className="rounded-lg bg-[#1d1d1f] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#2d2d2f]"
+                                      onClick={() =>
+                                        canEditRescheduledTab
+                                          ? setRescheduleCtx({
+                                              interview: i,
+                                              mode: "from_rescheduled",
+                                            })
                                           : undefined
-                                    }
-                                    className="rounded-lg bg-[#16a34a] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#15803d] disabled:cursor-not-allowed disabled:bg-[#d1d5db] disabled:text-[#6b7280]"
-                                    onClick={() =>
-                                      canEditRescheduledTab
-                                        ? (console.debug(
-                                            "[InterviewsBoard] mark completed click",
-                                            i,
-                                          ),
-                                          openCompleteModal(i))
-                                        : undefined
-                                    }
-                                  >
-                                    Mark completed
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                          ))
+                                      }
+                                    >
+                                      Schedule again
+                                    </button>
+                                    <button
+                                      type="button"
+                                      disabled={
+                                        !canEditRescheduledTab ||
+                                        !hasZoom ||
+                                        isCompletedRow
+                                      }
+                                      title={
+                                        !canEditRescheduledTab
+                                          ? "View only"
+                                          : isCompletedRow
+                                            ? "Already completed"
+                                            : !hasZoom
+                                              ? "Add Zoom details first"
+                                              : undefined
+                                      }
+                                      className="rounded-lg bg-[#16a34a] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#15803d] disabled:cursor-not-allowed disabled:bg-[#d1d5db] disabled:text-[#6b7280]"
+                                      onClick={() =>
+                                        canEditRescheduledTab &&
+                                        hasZoom &&
+                                        !isCompletedRow
+                                          ? (console.debug(
+                                              "[InterviewsBoard] mark completed click",
+                                              i,
+                                            ),
+                                            openCompleteModal(i))
+                                          : undefined
+                                      }
+                                    >
+                                      Mark completed
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })
                         )}
                       </tbody>
                     </table>

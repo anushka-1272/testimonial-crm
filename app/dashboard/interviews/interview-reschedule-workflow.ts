@@ -69,13 +69,21 @@ export function buildRescheduleDraftPatch(input: {
   };
 }
 
+/**
+ * Draft created by the reschedule flow: `interview_status` stays `draft` while
+ * interviewer/zoom are cleared. We persist the reason on every reschedule; we
+ * also persist the prior slot when it existed. Either signal distinguishes this
+ * from a brand-new draft from Eligible (no reason, no previous slot).
+ */
 export function isPostRescheduleDraftRow(row: {
   interview_status?: string | null;
   previous_scheduled_date?: string | null;
+  reschedule_reason?: string | null;
 }): boolean {
+  if (row.interview_status !== "draft") return false;
   return (
-    row.interview_status === "draft" &&
-    Boolean(row.previous_scheduled_date?.trim())
+    Boolean(row.previous_scheduled_date?.trim()) ||
+    Boolean(row.reschedule_reason?.trim())
   );
 }
 

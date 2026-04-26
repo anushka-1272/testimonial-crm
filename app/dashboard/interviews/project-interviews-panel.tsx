@@ -23,6 +23,7 @@ import {
 
 import { AssignInterviewerModal } from "./assign-interviewer-modal";
 import { EditInterviewDetailsModal } from "./edit-interview-details-modal";
+import { isPostRescheduleDraftRow } from "./interview-reschedule-workflow";
 import {
   followupStatusBadgeFromSnapshot,
   getFollowUpStatus,
@@ -559,6 +560,12 @@ export function ProjectInterviewsPanel({
     for (const i of interviews) {
       switch (i.interview_status) {
         case "draft":
+          if (isPostRescheduleDraftRow(i)) {
+            m.rescheduled.push(i);
+          } else {
+            m.scheduled.push(i);
+          }
+          break;
         case "scheduled":
           m.scheduled.push(i);
           break;
@@ -1458,6 +1465,10 @@ export function ProjectInterviewsPanel({
                     rescheduledPage.slice.map((i) => {
                       const pc = i.project_candidates;
                       if (!pc) return null;
+                      const postRescheduleDraft =
+                        isPostRescheduleDraftRow(i);
+                      const hasZoom = Boolean(i.zoom_link?.trim());
+                      const hasIv = hasAssignedProjectInterviewer(i);
                       return (
                         <tr key={i.id}>
                           <td className={tdName}>
@@ -1498,6 +1509,65 @@ export function ProjectInterviewsPanel({
                           </td>
                           <td className={tdActions}>
                             <div className="flex flex-wrap items-center justify-end gap-2">
+                              {postRescheduleDraft ? (
+                                <>
+                                  <button
+                                    type="button"
+                                    disabled={!canEditScheduledTab}
+                                    title={
+                                      !canEditScheduledTab
+                                        ? "View only"
+                                        : undefined
+                                    }
+                                    className="rounded-lg border border-[#d4d4d8] bg-white px-3 py-1.5 text-xs font-medium text-[#1d1d1f] hover:bg-[#fafafa] disabled:cursor-not-allowed disabled:border-[#d1d5db] disabled:text-[#9ca3af]"
+                                    onClick={() =>
+                                      canEditScheduledTab
+                                        ? setEditInterviewFor(i)
+                                        : undefined
+                                    }
+                                  >
+                                    Edit
+                                  </button>
+                                  {!hasIv ? (
+                                    <button
+                                      type="button"
+                                      disabled={!canEditScheduledTab}
+                                      title={
+                                        !canEditScheduledTab
+                                          ? "View only"
+                                          : undefined
+                                      }
+                                      className="rounded-lg bg-[#2563eb] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#1d4ed8] disabled:cursor-not-allowed disabled:bg-[#d1d5db] disabled:text-[#6b7280]"
+                                      onClick={() =>
+                                        canEditScheduledTab
+                                          ? setAssignInterviewerFor(i)
+                                          : undefined
+                                      }
+                                    >
+                                      Assign Interviewer
+                                    </button>
+                                  ) : null}
+                                  {hasIv && !hasZoom ? (
+                                    <button
+                                      type="button"
+                                      disabled={!canEditScheduledTab}
+                                      title={
+                                        !canEditScheduledTab
+                                          ? "View only"
+                                          : undefined
+                                      }
+                                      className="rounded-lg border border-[#1d1d1f] bg-white px-3 py-1.5 text-xs font-medium text-[#1d1d1f] hover:bg-[#fafafa] disabled:cursor-not-allowed disabled:border-[#d1d5db] disabled:text-[#9ca3af]"
+                                      onClick={() =>
+                                        canEditScheduledTab
+                                          ? setAddZoomFor(i)
+                                          : undefined
+                                      }
+                                    >
+                                      Add Zoom details
+                                    </button>
+                                  ) : null}
+                                </>
+                              ) : null}
                               <button
                                 type="button"
                                 className="rounded-lg bg-[#1d1d1f] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#2d2d2f]"
@@ -1512,8 +1582,14 @@ export function ProjectInterviewsPanel({
                               </button>
                               <button
                                 type="button"
-                                className="rounded-lg bg-[#16a34a] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#15803d]"
-                                onClick={() => onPostProjectInterview(i)}
+                                className="rounded-lg bg-[#16a34a] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#15803d] disabled:cursor-not-allowed disabled:bg-[#d1d5db] disabled:text-[#6b7280]"
+                                disabled={!hasZoom}
+                                title={
+                                  !hasZoom ? "Add Zoom details first" : undefined
+                                }
+                                onClick={() =>
+                                  hasZoom ? onPostProjectInterview(i) : undefined
+                                }
                               >
                                 Mark completed
                               </button>

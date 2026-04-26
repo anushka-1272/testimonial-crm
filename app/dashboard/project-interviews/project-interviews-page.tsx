@@ -13,6 +13,7 @@ import {
   ScheduleInterviewModal,
   type ScheduleProjectCandidate,
 } from "../interviews/schedule-interview-modal";
+import { isPostRescheduleDraftRow } from "../interviews/interview-reschedule-workflow";
 import type { ProjectInterviewWithProjectCandidate } from "../interviews/types";
 
 const cardChrome =
@@ -37,7 +38,7 @@ async function loadProjectPipelineStats(
       .order("created_at", { ascending: true }),
     supabase
       .from("project_interviews")
-      .select("project_candidate_id, interview_status"),
+      .select("project_candidate_id, interview_status, previous_scheduled_date"),
   ]);
 
   const interviews = piRows ?? [];
@@ -65,11 +66,16 @@ async function loadProjectPipelineStats(
     if (qualifiesPending) pending++;
   }
 
-  const scheduled = interviews.filter(
-    (r) => r.interview_status === "scheduled" || r.interview_status === "draft",
-  ).length;
+  const scheduled = interviews.filter((r) => {
+    if (r.interview_status === "scheduled") return true;
+    if (r.interview_status === "draft" && !isPostRescheduleDraftRow(r))
+      return true;
+    return false;
+  }).length;
   const rescheduled = interviews.filter(
-    (r) => r.interview_status === "rescheduled",
+    (r) =>
+      r.interview_status === "rescheduled" ||
+      isPostRescheduleDraftRow(r),
   ).length;
   const completed = interviews.filter((r) => r.interview_status === "completed")
     .length;
