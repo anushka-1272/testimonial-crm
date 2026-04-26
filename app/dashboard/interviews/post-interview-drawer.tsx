@@ -222,7 +222,11 @@ export function PostInterviewDrawer({
 
   useEffect(() => {
     if (!open || !interview) return;
-    setEligible(null);
+    setEligible(
+      typeof interview.post_interview_eligible === "boolean"
+        ? interview.post_interview_eligible
+        : null,
+    );
     setError(null);
     setSelectedCategories(
       isProjectInterviewRow(interview)

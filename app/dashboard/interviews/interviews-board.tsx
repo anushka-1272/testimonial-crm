@@ -608,6 +608,8 @@ export function InterviewsBoard() {
     (role === "admin" || role === "interviewer" || role === "operations");
   const canEditRescheduledTab =
     canEditCurrentPage && (role === "admin" || role === "interviewer");
+  const canEditCompletedTab =
+    canEditCurrentPage && (role === "admin" || role === "interviewer");
   const [eligibleQueue, setEligibleQueue] = useState<EligibleCandidate[]>([]);
   const [interviews, setInterviews] = useState<InterviewWithCandidate[]>([]);
   const [loading, setLoading] = useState(true);
@@ -663,6 +665,7 @@ export function InterviewsBoard() {
     null,
   );
   const [postProdBusyId, setPostProdBusyId] = useState<string | null>(null);
+  const [incompleteBusyId, setIncompleteBusyId] = useState<string | null>(null);
   const [liBusyId, setLiBusyId] = useState<string | null>(null);
   const [linkedInListPage, setLinkedInListPage] = useState(0);
   const [pocRoster, setPocRoster] = useState<string[]>([]);
@@ -1224,6 +1227,50 @@ export function InterviewsBoard() {
     setSelectedInterview(interview);
     setIsCompleteModalOpen(true);
   }, []);
+
+  const handleMarkIncomplete = useCallback(
+    async (interview: InterviewWithCandidate) => {
+      if (!supabase) return;
+      const ok = window.confirm(
+        "Mark this interview as incomplete and move it back to Scheduled?\n\nThis will clear post-interview details.",
+      );
+      if (!ok) return;
+      setError(null);
+      setIncompleteBusyId(interview.id);
+      try {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        const token = session?.access_token;
+        if (!token) {
+          setError("You must be signed in.");
+          return;
+        }
+        const response = await fetch(`/api/interviews/${interview.id}/incomplete`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+        const payload = (await response.json().catch(() => ({}))) as {
+          error?: string;
+        };
+        if (!response.ok) {
+          setError(payload.error ?? "Could not mark interview incomplete.");
+          return;
+        }
+        setToastMessage("Interview moved back to scheduled.");
+        setCompletedPopoverId(null);
+        await loadData();
+      } catch (e) {
+        console.error("Mark incomplete failed", e);
+        setError("Network error while marking interview incomplete.");
+      } finally {
+        setIncompleteBusyId(null);
+      }
+    },
+    [supabase, loadData],
+  );
 
   const handlePocChange = async (candidate: EligibleCandidate, value: string) => {
     if (!supabase) return;
@@ -2994,15 +3041,44 @@ export function InterviewsBoard() {
                                             </dd>
                                           </div>
                                         </dl>
-                                        <button
-                                          type="button"
-                                          className="mt-4 text-xs font-medium text-[#3b82f6] hover:text-[#2563eb]"
-                                          onClick={() =>
-                                            setCompletedPopoverId(null)
-                                          }
-                                        >
-                                          Close
-                                        </button>
+                                        <div className="mt-4 flex flex-wrap items-center gap-2">
+                                          <button
+                                            type="button"
+                                            disabled={!canEditCompletedTab}
+                                            className="rounded-lg border border-[#d4d4d8] bg-white px-2.5 py-1 text-xs font-medium text-[#1d1d1f] hover:bg-[#fafafa] disabled:cursor-not-allowed disabled:border-[#d1d5db] disabled:text-[#9ca3af]"
+                                            onClick={() => {
+                                              if (!canEditCompletedTab) return;
+                                              setCompletedPopoverId(null);
+                                              openCompleteModal(i);
+                                            }}
+                                          >
+                                            Edit Details
+                                          </button>
+                                          <button
+                                            type="button"
+                                            disabled={
+                                              !canEditCompletedTab ||
+                                              incompleteBusyId === i.id
+                                            }
+                                            className="rounded-lg bg-[#dc2626] px-2.5 py-1 text-xs font-medium text-white hover:bg-[#b91c1c] disabled:cursor-not-allowed disabled:bg-[#d1d5db] disabled:text-[#6b7280]"
+                                            onClick={() =>
+                                              void handleMarkIncomplete(i)
+                                            }
+                                          >
+                                            {incompleteBusyId === i.id
+                                              ? "Reverting..."
+                                              : "Mark Incomplete"}
+                                          </button>
+                                          <button
+                                            type="button"
+                                            className="text-xs font-medium text-[#3b82f6] hover:text-[#2563eb]"
+                                            onClick={() =>
+                                              setCompletedPopoverId(null)
+                                            }
+                                          >
+                                            Close
+                                          </button>
+                                        </div>
                                       </div>
                                     ) : null}
                                   </div>
