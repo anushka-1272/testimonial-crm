@@ -40,6 +40,7 @@ import {
   mergeRosterWithCurrent,
 } from "@/lib/team-roster";
 
+import { PostInterviewDrawer } from "./post-interview-drawer";
 import { RescheduleInterviewModal } from "./reschedule-interview-modal";
 import { AssignInterviewerModal } from "./assign-interviewer-modal";
 import { EditInterviewDetailsModal } from "./edit-interview-details-modal";
@@ -617,6 +618,9 @@ export function InterviewsBoard() {
   );
   const [scheduleProjectFor, setScheduleProjectFor] =
     useState<ScheduleProjectCandidate | null>(null);
+  const [isCompleteModalOpen, setIsCompleteModalOpen] = useState(false);
+  const [selectedInterview, setSelectedInterview] =
+    useState<InterviewWithCandidate | null>(null);
   const [rescheduleCtx, setRescheduleCtx] = useState<{
     interview: InterviewWithCandidate;
     mode: "from_scheduled" | "from_rescheduled";
@@ -659,7 +663,6 @@ export function InterviewsBoard() {
     null,
   );
   const [postProdBusyId, setPostProdBusyId] = useState<string | null>(null);
-  const [completeBusyId, setCompleteBusyId] = useState<string | null>(null);
   const [liBusyId, setLiBusyId] = useState<string | null>(null);
   const [linkedInListPage, setLinkedInListPage] = useState(0);
   const [pocRoster, setPocRoster] = useState<string[]>([]);
@@ -1216,45 +1219,11 @@ export function InterviewsBoard() {
     [supabase, loadData],
   );
 
-  const handleMarkCompleted = useCallback(
-    async (interview: InterviewWithCandidate) => {
-      if (!supabase) return;
-      setError(null);
-      setCompleteBusyId(interview.id);
-      try {
-        const {
-          data: { session },
-        } = await supabase.auth.getSession();
-        const token = session?.access_token;
-        if (!token) {
-          setError("You must be signed in.");
-          return;
-        }
-
-        const response = await fetch(`/api/interviews/${interview.id}/complete`, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
-        const payload = (await response.json().catch(() => ({}))) as {
-          error?: string;
-        };
-        if (!response.ok) {
-          setError(payload.error ?? "Could not mark interview as completed.");
-          return;
-        }
-        setToastMessage("Interview marked completed.");
-        await loadData();
-      } catch (e) {
-        console.error("Mark completed failed", e);
-        setError("Network error while marking interview completed.");
-      } finally {
-        setCompleteBusyId(null);
-      }
-    },
-    [supabase, loadData],
-  );
+  const openCompleteModal = useCallback((interview: InterviewWithCandidate) => {
+    console.debug("[InterviewsBoard] open complete modal", interview);
+    setSelectedInterview(interview);
+    setIsCompleteModalOpen(true);
+  }, []);
 
   const handlePocChange = async (candidate: EligibleCandidate, value: string) => {
     if (!supabase) return;
@@ -2430,8 +2399,7 @@ export function InterviewsBoard() {
                                       disabled={
                                         !canEditScheduledTab ||
                                         !hasZoom ||
-                                        isCompletedRow ||
-                                        completeBusyId === i.id
+                                        isCompletedRow
                                       }
                                       title={
                                         !canEditScheduledTab
@@ -2448,12 +2416,10 @@ export function InterviewsBoard() {
                                           "[InterviewsBoard] mark completed click",
                                           i,
                                         );
-                                        void handleMarkCompleted(i);
+                                        openCompleteModal(i);
                                       }}
                                     >
-                                      {completeBusyId === i.id
-                                        ? "Marking..."
-                                        : "Mark completed"}
+                                      Mark completed
                                     </button>
                                   </div>
                                 </td>
@@ -2596,8 +2562,7 @@ export function InterviewsBoard() {
                                           i.zoom_account?.trim(),
                                       ) ||
                                       i.interview_status?.trim().toLowerCase() ===
-                                        "completed" ||
-                                      completeBusyId === i.id
+                                        "completed"
                                     }
                                     title={
                                       !canEditRescheduledTab
@@ -2619,13 +2584,11 @@ export function InterviewsBoard() {
                                             "[InterviewsBoard] mark completed click",
                                             i,
                                           ),
-                                          void handleMarkCompleted(i))
+                                          openCompleteModal(i))
                                         : undefined
                                     }
                                   >
-                                    {completeBusyId === i.id
-                                      ? "Marking..."
-                                      : "Mark completed"}
+                                    Mark completed
                                   </button>
                                 </div>
                               </td>
@@ -3156,6 +3119,19 @@ export function InterviewsBoard() {
         supabase={supabase}
         onClose={() => setRescheduleCtx(null)}
         onSaved={() => void loadData()}
+      />
+
+      <PostInterviewDrawer
+        key={selectedInterview?.id ?? "post-closed"}
+        open={isCompleteModalOpen}
+        interview={selectedInterview}
+        supabase={supabase}
+        onClose={() => {
+          setIsCompleteModalOpen(false);
+          setSelectedInterview(null);
+        }}
+        onSaved={() => void loadData()}
+        onToast={(msg) => setToastMessage(msg)}
       />
 
     </>
