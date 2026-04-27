@@ -392,6 +392,39 @@ function projectCandidateFromRow(
   return one ?? null;
 }
 
+function rowCandidateDisplayName(row: PostProductionRow): string | null {
+  const ivRaw = row.interviews;
+  const interview = Array.isArray(ivRaw) ? (ivRaw[0] ?? null) : (ivRaw ?? null);
+  const ivCandRaw = interview?.candidates;
+  const interviewCandidate = Array.isArray(ivCandRaw)
+    ? (ivCandRaw[0] ?? null)
+    : (ivCandRaw ?? null);
+
+  const pivRaw = row.project_interviews;
+  const projectInterview = Array.isArray(pivRaw) ? (pivRaw[0] ?? null) : (pivRaw ?? null);
+  const piCandRaw = projectInterview?.project_candidates;
+  const projectInterviewCandidate = Array.isArray(piCandRaw)
+    ? (piCandRaw[0] ?? null)
+    : (piCandRaw ?? null);
+  const projectCandidateFallback = projectCandidateFromRow(row);
+
+  if (row.source_type === "project") {
+    return (
+      trimOrNull(projectInterviewCandidate?.full_name) ??
+      trimOrNull(projectCandidateFallback?.full_name) ??
+      trimOrNull(row.candidate_name) ??
+      trimOrNull(projectInterviewCandidate?.email) ??
+      trimOrNull(projectCandidateFallback?.email)
+    );
+  }
+
+  return (
+    trimOrNull(interviewCandidate?.full_name) ??
+    trimOrNull(row.candidate_name) ??
+    trimOrNull(interviewCandidate?.email)
+  );
+}
+
 const cardChrome =
   "rounded-2xl bg-white shadow-[0_4px_16px_rgba(0,0,0,0.08)] border border-[#f0f0f0]";
 
@@ -701,7 +734,8 @@ export function PostProductionDashboard() {
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return rows.filter((r) => {
-      const name = (r.candidate_name ?? "").toLowerCase();
+      const resolvedName = rowCandidateDisplayName(r);
+      const name = (resolvedName ?? r.candidate_name ?? "").toLowerCase();
       if (q && !name.includes(q)) return false;
       if (sourceFilter !== "all" && r.source_type !== sourceFilter)
         return false;
@@ -1878,7 +1912,8 @@ export function PostProductionDashboard() {
                     ) : (
                       filtered.map((row) => {
                         const busy = savingId === row.id;
-                        const nameClickable = Boolean(row.candidate_name?.trim());
+                        const displayName = rowCandidateDisplayName(row);
+                        const nameClickable = Boolean(displayName);
                         return (
                           <tr key={row.id}>
                             <td className={`${td} ${ppCol.name}`}>
@@ -1886,14 +1921,14 @@ export function PostProductionDashboard() {
                                 <button
                                   type="button"
                                   className="block max-w-full truncate text-left font-medium text-[#3b82f6] hover:underline"
-                                  title={row.candidate_name?.trim() || undefined}
+                                  title={displayName ?? undefined}
                                   onClick={() => void openNameDetail(row)}
                                 >
-                                  {row.candidate_name?.trim() || "—"}
+                                  {displayName ?? "—"}
                                 </button>
                               ) : (
                                 <span className="block max-w-full truncate">
-                                  {row.candidate_name?.trim() || "—"}
+                                  {displayName ?? "—"}
                                 </span>
                               )}
                             </td>
