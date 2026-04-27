@@ -16,6 +16,7 @@ export type InterviewWithCandidate = {
   interviewer_assigned_at: string | null;
   zoom_link: string | null;
   zoom_account: string | null;
+  not_eligible_recording_link: string | null;
   language: string | null;
   interview_language: string | null;
   invitation_sent: boolean | null;
@@ -153,6 +154,7 @@ export type ProjectInterviewWithProjectCandidate = {
   interviewer_assigned_at: string | null;
   zoom_link: string | null;
   zoom_account: string | null;
+  not_eligible_recording_link: string | null;
   language: string | null;
   invitation_sent: boolean | null;
   poc: string | null;

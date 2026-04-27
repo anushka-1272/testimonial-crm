@@ -61,12 +61,12 @@ import type {
 
 const PAGE_SIZE = 20;
 
-const INTERVIEW_SELECT = `id, candidate_id, scheduled_date, previous_scheduled_date, reschedule_reason, completed_at, interviewer, interviewer_assigned_at, zoom_link, zoom_account, language, interview_language, invitation_sent, poc, remarks, reminder_count, interview_status, post_interview_eligible, reward_item, category, funnel, comments, interview_type, candidates ( id, created_at, full_name, email, whatsapp_number, poc_assigned, is_deleted )`;
+const INTERVIEW_SELECT = `id, candidate_id, scheduled_date, previous_scheduled_date, reschedule_reason, completed_at, interviewer, interviewer_assigned_at, zoom_link, zoom_account, not_eligible_recording_link, language, interview_language, invitation_sent, poc, remarks, reminder_count, interview_status, post_interview_eligible, reward_item, category, funnel, comments, interview_type, candidates ( id, created_at, full_name, email, whatsapp_number, poc_assigned, is_deleted )`;
 
 const cardChrome =
   "rounded-2xl bg-white shadow-[0_4px_16px_rgba(0,0,0,0.08)] border border-[#f0f0f0]";
 
-type BoardTab = "eligible" | "scheduled" | "completed";
+type BoardTab = "eligible" | "scheduled" | "completed" | "notEligible";
 
 type InterviewTypeFilter = "all" | "testimonial" | "project";
 
@@ -589,6 +589,8 @@ function normalizeInterviewRow(
       (r.interviewer_assigned_at as string | null | undefined) ?? null,
     reward_item: (r.reward_item as string | null) ?? null,
     zoom_account: (r.zoom_account as string | null | undefined) ?? null,
+    not_eligible_recording_link:
+      (r.not_eligible_recording_link as string | null | undefined) ?? null,
     interview_language: (r.interview_language as string | null | undefined) ?? null,
     candidates: candidate,
   } as InterviewWithCandidate;
@@ -650,6 +652,7 @@ export function InterviewsBoard() {
   const [filters, setFilters] = useState<Record<SimpleTab, TableFilters>>({
     eligible: emptyFilters(),
     scheduled: emptyFilters(),
+    notEligible: emptyFilters(),
   });
   const [completedFilters, setCompletedFilters] = useState<CompletedTabFilters>(
     defaultCompletedFilters,
@@ -658,6 +661,13 @@ export function InterviewsBoard() {
     null,
   );
   const [postProdBusyId, setPostProdBusyId] = useState<string | null>(null);
+  const [notEligibleRecordingBusyId, setNotEligibleRecordingBusyId] = useState<
+    string | null
+  >(null);
+  const [notEligibleRecordingEdit, setNotEligibleRecordingEdit] = useState<{
+    id: string;
+    value: string;
+  } | null>(null);
   const [incompleteBusyId, setIncompleteBusyId] = useState<string | null>(null);
   const [liBusyId, setLiBusyId] = useState<string | null>(null);
   const [linkedInListPage, setLinkedInListPage] = useState(0);
@@ -843,6 +853,10 @@ export function InterviewsBoard() {
   }, [activeTab]);
 
   useEffect(() => {
+    if (activeTab !== "notEligible") setNotEligibleRecordingEdit(null);
+  }, [activeTab]);
+
+  useEffect(() => {
     if (!completedPopoverId) return;
     const onDocClick = (e: MouseEvent) => {
       const el = e.target as HTMLElement | null;
@@ -863,10 +877,15 @@ export function InterviewsBoard() {
     const m = {
       scheduled: [] as InterviewWithCandidate[],
       completed: [] as InterviewWithCandidate[],
+      notEligible: [] as InterviewWithCandidate[],
     };
     for (const i of interviews) {
       if (isCompletedInterview(i)) {
-        m.completed.push(i);
+        if (i.post_interview_eligible === false) {
+          m.notEligible.push(i);
+        } else {
+          m.completed.push(i);
+        }
         continue;
       }
       const st = (i.interview_status ?? "").trim().toLowerCase();
@@ -881,6 +900,7 @@ export function InterviewsBoard() {
       eligible: eligibleQueue.length,
       scheduled: byStatus.scheduled.length,
       completed: byStatus.completed.length,
+      notEligible: byStatus.notEligible.length,
     }),
     [eligibleQueue.length, byStatus],
   );
@@ -1064,6 +1084,19 @@ export function InterviewsBoard() {
     [byStatus.completed, completedFilters],
   );
 
+  const notEligibleFiltered = useMemo(
+    () =>
+      [...filterInterviews(byStatus.notEligible, filters.notEligible)].sort(
+        (a, b) => {
+          const dateA = new Date(a.completed_at || 0).getTime();
+          const dateB = new Date(b.completed_at || 0).getTime();
+          const cmp = dateB - dateA;
+          return cmp !== 0 ? cmp : a.id.localeCompare(b.id);
+        },
+      ),
+    [byStatus.notEligible, filters.notEligible, filterInterviews],
+  );
+
   const paginate = <T,>(rows: T[], page: number) => {
     const start = page * PAGE_SIZE;
     return {
@@ -1095,6 +1128,10 @@ export function InterviewsBoard() {
   const completedPage = useMemo(
     () => paginate(completedFiltered, completedFilters.page),
     [completedFiltered, completedFilters.page],
+  );
+  const notEligiblePage = useMemo(
+    () => paginate(notEligibleFiltered, filters.notEligible.page),
+    [notEligibleFiltered, filters.notEligible.page],
   );
 
   const exportCompletedCsv = useCallback(() => {
@@ -1197,6 +1234,36 @@ export function InterviewsBoard() {
       void loadData();
     },
     [supabase, loadData],
+  );
+
+  const saveNotEligibleRecordingLink = useCallback(
+    async (interviewId: string, rawValue: string) => {
+      if (!supabase || !canEditCompletedTab) return;
+      const next = rawValue.trim() || null;
+      setError(null);
+      setNotEligibleRecordingBusyId(interviewId);
+      const { error: updateError } = await supabase
+        .from("interviews")
+        .update({ not_eligible_recording_link: next })
+        .eq("id", interviewId);
+      setNotEligibleRecordingBusyId(null);
+      if (updateError) {
+        setError(updateError.message);
+        return;
+      }
+      setInterviews((prev) =>
+        prev.map((row) =>
+          row.id === interviewId
+            ? { ...row, not_eligible_recording_link: next }
+            : row,
+        ),
+      );
+      setNotEligibleRecordingEdit((prev) =>
+        prev?.id === interviewId ? null : prev,
+      );
+      setToastMessage("Not eligible recording saved.");
+    },
+    [supabase, canEditCompletedTab],
   );
 
   const openCompleteModal = useCallback((interview: InterviewWithCandidate) => {
@@ -1618,7 +1685,7 @@ export function InterviewsBoard() {
           <p className="text-sm text-[#6e6e73]">Loading…</p>
         ) : (
           <>
-            <section className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-3 lg:gap-4">
+            <section className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
               {(
                 [
                   {
@@ -1638,6 +1705,12 @@ export function InterviewsBoard() {
                     label: "Completed",
                     value: counts.completed,
                     accent: "bg-[#059669]",
+                  },
+                  {
+                    key: "notEligible",
+                    label: "Not eligible",
+                    value: counts.notEligible,
+                    accent: "bg-[#dc2626]",
                   },
                 ] as const
               ).map((card) => (
@@ -1660,6 +1733,7 @@ export function InterviewsBoard() {
                     ["eligible", "Eligible", counts.eligible],
                     ["scheduled", "Scheduled", counts.scheduled],
                     ["completed", "Completed", counts.completed],
+                    ["notEligible", "Not eligible", counts.notEligible],
                   ] as const
                 ).map(([id, label, n]) => (
                   <button
@@ -2549,7 +2623,6 @@ export function InterviewsBoard() {
                       >
                         <option value="all">All</option>
                         <option value="eligible">Eligible</option>
-                        <option value="not_eligible">Not eligible</option>
                       </select>
                     </label>
                     <label className="flex flex-col gap-1">
@@ -2902,6 +2975,232 @@ export function InterviewsBoard() {
                     "completed",
                     completedPage.totalPages,
                     completedPage.total,
+                  )}
+                </div>
+              </section>
+            )}
+
+            {activeTab === "notEligible" && (
+              <section className="space-y-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                  <label className="flex min-w-0 flex-1 flex-col gap-1">
+                    <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+                      Search
+                    </span>
+                    <input
+                      type="search"
+                      placeholder="Name or email"
+                      className={filterInp}
+                      value={filters.notEligible.search}
+                      onChange={(e) =>
+                        updateFilter("notEligible", { search: e.target.value })
+                      }
+                    />
+                  </label>
+                  <label className="flex w-full flex-col gap-1 sm:w-48 sm:shrink-0">
+                    <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+                      Interview type
+                    </span>
+                    <select
+                      className={filterInp}
+                      value={filters.notEligible.interviewType}
+                      onChange={(e) =>
+                        updateFilter("notEligible", {
+                          interviewType: e.target.value as InterviewTypeFilter,
+                        })
+                      }
+                    >
+                      <option value="all">All</option>
+                      <option value="testimonial">Testimonial</option>
+                      <option value="project">Project</option>
+                    </select>
+                  </label>
+                </div>
+
+                <div className={tableWrap}>
+                  <div className="w-full min-w-0 max-w-full overflow-x-auto">
+                    <table className="w-full min-w-[1540px] table-auto border-collapse">
+                      <thead>
+                        <tr>
+                          <th className={thName}>Name</th>
+                          <th className={thEmail}>Email</th>
+                          <th className={thInterviewType}>Interview type</th>
+                          <th className={thCompletedOn}>Completed on</th>
+                          <th className={thInterviewer}>Interviewer</th>
+                          <th className={thZoomStatus}>Zoom</th>
+                          <th className={thCommentsCol}>Recording</th>
+                          <th className={thCommentsCol}>Comments</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {notEligiblePage.slice.length === 0 ? (
+                          <tr>
+                            <td className={tdBase} colSpan={8}>
+                              {emptyState}
+                            </td>
+                          </tr>
+                        ) : (
+                          notEligiblePage.slice.map((i) => {
+                            const zoomLink = i.zoom_link?.trim() ?? "";
+                            const zoomAccount = i.zoom_account?.trim() ?? "";
+                            const recordingLink =
+                              i.not_eligible_recording_link?.trim() ?? "";
+                            const isEditingRecording =
+                              notEligibleRecordingEdit?.id === i.id;
+                            const commentsPreview = truncateWithTooltip(
+                              i.comments,
+                              40,
+                            );
+                            return (
+                              <tr key={i.id}>
+                                <td className={tdName}>
+                                  <button
+                                    type="button"
+                                    className={nameLinkBtn}
+                                    onClick={() =>
+                                      setDetailCandidateId(i.candidate_id)
+                                    }
+                                  >
+                                    {i.candidates?.full_name?.trim() || "—"}
+                                  </button>
+                                </td>
+                                <td className={tdEmail}>
+                                  {i.candidates?.email || "—"}
+                                </td>
+                                <td className={tdInterviewType}>
+                                  <div className="flex items-center justify-center">
+                                    {interviewTypeBadge(i.interview_type)}
+                                  </div>
+                                </td>
+                                <td className={tdCompletedOn}>
+                                  {formatDateTime(i.completed_at)}
+                                </td>
+                                <td className={tdInterviewer}>
+                                  {formatInterviewerStoredForUi(i.interviewer)}
+                                </td>
+                                <td className={tdZoomStatus}>
+                                  <div className="flex flex-col items-start gap-2">
+                                    {zoomAccount ? (
+                                      <p className="text-xs text-[#6e6e73]">
+                                        Account: {zoomAccount}
+                                      </p>
+                                    ) : (
+                                      <span className="text-[#6e6e73]">—</span>
+                                    )}
+                                    {zoomLink ? (
+                                      <a
+                                        href={zoomLink}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="inline-flex rounded-lg border border-[#e5e5e5] bg-white px-2.5 py-1 text-xs font-medium text-[#1d1d1f] transition-colors hover:bg-[#f5f5f7]"
+                                      >
+                                        Join
+                                      </a>
+                                    ) : null}
+                                  </div>
+                                </td>
+                                <td className={tdCommentsCol}>
+                                  {isEditingRecording ? (
+                                    <div className="flex w-full min-w-0 max-w-[260px] flex-col gap-2">
+                                      <input
+                                        type="url"
+                                        className="w-full rounded-lg border border-[#e5e5e5] px-2 py-1 text-xs"
+                                        placeholder="Paste recording link"
+                                        value={notEligibleRecordingEdit.value}
+                                        onChange={(e) =>
+                                          setNotEligibleRecordingEdit({
+                                            id: i.id,
+                                            value: e.target.value,
+                                          })
+                                        }
+                                      />
+                                      <div className="flex items-center gap-2">
+                                        <button
+                                          type="button"
+                                          disabled={
+                                            !canEditCompletedTab ||
+                                            notEligibleRecordingBusyId === i.id
+                                          }
+                                          className="rounded bg-[#1d1d1f] px-2 py-0.5 text-[11px] font-medium text-white disabled:opacity-50"
+                                          onClick={() =>
+                                            void saveNotEligibleRecordingLink(
+                                              i.id,
+                                              notEligibleRecordingEdit.value,
+                                            )
+                                          }
+                                        >
+                                          Save
+                                        </button>
+                                        <button
+                                          type="button"
+                                          className="text-[11px] text-[#6e6e73] underline"
+                                          onClick={() =>
+                                            setNotEligibleRecordingEdit(null)
+                                          }
+                                        >
+                                          Cancel
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ) : recordingLink ? (
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <a
+                                        href={recordingLink}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="inline-flex rounded-lg border border-[#e5e5e5] bg-white px-2 py-1 text-xs font-medium text-[#1d1d1f] hover:bg-[#f5f5f7]"
+                                      >
+                                        View
+                                      </a>
+                                      <button
+                                        type="button"
+                                        disabled={!canEditCompletedTab}
+                                        className="text-xs font-medium text-[#3b82f6] hover:text-[#2563eb] disabled:opacity-50"
+                                        onClick={() =>
+                                          setNotEligibleRecordingEdit({
+                                            id: i.id,
+                                            value: recordingLink,
+                                          })
+                                        }
+                                      >
+                                        Edit
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      disabled={!canEditCompletedTab}
+                                      className="rounded border border-[#e5e5e5] bg-[#fafafa] px-2 py-1 text-xs font-medium text-[#6e6e73] hover:bg-[#f0f0f0] disabled:opacity-50"
+                                      onClick={() =>
+                                        setNotEligibleRecordingEdit({
+                                          id: i.id,
+                                          value: "",
+                                        })
+                                      }
+                                    >
+                                      Add recording
+                                    </button>
+                                  )}
+                                </td>
+                                <td
+                                  className={tdCommentsCol}
+                                  title={commentsPreview.title}
+                                >
+                                  <span className="block max-w-[200px] truncate">
+                                    {commentsPreview.display}
+                                  </span>
+                                </td>
+                              </tr>
+                            );
+                          })
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                  {renderPagination(
+                    "notEligible",
+                    notEligiblePage.totalPages,
+                    notEligiblePage.total,
                   )}
                 </div>
               </section>
