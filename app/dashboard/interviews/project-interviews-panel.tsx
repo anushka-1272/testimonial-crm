@@ -1265,8 +1265,7 @@ export function ProjectInterviewsPanel({
                               ) : (
                                 <span className="text-[#6e6e73]">—</span>
                               )}
-                              {isScheduledRow &&
-                              i.zoom_account?.trim() ? (
+                              {zoomAdded && i.zoom_account?.trim() ? (
                                 <p className="text-xs text-[#6e6e73]">
                                   Account: {i.zoom_account.trim()}
                                 </p>
