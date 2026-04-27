@@ -62,6 +62,7 @@ import type {
 const PAGE_SIZE = 20;
 
 const INTERVIEW_SELECT = `id, candidate_id, scheduled_date, previous_scheduled_date, reschedule_reason, completed_at, interviewer, interviewer_assigned_at, zoom_link, zoom_account, not_eligible_recording_link, language, interview_language, invitation_sent, poc, remarks, reminder_count, interview_status, post_interview_eligible, reward_item, category, funnel, comments, interview_type, candidates ( id, created_at, full_name, email, whatsapp_number, poc_assigned, is_deleted )`;
+const INTERVIEW_SELECT_LEGACY = `id, candidate_id, scheduled_date, previous_scheduled_date, reschedule_reason, completed_at, interviewer, interviewer_assigned_at, zoom_link, zoom_account, language, interview_language, invitation_sent, poc, remarks, reminder_count, interview_status, post_interview_eligible, reward_item, category, funnel, comments, interview_type, candidates ( id, created_at, full_name, email, whatsapp_number, poc_assigned, is_deleted )`;
 
 const cardChrome =
   "rounded-2xl bg-white shadow-[0_4px_16px_rgba(0,0,0,0.08)] border border-[#f0f0f0]";
@@ -686,26 +687,38 @@ export function InterviewsBoard() {
 
   const loadData = useCallback(async () => {
     if (!supabase) return;
-    const [{ data: elig, error: e1 }, { data: inv, error: e2 }] =
-      await Promise.all([
-        supabase
-          .from("candidates")
-          .select(
-            "id, created_at, full_name, email, whatsapp_number, interview_type, poc_assigned, poc_assigned_at, assigned_at, linkedin_track, linkedin_track_status, followup_status, followup_count, callback_datetime, not_interested_reason, not_interested_at",
-          )
-          .eq("is_deleted", false)
-          .eq("eligibility_status", "eligible")
-          .order("created_at", { ascending: true }),
-        supabase.from("interviews").select(INTERVIEW_SELECT),
-      ]);
+    const { data: elig, error: e1 } = await supabase
+      .from("candidates")
+      .select(
+        "id, created_at, full_name, email, whatsapp_number, interview_type, poc_assigned, poc_assigned_at, assigned_at, linkedin_track, linkedin_track_status, followup_status, followup_count, callback_datetime, not_interested_reason, not_interested_at",
+      )
+      .eq("is_deleted", false)
+      .eq("eligibility_status", "eligible")
+      .order("created_at", { ascending: true });
+    const { data: inv, error: e2 } = await supabase
+      .from("interviews")
+      .select(INTERVIEW_SELECT);
+    let interviewRows = (inv as Record<string, unknown>[] | null) ?? null;
+    let interviewError = e2;
+    if (
+      interviewError?.message?.includes(
+        "column interviews.not_eligible_recording_link does not exist",
+      )
+    ) {
+      const { data: legacyInv, error: legacyErr } = await supabase
+        .from("interviews")
+        .select(INTERVIEW_SELECT_LEGACY);
+      interviewRows = (legacyInv as Record<string, unknown>[] | null) ?? null;
+      interviewError = legacyErr;
+    }
 
-    if (e1 || e2) {
-      setError(e1?.message ?? e2?.message ?? "Failed to load");
+    if (e1 || interviewError) {
+      setError(e1?.message ?? interviewError?.message ?? "Failed to load");
       return;
     }
 
-    const list = (inv ?? [])
-      .map((row) => normalizeInterviewRow(row as Record<string, unknown>))
+    const list = (interviewRows ?? [])
+      .map((row) => normalizeInterviewRow(row))
       .filter((i) => {
         const c = i.candidates;
         const one = c == null ? null : Array.isArray(c) ? c[0] ?? null : c;

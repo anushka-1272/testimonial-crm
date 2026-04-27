@@ -41,6 +41,7 @@ const PAGE_SIZE = 20;
 
 /** Interview rows only — join `project_candidates` client-side so a failed embed never blocks loading candidates. */
 const PROJECT_INTERVIEW_COLUMNS = `id, created_at, project_candidate_id, scheduled_date, previous_scheduled_date, reschedule_reason, completed_at, interviewer, interviewer_assigned_at, zoom_link, zoom_account, not_eligible_recording_link, language, invitation_sent, poc, remarks, reminder_count, interview_status, post_interview_eligible, reward_item, category, funnel, comments, interview_type`;
+const PROJECT_INTERVIEW_COLUMNS_LEGACY = `id, created_at, project_candidate_id, scheduled_date, previous_scheduled_date, reschedule_reason, completed_at, interviewer, interviewer_assigned_at, zoom_link, zoom_account, language, invitation_sent, poc, remarks, reminder_count, interview_status, post_interview_eligible, reward_item, category, funnel, comments, interview_type`;
 
 type ProjectSubTab = "pending" | "scheduled" | "completed" | "notEligible";
 
@@ -387,6 +388,20 @@ export function ProjectInterviewsPanel({
       .from("project_interviews")
       .select(PROJECT_INTERVIEW_COLUMNS)
       .order("created_at", { ascending: true });
+    let projectInterviewRows = pi;
+    let projectInterviewError = eInterviews;
+    if (
+      projectInterviewError?.message?.includes(
+        "column project_interviews.not_eligible_recording_link does not exist",
+      )
+    ) {
+      const { data: legacyPi, error: legacyErr } = await supabase
+        .from("project_interviews")
+        .select(PROJECT_INTERVIEW_COLUMNS_LEGACY)
+        .order("created_at", { ascending: true });
+      projectInterviewRows = legacyPi;
+      projectInterviewError = legacyErr;
+    }
     const { data: fl, error: eFollowup } = await supabase
       .from("followup_log")
       .select(
@@ -395,14 +410,14 @@ export function ProjectInterviewsPanel({
       .not("project_candidate_id", "is", null)
       .order("created_at", { ascending: true });
 
-    if (eInterviews) {
+    if (projectInterviewError) {
       console.log(
         "[ProjectInterviewsPanel] project_interviews load error:",
-        eInterviews,
+        projectInterviewError,
       );
       setInterviews([]);
     } else {
-      const rows = (pi ?? []) as Record<string, unknown>[];
+      const rows = (projectInterviewRows ?? []) as Record<string, unknown>[];
       console.log(
         `[ProjectInterviewsPanel] Loaded ${rows.length} project_interviews from DB (merged with candidates client-side)`,
       );
@@ -427,15 +442,15 @@ export function ProjectInterviewsPanel({
       setFollowupLogs((fl ?? []) as FollowupLogStatusRow[]);
     }
 
-    if (eCandidates && eInterviews) {
+    if (eCandidates && projectInterviewError) {
       onError(
-        `${eCandidates.message} · ${eInterviews.message}`,
+        `${eCandidates.message} · ${projectInterviewError.message}`,
       );
     } else if (eCandidates) {
       onError(eCandidates.message);
-    } else if (eInterviews) {
+    } else if (projectInterviewError) {
       onError(
-        `Could not load project interviews: ${eInterviews.message}. Pending list still uses candidates.`,
+        `Could not load project interviews: ${projectInterviewError.message}. Pending list still uses candidates.`,
       );
     } else if (eFollowup) {
       onError(`Could not load follow-up logs: ${eFollowup.message}.`);
@@ -1279,6 +1294,14 @@ export function ProjectInterviewsPanel({
                       const zoomAdded = hasZoom;
                       const zoomLink = i.zoom_link?.trim() ?? "";
                       const canEditZoom = canEditScheduledTab && !awaitingIv;
+                      const canTakeInterviewActions = hasIv && hasZoom;
+                      const blockedActionTitle = !canEditScheduledTab
+                        ? "View only"
+                        : !hasIv
+                          ? "Assign interviewer first"
+                          : !hasZoom
+                            ? "Add Zoom details first"
+                            : undefined;
                       return (
                         <tr key={i.id}>
                           <td className={tdName}>
@@ -1420,12 +1443,8 @@ export function ProjectInterviewsPanel({
                                       : "from_scheduled",
                                   )
                                 }
-                                disabled={!isScheduledRow}
-                                title={
-                                  !isScheduledRow
-                                    ? "Disabled until Zoom is added"
-                                    : undefined
-                                }
+                                disabled={!canEditScheduledTab || !canTakeInterviewActions}
+                                title={blockedActionTitle}
                               >
                                 Reschedule
                               </button>
@@ -1433,12 +1452,8 @@ export function ProjectInterviewsPanel({
                                 type="button"
                                 className="rounded-lg bg-[#16a34a] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#15803d] disabled:cursor-not-allowed disabled:bg-[#d1d5db] disabled:text-[#6b7280]"
                                 onClick={() => onPostProjectInterview(i)}
-                                disabled={!isScheduledRow}
-                                title={
-                                  !isScheduledRow
-                                    ? "Disabled until Zoom is added"
-                                    : undefined
-                                }
+                                disabled={!canEditScheduledTab || !canTakeInterviewActions}
+                                title={blockedActionTitle}
                               >
                                 Mark completed
                               </button>
