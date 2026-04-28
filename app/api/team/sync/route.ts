@@ -18,6 +18,27 @@ async function verifyRequestUser(request: Request) {
   return getUserSafe(supabase);
 }
 
+type TeamRole =
+  | "admin"
+  | "interviewer"
+  | "poc"
+  | "operations"
+  | "post_production"
+  | "viewer";
+
+function normalizeRosterRole(raw: string | null | undefined): TeamRole {
+  const role = raw?.trim();
+  if (
+    role === "interviewer" ||
+    role === "poc" ||
+    role === "operations" ||
+    role === "post_production"
+  ) {
+    return role;
+  }
+  return "viewer";
+}
+
 export async function POST(request: Request) {
   try {
     const user = await verifyRequestUser(request);
@@ -69,7 +90,11 @@ export async function POST(request: Request) {
 
     const currentByEmail = new Map<
       string,
-      { id: string; email: string; user_id: string | null; full_name: string | null }
+      {
+        id: string | null;
+        user_id: string | null;
+        full_name: string | null;
+      }
     >();
     for (const row of (currentRows ?? []) as Array<{
       id: string;
@@ -79,22 +104,81 @@ export async function POST(request: Request) {
     }>) {
       const email = row.email.trim().toLowerCase();
       if (!email) continue;
-      currentByEmail.set(email, row);
+      currentByEmail.set(email, {
+        id: row.id,
+        user_id: row.user_id,
+        full_name: row.full_name,
+      });
+    }
+
+    const authByEmail = new Map<
+      string,
+      { id: string; full_name: string | null }
+    >();
+    for (const authUser of allAuthUsers) {
+      const email = authUser.email?.trim().toLowerCase() ?? "";
+      if (!email) continue;
+      const fullNameRaw = authUser.user_metadata?.name;
+      const fullName =
+        typeof fullNameRaw === "string" && fullNameRaw.trim()
+          ? fullNameRaw.trim()
+          : null;
+      authByEmail.set(email, {
+        id: authUser.id,
+        full_name: fullName,
+      });
+    }
+
+    const { data: rosterRows, error: rosterErr } = await admin
+      .from("team_roster")
+      .select("email, name, role_type, is_active")
+      .not("email", "is", null);
+    if (rosterErr) {
+      return NextResponse.json({ error: rosterErr.message }, { status: 400 });
     }
 
     const nowIso = new Date().toISOString();
     const toInsert: Array<{
-      user_id: string;
+      user_id: string | null;
       email: string;
       full_name: string | null;
-      role: "viewer";
+      role: TeamRole;
       invited_by: string;
       invited_at: string;
-      status: "active";
+      status: "active" | "removed";
     }> = [];
     const toBackfill: Array<{ id: string; user_id: string; full_name: string | null }> = [];
+    let insertedFromRoster = 0;
     let skipped = 0;
 
+    for (const row of (rosterRows ?? []) as Array<{
+      email: string | null;
+      name: string | null;
+      role_type: string | null;
+      is_active: boolean;
+    }>) {
+      const email = row.email?.trim().toLowerCase() ?? "";
+      if (!email) continue;
+      if (currentByEmail.has(email)) continue;
+      const auth = authByEmail.get(email);
+      toInsert.push({
+        user_id: auth?.id ?? null,
+        email,
+        full_name: row.name?.trim() || auth?.full_name || null,
+        role: normalizeRosterRole(row.role_type),
+        invited_by: user.id,
+        invited_at: nowIso,
+        status: row.is_active ? "active" : "removed",
+      });
+      currentByEmail.set(email, {
+        id: null,
+        user_id: auth?.id ?? null,
+        full_name: row.name?.trim() || auth?.full_name || null,
+      });
+      insertedFromRoster += 1;
+    }
+
+    let insertedFromAuth = 0;
     for (const authUser of allAuthUsers) {
       const email = authUser.email?.trim().toLowerCase() ?? "";
       if (!email) {
@@ -117,9 +201,15 @@ export async function POST(request: Request) {
           invited_at: nowIso,
           status: "active",
         });
+        currentByEmail.set(email, {
+          id: null,
+          user_id: authUser.id,
+          full_name: fullName,
+        });
+        insertedFromAuth += 1;
         continue;
       }
-      if (!existing.user_id) {
+      if (existing.id && !existing.user_id) {
         toBackfill.push({
           id: existing.id,
           user_id: authUser.id,
@@ -157,9 +247,11 @@ export async function POST(request: Request) {
       action_type: "settings",
       entity_type: "team_member",
       candidate_name: null,
-      description: `Admin ${actorName} synced ${toInsert.length} auth users into Team`,
+      description: `Admin ${actorName} synced Team members from auth and roster`,
       metadata: {
-        inserted: toInsert.length,
+        inserted_total: toInsert.length,
+        inserted_from_auth: insertedFromAuth,
+        inserted_from_roster: insertedFromRoster,
         backfilled,
         skipped,
         auth_total: allAuthUsers.length,
@@ -169,6 +261,8 @@ export async function POST(request: Request) {
     return NextResponse.json({
       ok: true,
       inserted: toInsert.length,
+      inserted_from_auth: insertedFromAuth,
+      inserted_from_roster: insertedFromRoster,
       backfilled,
       skipped,
       auth_total: allAuthUsers.length,
