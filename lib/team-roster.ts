@@ -32,10 +32,17 @@ export function teamMemberDisplayName(row: {
   full_name: string | null | undefined;
   email: string | null | undefined;
 }): string {
-  const email = row.email?.trim() ?? "";
-  if (email) return email;
   const n = row.full_name?.trim() ?? "";
-  return n;
+  if (n) return n;
+  const email = row.email?.trim() ?? "";
+  if (!email) return "";
+  const local = email.split("@")[0] ?? "";
+  if (!local) return email;
+  return local
+    .split(/[._-]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 }
 
 export function mergeRosterWithCurrent(
@@ -109,7 +116,7 @@ async function fetchLegacyTeamRosterNames(
   const rows = (data ?? []) as Array<{ name: string | null; email: string | null }>;
   return normalizeNames(
     rows.map((row) => ({
-      name: row.email?.trim() || row.name,
+      name: row.name?.trim() || teamMemberDisplayName({ full_name: null, email: row.email }),
     })),
   );
 }
