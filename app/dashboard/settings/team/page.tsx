@@ -72,6 +72,7 @@ export default function TeamSettingsPage() {
   const [invitePassword, setInvitePassword] = useState("");
   const [inviteRole, setInviteRole] = useState<TeamRole>("viewer");
   const [submitting, setSubmitting] = useState(false);
+  const [syncing, setSyncing] = useState(false);
 
   const roleFromRoster = (role: string): TeamRole | null => {
     if (
@@ -240,6 +241,47 @@ export default function TeamSettingsPage() {
     }
   };
 
+  const syncMembers = async () => {
+    const user = await getUserSafe(supabase);
+    if (!user) {
+      setError("You must be signed in.");
+      return;
+    }
+    setSyncing(true);
+    setError(null);
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      const res = await fetch("/api/team/sync", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session?.access_token ?? ""}`,
+        },
+      });
+      const j = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        inserted?: number;
+        backfilled?: number;
+      };
+      if (!res.ok) {
+        setError(j.error ?? "Failed to sync members");
+        return;
+      }
+      const inserted = Number(j.inserted ?? 0);
+      const backfilled = Number(j.backfilled ?? 0);
+      setToast(
+        inserted || backfilled
+          ? `Sync complete: ${inserted} added, ${backfilled} linked.`
+          : "Sync complete: no new users found.",
+      );
+      await loadMembers(false);
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   const changeRole = async (id: string, role: TeamRole) => {
     if (id.startsWith("roster:")) {
       setError("This member exists only in roster. Add them in Team to manage access.");
@@ -325,13 +367,23 @@ export default function TeamSettingsPage() {
               </span>
             ) : null}
             {canManageTeam ? (
-              <button
-                type="button"
-                onClick={() => setInviteOpen(true)}
-                className="rounded-xl bg-[#1d1d1f] px-4 py-2 text-sm font-medium text-white hover:bg-[#2d2d2f]"
-              >
-                Add Member
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={() => void syncMembers()}
+                  disabled={syncing}
+                  className="rounded-xl border border-[#e5e5e5] bg-white px-4 py-2 text-sm font-medium text-[#1d1d1f] hover:bg-[#fafafa] disabled:opacity-50"
+                >
+                  {syncing ? "Syncing..." : "Sync Members"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setInviteOpen(true)}
+                  className="rounded-xl bg-[#1d1d1f] px-4 py-2 text-sm font-medium text-white hover:bg-[#2d2d2f]"
+                >
+                  Add Member
+                </button>
+              </>
             ) : null}
           </div>
         </div>
