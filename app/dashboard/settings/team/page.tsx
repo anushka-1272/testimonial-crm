@@ -43,6 +43,14 @@ function initials(name: string | null, email: string): string {
   return email.slice(0, 2).toUpperCase();
 }
 
+function memberSortKey(row: TeamMemberRow): string {
+  const name = row.full_name?.trim().toLowerCase() ?? "";
+  if (name) return name;
+  const email = row.email.trim().toLowerCase();
+  const local = email.split("@")[0] ?? "";
+  return local || email;
+}
+
 function roleBadgeClass(role: TeamRole): string {
   if (role === "admin") return "bg-[#1d1d1f] text-white";
   if (role === "interviewer") return "bg-[#dbeafe] text-[#1d4ed8]";
@@ -78,11 +86,18 @@ export default function TeamSettingsPage() {
     const { data, error: qErr } = await supabase
       .from("team_members")
       .select("id, created_at, user_id, email, full_name, role, invited_at, status")
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: true });
     if (qErr) {
       setError(qErr.message);
     } else {
-      setMembers((data ?? []) as TeamMemberRow[]);
+      const sorted = ((data ?? []) as TeamMemberRow[]).sort((a, b) => {
+        const byName = memberSortKey(a).localeCompare(memberSortKey(b), undefined, {
+          sensitivity: "base",
+        });
+        if (byName !== 0) return byName;
+        return a.email.localeCompare(b.email, undefined, { sensitivity: "base" });
+      });
+      setMembers(sorted);
       setError(null);
     }
     if (showLoading) setLoading(false);
@@ -425,13 +440,19 @@ export default function TeamSettingsPage() {
                                 </option>
                               ))}
                             </select>
-                            <button
-                              type="button"
-                              onClick={() => void removeMember(m)}
-                              className="rounded-lg bg-[#dc2626] px-2.5 py-1.5 text-xs font-medium text-white hover:bg-[#b91c1c]"
-                            >
-                              Remove
-                            </button>
+                            {m.status === "removed" ? (
+                              <span className="rounded-lg bg-[#f3f4f6] px-2.5 py-1.5 text-xs font-medium text-[#6b7280]">
+                                Access Revoked
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => void removeMember(m)}
+                                className="rounded-lg bg-[#dc2626] px-2.5 py-1.5 text-xs font-medium text-white hover:bg-[#b91c1c]"
+                              >
+                                Revoke Access
+                              </button>
+                            )}
                           </div>
                         </td>
                       ) : null}
