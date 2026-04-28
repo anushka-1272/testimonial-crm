@@ -399,7 +399,11 @@ export function ProjectInterviewsPanel({
         .from("project_interviews")
         .select(PROJECT_INTERVIEW_COLUMNS_LEGACY)
         .order("created_at", { ascending: true });
-      projectInterviewRows = legacyPi;
+      projectInterviewRows =
+        legacyPi?.map((row) => ({
+          ...row,
+          not_eligible_recording_link: null,
+        })) ?? null;
       projectInterviewError = legacyErr;
     }
     const { data: fl, error: eFollowup } = await supabase
