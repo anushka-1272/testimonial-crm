@@ -32,12 +32,10 @@ export function teamMemberDisplayName(row: {
   full_name: string | null | undefined;
   email: string | null | undefined;
 }): string {
-  const n = row.full_name?.trim() ?? "";
-  if (n) return n;
   const email = row.email?.trim() ?? "";
-  if (!email) return "";
-  const local = email.split("@")[0] ?? "";
-  return local || email;
+  if (email) return email;
+  const n = row.full_name?.trim() ?? "";
+  return n;
 }
 
 export function mergeRosterWithCurrent(
@@ -97,7 +95,7 @@ async function fetchLegacyTeamRosterNames(
 ): Promise<string[]> {
   let query = supabase
     .from("team_roster")
-    .select("name")
+    .select("name, email")
     .eq("role_type", role)
     .order("display_order", { ascending: true })
     .order("created_at", { ascending: true });
@@ -108,7 +106,12 @@ async function fetchLegacyTeamRosterNames(
 
   const { data, error } = await query;
   if (error) return [];
-  return normalizeNames((data ?? []) as Array<{ name: string | null }>);
+  const rows = (data ?? []) as Array<{ name: string | null; email: string | null }>;
+  return normalizeNames(
+    rows.map((row) => ({
+      name: row.email?.trim() || row.name,
+    })),
+  );
 }
 
 function mergeUniqueNameLists(primary: string[], secondary: string[]): string[] {

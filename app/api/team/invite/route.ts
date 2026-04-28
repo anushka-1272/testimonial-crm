@@ -43,6 +43,7 @@ type InviteBody = {
   full_name?: string;
   email?: string;
   role?: TeamRole;
+  password?: string;
 };
 
 function normalizeRole(raw: unknown): TeamRole | null {
@@ -106,23 +107,24 @@ export async function POST(request: Request) {
     const email = body.email?.trim().toLowerCase();
     const fullName = body.full_name?.trim() || null;
     const role = normalizeRole(body.role);
-    if (!email || !role) {
+    const password = typeof body.password === "string" ? body.password : "";
+    if (!email || !role || password.length < 6) {
       return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
     }
 
-    const inviteRes = await supabaseAdmin.auth.admin.inviteUserByEmail(
+    const createRes = await supabaseAdmin.auth.admin.createUser({
       email,
-      {
-        data: { name: fullName ?? undefined },
-      },
-    );
+      password,
+      email_confirm: true,
+      user_metadata: { name: fullName ?? undefined },
+    });
 
     let targetUserId: string | null = null;
-    let reactivatedExistingAccount = false;
+    let reusedExistingAccount = false;
 
-    if (!inviteRes.error && inviteRes.data.user?.id) {
-      targetUserId = inviteRes.data.user.id;
-    } else if (inviteRes.error && isExistingAuthUserInviteError(inviteRes.error)) {
+    if (!createRes.error && createRes.data.user?.id) {
+      targetUserId = createRes.data.user.id;
+    } else if (createRes.error && isExistingAuthUserInviteError(createRes.error)) {
       const existingId = await authUserIdByEmail(supabaseAdmin, email);
       if (!existingId) {
         return NextResponse.json(
@@ -134,20 +136,33 @@ export async function POST(request: Request) {
         );
       }
       targetUserId = existingId;
-      reactivatedExistingAccount = true;
-    } else if (inviteRes.error) {
+      reusedExistingAccount = true;
+      const { error: pwErr } = await supabaseAdmin.auth.admin.updateUserById(
+        existingId,
+        {
+          password,
+          email_confirm: true,
+          user_metadata: { name: fullName ?? undefined },
+        },
+      );
+      if (pwErr) {
+        return NextResponse.json({ error: pwErr.message }, { status: 400 });
+      }
+    } else if (createRes.error) {
       return NextResponse.json(
-        { error: inviteRes.error.message },
+        { error: createRes.error.message },
         { status: 400 },
       );
     } else {
       return NextResponse.json(
-        { error: "Invite did not return a user id" },
+        { error: "User creation did not return a user id" },
         { status: 400 },
       );
     }
 
-    const { error: upErr } = await supabaseAdmin.from("team_members").upsert(
+    const { data: savedMember, error: upErr } = await supabaseAdmin
+      .from("team_members")
+      .upsert(
       {
         user_id: targetUserId,
         email,
@@ -155,10 +170,12 @@ export async function POST(request: Request) {
         role,
         invited_by: user.id,
         invited_at: new Date().toISOString(),
-        status: reactivatedExistingAccount ? "active" : "invited",
+        status: "active",
       },
       { onConflict: "email" },
-    );
+      )
+      .select("id, created_at, user_id, email, full_name, role, invited_at, status")
+      .single();
     if (upErr) {
       return NextResponse.json({ error: upErr.message }, { status: 400 });
     }
@@ -173,19 +190,19 @@ export async function POST(request: Request) {
       action_type: "settings",
       entity_type: "team_member",
       candidate_name: email,
-      description: reactivatedExistingAccount
-        ? `Admin ${actorName} added ${email} as ${role} (existing account)`
-        : `Admin ${actorName} invited ${email} as ${role}`,
+      description: reusedExistingAccount
+        ? `Admin ${actorName} updated ${email} and granted ${role} access`
+        : `Admin ${actorName} added ${email} as ${role}`,
       metadata: { role },
     });
 
-    if (reactivatedExistingAccount) {
-      return NextResponse.json({
-        ok: true,
-        success: "Member added successfully",
-      });
-    }
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({
+      ok: true,
+      success: reusedExistingAccount
+        ? "Member access updated successfully"
+        : "Member added successfully",
+      member: savedMember,
+    });
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Failed to invite user";

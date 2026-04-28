@@ -2,7 +2,7 @@
 
 import { format, parseISO } from "date-fns";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useAccessControl } from "@/components/access-control-context";
 import { roleLabel, type TeamRole } from "@/lib/access-control";
@@ -68,11 +68,12 @@ export default function TeamSettingsPage() {
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteName, setInviteName] = useState("");
   const [inviteEmail, setInviteEmail] = useState("");
+  const [invitePassword, setInvitePassword] = useState("");
   const [inviteRole, setInviteRole] = useState<TeamRole>("viewer");
   const [submitting, setSubmitting] = useState(false);
 
-  const loadMembers = async () => {
-    setLoading(true);
+  const loadMembers = useCallback(async (showLoading = true) => {
+    if (showLoading) setLoading(true);
     const { data, error: qErr } = await supabase
       .from("team_members")
       .select("id, created_at, user_id, email, full_name, role, invited_at, status")
@@ -83,12 +84,29 @@ export default function TeamSettingsPage() {
       setMembers((data ?? []) as TeamMemberRow[]);
       setError(null);
     }
-    setLoading(false);
-  };
+    if (showLoading) setLoading(false);
+  }, [supabase]);
 
   useEffect(() => {
     void loadMembers();
-  }, []);
+  }, [loadMembers]);
+
+  useEffect(() => {
+    const channel = supabase
+      .channel("team-members-settings")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "team_members" },
+        () => {
+          void loadMembers(false);
+        },
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [loadMembers, supabase]);
 
   useEffect(() => {
     if (!toast) return;
@@ -99,7 +117,14 @@ export default function TeamSettingsPage() {
   const selectedRole = ROLE_OPTIONS.find((r) => r.value === inviteRole);
 
   const inviteMember = async () => {
-    if (!inviteEmail.trim()) return;
+    if (!inviteEmail.trim()) {
+      setError("Email is required.");
+      return;
+    }
+    if (invitePassword.length < 6) {
+      setError("Password must be at least 6 characters.");
+      return;
+    }
     const user = await getUserSafe(supabase);
     if (!user) {
       setError("You must be signed in.");
@@ -120,26 +145,34 @@ export default function TeamSettingsPage() {
         body: JSON.stringify({
           full_name: inviteName.trim() || null,
           email: inviteEmail.trim(),
+          password: invitePassword,
           role: inviteRole,
         }),
       });
       const j = (await res.json().catch(() => ({}))) as {
         error?: string;
         success?: string;
+        member?: TeamMemberRow;
       };
       if (!res.ok) {
         setError(j.error ?? "Failed to invite member");
         setSubmitting(false);
         return;
       }
-      setToast(
-        j.success ?? `Invite sent to ${inviteEmail.trim()}`,
-      );
+      const returnedMember = j.member;
+      if (returnedMember) {
+        setMembers((prev) => [
+          returnedMember,
+          ...prev.filter((m) => m.id !== returnedMember.id),
+        ]);
+      }
+      setToast(j.success ?? `Member added: ${inviteEmail.trim()}`);
       setInviteOpen(false);
       setInviteName("");
       setInviteEmail("");
+      setInvitePassword("");
       setInviteRole("viewer");
-      await loadMembers();
+      await loadMembers(false);
     } finally {
       setSubmitting(false);
     }
@@ -227,7 +260,7 @@ export default function TeamSettingsPage() {
                 onClick={() => setInviteOpen(true)}
                 className="rounded-xl bg-[#1d1d1f] px-4 py-2 text-sm font-medium text-white hover:bg-[#2d2d2f]"
               >
-                Invite Member
+                Add Member
               </button>
             ) : null}
           </div>
@@ -363,7 +396,7 @@ export default function TeamSettingsPage() {
             onClick={() => setInviteOpen(false)}
           />
           <div className={`${modalPanelClass} p-6 shadow-[0_4px_16px_rgba(0,0,0,0.08)]`}>
-            <h2 className="text-lg font-semibold text-[#1d1d1f]">Invite Member</h2>
+            <h2 className="text-lg font-semibold text-[#1d1d1f]">Add Team Member</h2>
             <div className="mt-4 space-y-4">
               <label className="block text-sm">
                 <span className="text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">Full name</span>
@@ -372,6 +405,10 @@ export default function TeamSettingsPage() {
               <label className="block text-sm">
                 <span className="text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">Email</span>
                 <input type="email" className="mt-1 w-full rounded-xl border border-[#e5e5e5] px-3 py-2.5 text-sm" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} />
+              </label>
+              <label className="block text-sm">
+                <span className="text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">Password</span>
+                <input type="password" className="mt-1 w-full rounded-xl border border-[#e5e5e5] px-3 py-2.5 text-sm" value={invitePassword} onChange={(e) => setInvitePassword(e.target.value)} />
               </label>
               <label className="block text-sm">
                 <span className="text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">Role</span>
@@ -383,7 +420,9 @@ export default function TeamSettingsPage() {
                   ))}
                 </select>
               </label>
-              <p className="text-xs text-[#6e6e73]">{selectedRole?.description}</p>
+              <p className="text-xs text-[#6e6e73]">
+                {selectedRole?.description}. No invitation email will be sent.
+              </p>
             </div>
             <div className="mt-6 flex justify-end gap-2">
               <button type="button" className="rounded-xl border border-[#f0f0f0] bg-white px-4 py-2 text-sm font-medium text-[#1d1d1f]" onClick={() => setInviteOpen(false)}>
@@ -395,7 +434,7 @@ export default function TeamSettingsPage() {
                 onClick={() => void inviteMember()}
                 className="rounded-xl bg-[#1d1d1f] px-4 py-2 text-sm font-medium text-white hover:bg-[#2d2d2f] disabled:opacity-50"
               >
-                {submitting ? "Sending..." : "Send Invite"}
+                {submitting ? "Adding..." : "Add Member"}
               </button>
             </div>
           </div>
