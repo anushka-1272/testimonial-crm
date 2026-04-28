@@ -28,6 +28,7 @@ export async function slackEmailForTeamMember(
   const n = name?.trim();
   if (!n) return null;
   const lower = n.toLowerCase();
+  if (lower.includes("@")) return lower;
 
   const { data: teamRows, error: teamErr } = await supabase
     .from("team_members")
@@ -42,22 +43,37 @@ export async function slackEmailForTeamMember(
     }>) {
       const email = row.email?.trim();
       if (!email) continue;
+      const emailLower = email.toLowerCase();
       const fn = row.full_name?.trim().toLowerCase() ?? "";
-      const local = email.split("@")[0]?.toLowerCase() ?? "";
-      if (fn === lower || local === lower) return email;
+      const local = emailLower.split("@")[0] ?? "";
+      if (fn === lower || local === lower || emailLower === lower) return emailLower;
     }
   }
 
   const { data } = await supabase
     .from("team_roster")
-    .select("email")
-    .eq("name", n)
+    .select("name, email")
     .eq("is_active", true)
     .not("email", "is", null)
     .order("display_order", { ascending: true })
-    .limit(1);
+    .limit(1000);
 
-  const legacy = (data?.[0] as { email?: string | null } | undefined)?.email;
-  if (legacy?.trim()) return legacy.trim();
-  return POC_INTERVIEWER_SLACK_EMAILS[n] ?? null;
+  if (data?.length) {
+    for (const row of data as Array<{ name?: string | null; email?: string | null }>) {
+      const email = row.email?.trim().toLowerCase();
+      if (!email) continue;
+      const local = email.split("@")[0] ?? "";
+      const rosterName = row.name?.trim().toLowerCase() ?? "";
+      if (email === lower || local === lower || rosterName === lower) {
+        return email;
+      }
+    }
+  }
+
+  for (const [key, value] of Object.entries(POC_INTERVIEWER_SLACK_EMAILS)) {
+    if (key.toLowerCase() === lower) return value;
+    if (value.toLowerCase() === lower) return value;
+    if ((value.split("@")[0] ?? "").toLowerCase() === lower) return value;
+  }
+  return null;
 }

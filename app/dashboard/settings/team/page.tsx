@@ -22,6 +22,7 @@ type TeamMemberRow = {
   role: TeamRole;
   invited_at: string | null;
   status: "invited" | "active" | "removed";
+  isRosterOnly?: boolean;
 };
 
 const ROLE_OPTIONS: { value: TeamRole; label: string; description: string }[] = [
@@ -72,18 +73,72 @@ export default function TeamSettingsPage() {
   const [inviteRole, setInviteRole] = useState<TeamRole>("viewer");
   const [submitting, setSubmitting] = useState(false);
 
+  const roleFromRoster = (role: string): TeamRole | null => {
+    if (
+      role === "interviewer" ||
+      role === "poc" ||
+      role === "operations" ||
+      role === "post_production"
+    ) {
+      return role;
+    }
+    return null;
+  };
+
   const loadMembers = useCallback(async (showLoading = true) => {
     if (showLoading) setLoading(true);
-    const { data, error: qErr } = await supabase
+    const { data: memberRows, error: memberErr } = await supabase
       .from("team_members")
       .select("id, created_at, user_id, email, full_name, role, invited_at, status")
       .order("created_at", { ascending: false });
-    if (qErr) {
-      setError(qErr.message);
-    } else {
-      setMembers((data ?? []) as TeamMemberRow[]);
-      setError(null);
+
+    const { data: rosterRows, error: rosterErr } = await supabase
+      .from("team_roster")
+      .select("id, created_at, name, email, role_type, is_active")
+      .order("created_at", { ascending: false });
+
+    if (memberErr) {
+      setError(memberErr.message);
+      if (showLoading) setLoading(false);
+      return;
     }
+
+    const fromMembers = (memberRows ?? []) as TeamMemberRow[];
+    const byEmail = new Set(
+      fromMembers.map((m) => m.email.trim().toLowerCase()).filter(Boolean),
+    );
+
+    const fromRosterOnly = ((rosterRows ?? []) as Array<{
+      id: string;
+      created_at: string;
+      name: string | null;
+      email: string | null;
+      role_type: string;
+      is_active: boolean;
+    }>)
+      .map((r): TeamMemberRow | null => {
+        const email = r.email?.trim().toLowerCase() ?? "";
+        if (!email || byEmail.has(email)) return null;
+        const role = roleFromRoster(r.role_type) ?? "viewer";
+        return {
+          id: `roster:${r.id}`,
+          created_at: r.created_at,
+          user_id: null,
+          email,
+          full_name: r.name?.trim() || null,
+          role,
+          invited_at: null,
+          status: r.is_active ? "active" : "removed",
+          isRosterOnly: true,
+        };
+      })
+      .filter((r): r is TeamMemberRow => r != null);
+
+    const merged = [...fromMembers, ...fromRosterOnly].sort((a, b) =>
+      (b.created_at ?? "").localeCompare(a.created_at ?? ""),
+    );
+    setMembers(merged);
+    setError(rosterErr ? `Roster sync warning: ${rosterErr.message}` : null);
     if (showLoading) setLoading(false);
   }, [supabase]);
 
@@ -97,6 +152,13 @@ export default function TeamSettingsPage() {
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "team_members" },
+        () => {
+          void loadMembers(false);
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "team_roster" },
         () => {
           void loadMembers(false);
         },
@@ -179,6 +241,10 @@ export default function TeamSettingsPage() {
   };
 
   const changeRole = async (id: string, role: TeamRole) => {
+    if (id.startsWith("roster:")) {
+      setError("This member exists only in roster. Add them in Team to manage access.");
+      return;
+    }
     const user = await getUserSafe(supabase);
     if (!user) {
       setError("You must be signed in.");
@@ -204,6 +270,10 @@ export default function TeamSettingsPage() {
   };
 
   const removeMember = async (m: TeamMemberRow) => {
+    if (m.isRosterOnly) {
+      setError("This member exists only in roster. Remove from Team Roster page.");
+      return;
+    }
     const user = await getUserSafe(supabase);
     if (!user) {
       setError("You must be signed in.");
@@ -361,6 +431,7 @@ export default function TeamSettingsPage() {
                             <select
                               value={m.role}
                               onChange={(e) => void changeRole(m.id, e.target.value as TeamRole)}
+                              disabled={m.isRosterOnly}
                               className="rounded-lg border border-[#e5e5e5] px-2 py-1.5 text-xs text-[#1d1d1f]"
                             >
                               {ROLE_OPTIONS.map((r) => (
@@ -372,10 +443,14 @@ export default function TeamSettingsPage() {
                             <button
                               type="button"
                               onClick={() => void removeMember(m)}
+                              disabled={m.isRosterOnly}
                               className="rounded-lg bg-[#dc2626] px-2.5 py-1.5 text-xs font-medium text-white hover:bg-[#b91c1c]"
                             >
                               Remove
                             </button>
+                            {m.isRosterOnly ? (
+                              <span className="text-[11px] text-[#6e6e73]">Roster-only</span>
+                            ) : null}
                           </div>
                         </td>
                       ) : null}
