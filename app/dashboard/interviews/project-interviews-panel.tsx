@@ -1724,7 +1724,7 @@ export function ProjectInterviewsPanel({
                                       onClick={() => {
                                         if (!canEditScheduledTab) return;
                                         setCompletedPopoverId(null);
-                                        setEditInterviewFor(i);
+                                        onPostProjectInterview(i);
                                       }}
                                     >
                                       Edit Details
