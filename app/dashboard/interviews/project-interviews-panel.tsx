@@ -1711,13 +1711,32 @@ export function ProjectInterviewsPanel({
                                       </dd>
                                     </div>
                                   </dl>
-                                  <button
-                                    type="button"
-                                    className="mt-4 text-xs font-medium text-[#3b82f6] hover:text-[#2563eb]"
-                                    onClick={() => setCompletedPopoverId(null)}
-                                  >
-                                    Close
-                                  </button>
+                                  <div className="mt-4 flex flex-wrap items-center gap-2">
+                                    <button
+                                      type="button"
+                                      disabled={!canEditScheduledTab}
+                                      title={
+                                        !canEditScheduledTab
+                                          ? "View only"
+                                          : undefined
+                                      }
+                                      className="rounded-lg border border-[#d4d4d8] bg-white px-2.5 py-1 text-xs font-medium text-[#1d1d1f] hover:bg-[#fafafa] disabled:cursor-not-allowed disabled:border-[#d1d5db] disabled:text-[#9ca3af]"
+                                      onClick={() => {
+                                        if (!canEditScheduledTab) return;
+                                        setCompletedPopoverId(null);
+                                        setEditInterviewFor(i);
+                                      }}
+                                    >
+                                      Edit Details
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="text-xs font-medium text-[#3b82f6] hover:text-[#2563eb]"
+                                      onClick={() => setCompletedPopoverId(null)}
+                                    >
+                                      Close
+                                    </button>
+                                  </div>
                                 </div>
                               ) : null}
                             </div>
