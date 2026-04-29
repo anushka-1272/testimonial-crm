@@ -201,6 +201,67 @@ function normalizeProjectInterviewRow(
   } as ProjectInterviewWithProjectCandidate;
 }
 
+function projectInterviewDuplicateKey(
+  i: ProjectInterviewWithProjectCandidate,
+): string {
+  const scheduledAt = (i.scheduled_date ?? "").trim();
+  const type = (i.interview_type ?? "project").trim();
+  const bucket =
+    i.interview_status === "completed" || i.completed_at
+      ? "completed"
+      : "active";
+  return `${i.project_candidate_id}|${scheduledAt}|${type}|${bucket}`;
+}
+
+function projectInterviewQualityScore(
+  i: ProjectInterviewWithProjectCandidate,
+): number {
+  let score = 0;
+  if (i.interviewer?.trim()) score += 1000;
+  if (i.interviewer_assigned_at) score += 100;
+  if ((i.zoom_link ?? "").trim() || (i.zoom_account ?? "").trim())
+    score += 10;
+  if (i.interview_status === "scheduled") score += 5;
+  if (i.interview_status === "rescheduled") score += 3;
+  if (i.interview_status === "draft") score += 1;
+  return score;
+}
+
+function dedupeProjectInterviewRows(
+  rows: ProjectInterviewWithProjectCandidate[],
+): ProjectInterviewWithProjectCandidate[] {
+  const byKey = new Map<string, ProjectInterviewWithProjectCandidate>();
+  for (const row of rows) {
+    const key = projectInterviewDuplicateKey(row);
+    const prev = byKey.get(key);
+    if (!prev) {
+      byKey.set(key, row);
+      continue;
+    }
+    const prevScore = projectInterviewQualityScore(prev);
+    const nextScore = projectInterviewQualityScore(row);
+    if (nextScore > prevScore) {
+      byKey.set(key, row);
+      continue;
+    }
+    if (nextScore < prevScore) continue;
+    const prevTime = new Date(
+      prev.interviewer_assigned_at ??
+        prev.completed_at ??
+        prev.scheduled_date ??
+        0,
+    ).getTime();
+    const nextTime = new Date(
+      row.interviewer_assigned_at ??
+        row.completed_at ??
+        row.scheduled_date ??
+        0,
+    ).getTime();
+    if (nextTime >= prevTime) byKey.set(key, row);
+  }
+  return [...byKey.values()];
+}
+
 const REWARD_NO_DISPATCH = "No Dispatch";
 
 function postInterviewEligibleBadge(
@@ -434,7 +495,7 @@ export function ProjectInterviewsPanel({
           });
         })
         .filter((i) => i.project_candidates != null);
-      setInterviews(merged);
+      setInterviews(dedupeProjectInterviewRows(merged));
     }
     if (eFollowup) {
       console.log(
