@@ -597,6 +597,53 @@ function normalizeInterviewRow(
   } as InterviewWithCandidate;
 }
 
+function interviewDuplicateKey(i: InterviewWithCandidate): string {
+  const scheduledAt = (i.scheduled_date ?? "").trim();
+  const type = (i.interview_type ?? "").trim();
+  const bucket = isCompletedInterview(i) ? "completed" : "active";
+  return `${i.candidate_id}|${scheduledAt}|${type}|${bucket}`;
+}
+
+function interviewQualityScore(i: InterviewWithCandidate): number {
+  let score = 0;
+  if (i.interviewer?.trim()) score += 1000;
+  if (i.interviewer_assigned_at) score += 100;
+  if ((i.zoom_link ?? "").trim() || (i.zoom_account ?? "").trim()) score += 10;
+  if (i.interview_status === "scheduled") score += 5;
+  if (i.interview_status === "rescheduled") score += 3;
+  if (i.interview_status === "draft") score += 1;
+  return score;
+}
+
+function dedupeInterviewRows(
+  rows: InterviewWithCandidate[],
+): InterviewWithCandidate[] {
+  const byKey = new Map<string, InterviewWithCandidate>();
+  for (const row of rows) {
+    const key = interviewDuplicateKey(row);
+    const prev = byKey.get(key);
+    if (!prev) {
+      byKey.set(key, row);
+      continue;
+    }
+    const prevScore = interviewQualityScore(prev);
+    const nextScore = interviewQualityScore(row);
+    if (nextScore > prevScore) {
+      byKey.set(key, row);
+      continue;
+    }
+    if (nextScore < prevScore) continue;
+    const prevTime = new Date(
+      prev.interviewer_assigned_at ?? prev.completed_at ?? prev.scheduled_date ?? 0,
+    ).getTime();
+    const nextTime = new Date(
+      row.interviewer_assigned_at ?? row.completed_at ?? row.scheduled_date ?? 0,
+    ).getTime();
+    if (nextTime >= prevTime) byKey.set(key, row);
+  }
+  return [...byKey.values()];
+}
+
 export function InterviewsBoard() {
   const { role, canEditCurrentPage, showViewOnlyBadge } = useAccessControl();
   const canEditEligibleTab =
@@ -717,13 +764,15 @@ export function InterviewsBoard() {
       return;
     }
 
-    const list = (interviewRows ?? [])
+    const list = dedupeInterviewRows(
+      (interviewRows ?? [])
       .map((row) => normalizeInterviewRow(row))
       .filter((i) => {
         const c = i.candidates;
         const one = c == null ? null : Array.isArray(c) ? c[0] ?? null : c;
         return one != null && !one.is_deleted;
-      });
+      }),
+    );
     const busy = new Set(
       list
         .filter(
