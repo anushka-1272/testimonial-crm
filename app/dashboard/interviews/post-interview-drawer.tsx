@@ -139,6 +139,21 @@ function watiCandidatePhoneAndName(
   };
 }
 
+function missingColumnError(
+  message: string | undefined,
+  table: "dispatch" | "project_dispatch",
+  column: "dispatch_status" | "status",
+): boolean {
+  if (!message) return false;
+  const lower = message.toLowerCase();
+  return (
+    lower.includes(`column '${column}'`) ||
+    lower.includes(`column ${table}.${column}`) ||
+    lower.includes(`column "${table}"."${column}"`) ||
+    lower.includes(`column ${column}`)
+  );
+}
+
 type Props = {
   open: boolean;
   interview:
@@ -418,12 +433,35 @@ export function PostInterviewDrawer({
         rewardItemForDb
       ) {
         if (isProject) {
-          const { error: dErr } = await supabase.from("project_dispatch").insert({
+          const baseDispatch = {
             project_candidate_id: interview.project_candidate_id,
             shipping_address: shippingAddress.trim(),
-            dispatch_status: "pending",
             reward_item: rewardItemForDb,
+          };
+          let { error: dErr } = await supabase.from("project_dispatch").insert({
+            ...baseDispatch,
+            dispatch_status: "pending",
           });
+          if (
+            dErr &&
+            missingColumnError(dErr.message, "project_dispatch", "dispatch_status")
+          ) {
+            // Backward compatibility for environments where project_dispatch still uses `status`.
+            const retryWithStatus = await supabase.from("project_dispatch").insert({
+              ...baseDispatch,
+              status: "pending",
+            });
+            dErr = retryWithStatus.error;
+            if (
+              dErr &&
+              missingColumnError(dErr.message, "project_dispatch", "status")
+            ) {
+              const retryWithoutStatus = await supabase
+                .from("project_dispatch")
+                .insert(baseDispatch);
+              dErr = retryWithoutStatus.error;
+            }
+          }
           if (dErr) {
             setError(dErr.message);
             setSubmitting(false);
