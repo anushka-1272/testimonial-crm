@@ -99,11 +99,28 @@ const ZOOM_STATUS_FILTER_OPTIONS: { value: ZoomStatusFilter; label: string }[] =
     { value: "zoom_added", label: "Zoom Added" },
   ];
 
+/** Sentinel for POC filter dropdown (rows with no POC). */
+const POC_FILTER_UNASSIGNED = "__poc_unassigned__";
+
+function effectivePocForInterview(i: InterviewWithCandidate): string {
+  return i.poc?.trim() || i.candidates?.poc_assigned?.trim() || "";
+}
+
+function pocMatchesFilter(
+  filter: string,
+  rowPoc: string | null | undefined,
+): boolean {
+  if (filter === "all") return true;
+  if (filter === POC_FILTER_UNASSIGNED) return !rowPoc?.trim();
+  return interviewerRowMatchesFilter(filter, rowPoc);
+}
+
 type TableFilters = {
   search: string;
   interviewType: InterviewTypeFilter;
   language: InterviewLanguageFilter;
   zoomStatus: ZoomStatusFilter;
+  poc: string;
   page: number;
 };
 
@@ -124,6 +141,7 @@ const emptyFilters = (): TableFilters => ({
   interviewType: "all",
   language: "all",
   zoomStatus: "all",
+  poc: "all",
   page: 0,
 });
 
@@ -218,6 +236,8 @@ function filterCompletedInterviews(
         f.language,
       )
     )
+      return false;
+    if (!pocMatchesFilter(f.poc, effectivePocForInterview(i)))
       return false;
     const q = f.search.trim().toLowerCase();
     if (q) {
@@ -967,6 +987,21 @@ export function InterviewsBoard() {
     [eligibleQueue.length, byStatus],
   );
 
+  const pocFilterNames = useMemo(() => {
+    const set = new Set<string>(pocRoster);
+    for (const c of eligibleQueue) {
+      const p = c.poc_assigned?.trim();
+      if (p) set.add(p);
+    }
+    for (const i of interviews) {
+      const p = effectivePocForInterview(i);
+      if (p) set.add(p);
+    }
+    return [...set].sort((a, b) =>
+      a.localeCompare(b, undefined, { sensitivity: "base" }),
+    );
+  }, [pocRoster, eligibleQueue, interviews]);
+
   const updateFilter = useCallback(
     (tab: SimpleTab, patch: Partial<Omit<TableFilters, "page">>) => {
       setFilters((prev) => ({
@@ -978,7 +1013,8 @@ export function InterviewsBoard() {
             "search" in patch ||
             "interviewType" in patch ||
             "language" in patch ||
-            "zoomStatus" in patch
+            "zoomStatus" in patch ||
+            "poc" in patch
               ? 0
               : prev[tab].page,
         },
@@ -1033,6 +1069,7 @@ export function InterviewsBoard() {
           c.interview_type !== f.interviewType
         )
           return false;
+        if (!pocMatchesFilter(f.poc, c.poc_assigned)) return false;
         return matchesRowSearch(c.full_name, c.email, f.search);
       }),
     [],
@@ -1055,6 +1092,8 @@ export function InterviewsBoard() {
           const z = zoomPipelineFilterKey(i);
           if (z !== f.zoomStatus) return false;
         }
+        if (!pocMatchesFilter(f.poc, effectivePocForInterview(i)))
+          return false;
         const name = i.candidates?.full_name;
         const email = i.candidates?.email;
         return matchesRowSearch(name, email, f.search);
@@ -1107,6 +1146,7 @@ export function InterviewsBoard() {
   }, [
     filters.eligible.search,
     filters.eligible.interviewType,
+    filters.eligible.poc,
     linkedInTrackFiltered.length,
   ]);
 
@@ -1819,7 +1859,7 @@ export function InterviewsBoard() {
 
             {activeTab === "eligible" && (
               <section className="space-y-4">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
                   <label className="flex min-w-0 flex-1 flex-col gap-1">
                     <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
                       Search
@@ -1834,25 +1874,49 @@ export function InterviewsBoard() {
                       }
                     />
                   </label>
-                  <label className="flex w-full flex-col gap-1 sm:w-48 sm:shrink-0">
-                    <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
-                      Interview type
-                    </span>
-                    <select
-                      className={filterInp}
-                      value={filters.eligible.interviewType}
-                      onChange={(e) =>
-                        updateFilter("eligible", {
-                          interviewType: e.target
-                            .value as InterviewTypeFilter,
-                        })
-                      }
-                    >
-                      <option value="all">All</option>
-                      <option value="testimonial">Testimonial</option>
-                      <option value="project">Project</option>
-                    </select>
-                  </label>
+                  <div className="flex w-full flex-col gap-3 sm:flex-row lg:w-auto lg:shrink-0">
+                    <label className="flex w-full flex-col gap-1 sm:w-48">
+                      <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+                        Interview type
+                      </span>
+                      <select
+                        className={filterInp}
+                        value={filters.eligible.interviewType}
+                        onChange={(e) =>
+                          updateFilter("eligible", {
+                            interviewType: e.target
+                              .value as InterviewTypeFilter,
+                          })
+                        }
+                      >
+                        <option value="all">All</option>
+                        <option value="testimonial">Testimonial</option>
+                        <option value="project">Project</option>
+                      </select>
+                    </label>
+                    <label className="flex w-full flex-col gap-1 sm:w-48">
+                      <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+                        POC
+                      </span>
+                      <select
+                        className={filterInp}
+                        value={filters.eligible.poc}
+                        onChange={(e) =>
+                          updateFilter("eligible", { poc: e.target.value })
+                        }
+                      >
+                        <option value="all">All</option>
+                        <option value={POC_FILTER_UNASSIGNED}>
+                          Unassigned
+                        </option>
+                        {pocFilterNames.map((n) => (
+                          <option key={n} value={n}>
+                            {n}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
                 </div>
 
                 <div className={tableWrap}>
@@ -2397,6 +2461,28 @@ export function InterviewsBoard() {
                         ))}
                       </select>
                     </label>
+                    <label className="flex w-full flex-col gap-1 sm:w-48">
+                      <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+                        POC
+                      </span>
+                      <select
+                        className={filterInp}
+                        value={filters.scheduled.poc}
+                        onChange={(e) =>
+                          updateFilter("scheduled", { poc: e.target.value })
+                        }
+                      >
+                        <option value="all">All</option>
+                        <option value={POC_FILTER_UNASSIGNED}>
+                          Unassigned
+                        </option>
+                        {pocFilterNames.map((n) => (
+                          <option key={n} value={n}>
+                            {n}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
                   </div>
                 </div>
 
@@ -2704,6 +2790,30 @@ export function InterviewsBoard() {
                         {interviewerRoster.map((o) => (
                           <option key={o.value} value={o.value}>
                             {o.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="flex flex-col gap-1">
+                      <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+                        POC
+                      </span>
+                      <select
+                        className={filterInp}
+                        value={completedFilters.poc}
+                        onChange={(e) =>
+                          patchCompletedFilters({
+                            poc: e.target.value,
+                          })
+                        }
+                      >
+                        <option value="all">All</option>
+                        <option value={POC_FILTER_UNASSIGNED}>
+                          Unassigned
+                        </option>
+                        {pocFilterNames.map((n) => (
+                          <option key={n} value={n}>
+                            {n}
                           </option>
                         ))}
                       </select>
@@ -3044,7 +3154,7 @@ export function InterviewsBoard() {
 
             {activeTab === "notEligible" && (
               <section className="space-y-4">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
                   <label className="flex min-w-0 flex-1 flex-col gap-1">
                     <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
                       Search
@@ -3059,24 +3169,51 @@ export function InterviewsBoard() {
                       }
                     />
                   </label>
-                  <label className="flex w-full flex-col gap-1 sm:w-48 sm:shrink-0">
-                    <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
-                      Interview type
-                    </span>
-                    <select
-                      className={filterInp}
-                      value={filters.notEligible.interviewType}
-                      onChange={(e) =>
-                        updateFilter("notEligible", {
-                          interviewType: e.target.value as InterviewTypeFilter,
-                        })
-                      }
-                    >
-                      <option value="all">All</option>
-                      <option value="testimonial">Testimonial</option>
-                      <option value="project">Project</option>
-                    </select>
-                  </label>
+                  <div className="flex w-full flex-col gap-3 sm:flex-row lg:w-auto lg:shrink-0">
+                    <label className="flex w-full flex-col gap-1 sm:w-48">
+                      <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+                        Interview type
+                      </span>
+                      <select
+                        className={filterInp}
+                        value={filters.notEligible.interviewType}
+                        onChange={(e) =>
+                          updateFilter("notEligible", {
+                            interviewType: e.target
+                              .value as InterviewTypeFilter,
+                          })
+                        }
+                      >
+                        <option value="all">All</option>
+                        <option value="testimonial">Testimonial</option>
+                        <option value="project">Project</option>
+                      </select>
+                    </label>
+                    <label className="flex w-full flex-col gap-1 sm:w-48">
+                      <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+                        POC
+                      </span>
+                      <select
+                        className={filterInp}
+                        value={filters.notEligible.poc}
+                        onChange={(e) =>
+                          updateFilter("notEligible", {
+                            poc: e.target.value,
+                          })
+                        }
+                      >
+                        <option value="all">All</option>
+                        <option value={POC_FILTER_UNASSIGNED}>
+                          Unassigned
+                        </option>
+                        {pocFilterNames.map((n) => (
+                          <option key={n} value={n}>
+                            {n}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
                 </div>
 
                 <div className={tableWrap}>

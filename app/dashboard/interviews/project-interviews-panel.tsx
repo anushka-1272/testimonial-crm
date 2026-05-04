@@ -11,7 +11,10 @@ import { ProjectCandidateDetailModal } from "@/components/project-candidate-deta
 import { ZoomDetailsModal } from "@/components/ZoomDetailsModal";
 import { logActivity } from "@/lib/activity-logger";
 import { displayNameFromUser, getUserSafe } from "@/lib/supabase-auth";
-import { formatInterviewerStoredForUi } from "@/lib/interviewer-enum";
+import {
+  formatInterviewerStoredForUi,
+  interviewerRowMatchesFilter,
+} from "@/lib/interviewer-enum";
 import {
   canMoveToPostProduction,
   POST_PRODUCTION_ELIGIBILITY_TOOLTIP,
@@ -45,7 +48,27 @@ const PROJECT_INTERVIEW_COLUMNS_LEGACY = `id, created_at, project_candidate_id, 
 
 type ProjectSubTab = "pending" | "scheduled" | "completed" | "notEligible";
 
-type TabFilters = { search: string; page: number };
+/** Sentinel for POC filter dropdown (rows with no POC). */
+const POC_FILTER_UNASSIGNED = "__poc_unassigned__";
+
+function effectivePocForProjectInterview(
+  i: ProjectInterviewWithProjectCandidate,
+): string {
+  return (
+    i.poc?.trim() || i.project_candidates?.poc_assigned?.trim() || ""
+  );
+}
+
+function pocMatchesFilter(
+  filter: string,
+  rowPoc: string | null | undefined,
+): boolean {
+  if (filter === "all") return true;
+  if (filter === POC_FILTER_UNASSIGNED) return !rowPoc?.trim();
+  return interviewerRowMatchesFilter(filter, rowPoc);
+}
+
+type TabFilters = { search: string; page: number; poc: string };
 
 function formatDateTime(iso: string | null | undefined) {
   if (!iso) return "—";
@@ -354,10 +377,10 @@ type Props = {
 };
 
 const defaultFilters = (): Record<ProjectSubTab, TabFilters> => ({
-  pending: { search: "", page: 0 },
-  scheduled: { search: "", page: 0 },
-  completed: { search: "", page: 0 },
-  notEligible: { search: "", page: 0 },
+  pending: { search: "", page: 0, poc: "all" },
+  scheduled: { search: "", page: 0, poc: "all" },
+  completed: { search: "", page: 0, poc: "all" },
+  notEligible: { search: "", page: 0, poc: "all" },
 });
 
 function hasAssignedProjectInterviewer(
@@ -758,6 +781,7 @@ export function ProjectInterviewsPanel({
 
   const pendingQueue = useMemo(() => {
     const q = filters.pending.search;
+    const pocF = filters.pending.poc;
     const rows = candidates.filter((c) => {
       if (activePipelineCandidateIds.has(c.id)) return false;
       if (completedCandidateIds.has(c.id)) return false;
@@ -765,7 +789,11 @@ export function ProjectInterviewsPanel({
       const hasInterview = candidateIdsWithInterview.has(c.id);
       const qualifiesPending =
         statusNorm === "pending" || !hasInterview;
-      return qualifiesPending && matchesPendingSearch(c, q);
+      return (
+        qualifiesPending &&
+        matchesPendingSearch(c, q) &&
+        pocMatchesFilter(pocF, c.poc_assigned)
+      );
     });
     return [...rows].sort(compareProjectCandidateCreatedAsc);
   }, [
@@ -774,30 +802,58 @@ export function ProjectInterviewsPanel({
     activePipelineCandidateIds,
     completedCandidateIds,
     filters.pending.search,
+    filters.pending.poc,
   ]);
 
   const scheduledFiltered = useMemo(
     () =>
-      [...byStatus.scheduled.filter((i) =>
-        matchesInterviewSearch(i, filters.scheduled.search),
-      )].sort(compareProjectInterviewScheduledAsc),
-    [byStatus.scheduled, filters.scheduled.search],
+      [...byStatus.scheduled.filter((i) => {
+        if (!matchesInterviewSearch(i, filters.scheduled.search))
+          return false;
+        return pocMatchesFilter(
+          filters.scheduled.poc,
+          effectivePocForProjectInterview(i),
+        );
+      })].sort(compareProjectInterviewScheduledAsc),
+    [
+      byStatus.scheduled,
+      filters.scheduled.search,
+      filters.scheduled.poc,
+    ],
   );
 
   const completedFiltered = useMemo(
     () =>
-      [...byStatus.completed.filter((i) =>
-        matchesInterviewSearch(i, filters.completed.search),
-      )].sort(compareProjectInterviewCompletedDesc),
-    [byStatus.completed, filters.completed.search],
+      [...byStatus.completed.filter((i) => {
+        if (!matchesInterviewSearch(i, filters.completed.search))
+          return false;
+        return pocMatchesFilter(
+          filters.completed.poc,
+          effectivePocForProjectInterview(i),
+        );
+      })].sort(compareProjectInterviewCompletedDesc),
+    [
+      byStatus.completed,
+      filters.completed.search,
+      filters.completed.poc,
+    ],
   );
 
   const notEligibleFiltered = useMemo(
     () =>
-      [...byStatus.notEligible.filter((i) =>
-        matchesInterviewSearch(i, filters.notEligible.search),
-      )].sort(compareProjectInterviewCompletedDesc),
-    [byStatus.notEligible, filters.notEligible.search],
+      [...byStatus.notEligible.filter((i) => {
+        if (!matchesInterviewSearch(i, filters.notEligible.search))
+          return false;
+        return pocMatchesFilter(
+          filters.notEligible.poc,
+          effectivePocForProjectInterview(i),
+        );
+      })].sort(compareProjectInterviewCompletedDesc),
+    [
+      byStatus.notEligible,
+      filters.notEligible.search,
+      filters.notEligible.poc,
+    ],
   );
 
   const paginate = <T,>(rows: T[], page: number) => {
@@ -826,13 +882,30 @@ export function ProjectInterviewsPanel({
     [notEligibleFiltered, filters.notEligible.page],
   );
 
+  const pocFilterNames = useMemo(() => {
+    const set = new Set<string>(pocRoster);
+    for (const c of candidates) {
+      const p = c.poc_assigned?.trim();
+      if (p) set.add(p);
+    }
+    for (const i of interviews) {
+      const p = effectivePocForProjectInterview(i);
+      if (p) set.add(p);
+    }
+    return [...set].sort((a, b) =>
+      a.localeCompare(b, undefined, { sensitivity: "base" }),
+    );
+  }, [pocRoster, candidates, interviews]);
+
   const patchFilter = (tab: ProjectSubTab, patch: Partial<TabFilters>) => {
     setFilters((prev) => ({
       ...prev,
       [tab]: {
         ...prev[tab],
         ...patch,
-        ...(patch.search !== undefined ? { page: 0 } : {}),
+        ...(patch.search !== undefined || patch.poc !== undefined
+          ? { page: 0 }
+          : {}),
       },
     }));
   };
@@ -1101,18 +1174,42 @@ export function ProjectInterviewsPanel({
 
       {subTab === "pending" && (
         <section className="space-y-4">
-          <label className="flex max-w-md flex-col gap-1">
-            <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
-              Search
-            </span>
-            <input
-              type="search"
-              placeholder="Name, email, or title"
-              className={filterInp}
-              value={filters.pending.search}
-              onChange={(e) => patchFilter("pending", { search: e.target.value })}
-            />
-          </label>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+            <label className="flex min-w-0 flex-1 flex-col gap-1 sm:max-w-md">
+              <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+                Search
+              </span>
+              <input
+                type="search"
+                placeholder="Name, email, or title"
+                className={filterInp}
+                value={filters.pending.search}
+                onChange={(e) =>
+                  patchFilter("pending", { search: e.target.value })
+                }
+              />
+            </label>
+            <label className="flex w-full flex-col gap-1 sm:w-48 sm:shrink-0">
+              <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+                POC
+              </span>
+              <select
+                className={filterInp}
+                value={filters.pending.poc}
+                onChange={(e) =>
+                  patchFilter("pending", { poc: e.target.value })
+                }
+              >
+                <option value="all">All</option>
+                <option value={POC_FILTER_UNASSIGNED}>Unassigned</option>
+                {pocFilterNames.map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
           <div className={tableWrap}>
             <div className="w-full overflow-x-auto">
               <table className="w-full min-w-[1040px] table-auto border-collapse">
@@ -1307,20 +1404,42 @@ export function ProjectInterviewsPanel({
 
       {subTab === "scheduled" && (
         <section className="space-y-4">
-          <label className="flex max-w-md flex-col gap-1">
-            <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
-              Search
-            </span>
-            <input
-              type="search"
-              placeholder="Name, email, or title"
-              className={filterInp}
-              value={filters.scheduled.search}
-              onChange={(e) =>
-                patchFilter("scheduled", { search: e.target.value })
-              }
-            />
-          </label>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+            <label className="flex min-w-0 flex-1 flex-col gap-1 sm:max-w-md">
+              <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+                Search
+              </span>
+              <input
+                type="search"
+                placeholder="Name, email, or title"
+                className={filterInp}
+                value={filters.scheduled.search}
+                onChange={(e) =>
+                  patchFilter("scheduled", { search: e.target.value })
+                }
+              />
+            </label>
+            <label className="flex w-full flex-col gap-1 sm:w-48 sm:shrink-0">
+              <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+                POC
+              </span>
+              <select
+                className={filterInp}
+                value={filters.scheduled.poc}
+                onChange={(e) =>
+                  patchFilter("scheduled", { poc: e.target.value })
+                }
+              >
+                <option value="all">All</option>
+                <option value={POC_FILTER_UNASSIGNED}>Unassigned</option>
+                {pocFilterNames.map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
           <div className={tableWrap}>
             <div className="w-full overflow-x-auto">
               <table className="w-full min-w-[1280px] table-auto border-collapse">
@@ -1542,20 +1661,42 @@ export function ProjectInterviewsPanel({
 
       {subTab === "completed" && (
         <section className="space-y-4">
-          <label className="flex max-w-md flex-col gap-1">
-            <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
-              Search
-            </span>
-            <input
-              type="search"
-              placeholder="Name, email, or title"
-              className={filterInp}
-              value={filters.completed.search}
-              onChange={(e) =>
-                patchFilter("completed", { search: e.target.value })
-              }
-            />
-          </label>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+            <label className="flex min-w-0 flex-1 flex-col gap-1 sm:max-w-md">
+              <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+                Search
+              </span>
+              <input
+                type="search"
+                placeholder="Name, email, or title"
+                className={filterInp}
+                value={filters.completed.search}
+                onChange={(e) =>
+                  patchFilter("completed", { search: e.target.value })
+                }
+              />
+            </label>
+            <label className="flex w-full flex-col gap-1 sm:w-48 sm:shrink-0">
+              <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+                POC
+              </span>
+              <select
+                className={filterInp}
+                value={filters.completed.poc}
+                onChange={(e) =>
+                  patchFilter("completed", { poc: e.target.value })
+                }
+              >
+                <option value="all">All</option>
+                <option value={POC_FILTER_UNASSIGNED}>Unassigned</option>
+                {pocFilterNames.map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
           <div className={tableWrap}>
             <div className="w-full overflow-x-auto">
               <table className="w-full min-w-[1320px] table-auto border-collapse">
@@ -1820,20 +1961,42 @@ export function ProjectInterviewsPanel({
 
       {subTab === "notEligible" && (
         <section className="space-y-4">
-          <label className="flex max-w-md flex-col gap-1">
-            <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
-              Search
-            </span>
-            <input
-              type="search"
-              placeholder="Name, email, or title"
-              className={filterInp}
-              value={filters.notEligible.search}
-              onChange={(e) =>
-                patchFilter("notEligible", { search: e.target.value })
-              }
-            />
-          </label>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+            <label className="flex min-w-0 flex-1 flex-col gap-1 sm:max-w-md">
+              <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+                Search
+              </span>
+              <input
+                type="search"
+                placeholder="Name, email, or title"
+                className={filterInp}
+                value={filters.notEligible.search}
+                onChange={(e) =>
+                  patchFilter("notEligible", { search: e.target.value })
+                }
+              />
+            </label>
+            <label className="flex w-full flex-col gap-1 sm:w-48 sm:shrink-0">
+              <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+                POC
+              </span>
+              <select
+                className={filterInp}
+                value={filters.notEligible.poc}
+                onChange={(e) =>
+                  patchFilter("notEligible", { poc: e.target.value })
+                }
+              >
+                <option value="all">All</option>
+                <option value={POC_FILTER_UNASSIGNED}>Unassigned</option>
+                {pocFilterNames.map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
           <div className={tableWrap}>
             <div className="w-full overflow-x-auto">
               <table className="w-full min-w-[1480px] table-auto border-collapse">
