@@ -31,6 +31,8 @@ export type SupportInterview = {
   reschedule_reason: string | null;
   interview_type: InterviewType;
   reward_item: string | null;
+  completed_at?: string | null;
+  created_at?: string | null;
 };
 
 export type SupportDispatch = {
@@ -92,12 +94,87 @@ function formatDateOnly(iso: string | null | undefined): string | null {
 }
 
 /**
+ * When multiple interview rows exist for one candidate, prefer the row that best
+ * reflects pipeline reality (completed beats a newer draft, etc.).
+ */
+export function pickBestInterviewForLookup(
+  rows: SupportInterview[],
+): SupportInterview | null {
+  if (rows.length === 0) return null;
+  if (rows.length === 1) return rows[0] ?? null;
+
+  const rank = (s: InterviewStatus): number => {
+    switch (s) {
+      case "completed":
+        return 5;
+      case "scheduled":
+      case "rescheduled":
+        return 4;
+      case "draft":
+        return 3;
+      case "cancelled":
+        return 1;
+      default:
+        return 0;
+    }
+  };
+
+  const completedTime = (iso: string | null | undefined): number => {
+    if (!iso?.trim()) return 0;
+    try {
+      return new Date(iso.trim()).getTime();
+    } catch {
+      return 0;
+    }
+  };
+
+  const scheduledTime = (iso: string | null | undefined): number =>
+    completedTime(iso);
+
+  return [...rows].sort((a, b) => {
+    const ra = rank(a.interview_status);
+    const rb = rank(b.interview_status);
+    if (rb !== ra) return rb - ra;
+
+    const same =
+      a.interview_status === "completed" && b.interview_status === "completed";
+    if (same) {
+      return (
+        completedTime(b.completed_at) - completedTime(a.completed_at)
+      );
+    }
+
+    if (
+      (a.interview_status === "scheduled" ||
+        a.interview_status === "rescheduled") &&
+      (b.interview_status === "scheduled" ||
+        b.interview_status === "rescheduled")
+    ) {
+      return scheduledTime(b.scheduled_date) - scheduledTime(a.scheduled_date);
+    }
+
+    const ca = completedTime(a.created_at);
+    const cb = completedTime(b.created_at);
+    return cb - ca;
+  })[0]!;
+}
+
+/**
  * Public copy for the candidate lookup modal. Callback and not_interested take
  * precedence; otherwise any positive followup_count shows the no-answer attempts line.
+ * When an interview row shows scheduling or completion, outbound follow-up lines are hidden
+ * so viewers don't see stale "called — no answer" after the pipeline moved forward.
  */
 export function resolveFollowupStatusPublicDisplay(
   candidate: SupportCandidate,
+  interview: SupportInterview | null,
 ): SupportFollowupStatusDisplay | null {
+  // Hide outbound follow-up once there is a real pipeline row (draft → completed).
+  // Keep follow-up visible only when there is no interview yet, or it was cancelled.
+  if (interview && interview.interview_status !== "cancelled") {
+    return null;
+  }
+
   const count = Math.max(0, Number(candidate.followup_count ?? 0));
   const status = (candidate.followup_status ?? "").trim();
 
@@ -166,7 +243,7 @@ export function resolveSupportStatus(
   if (!interview) {
     return {
       kind: "eligible_unscheduled",
-      title: "Eligible — Not Yet Scheduled",
+      title: "Awaiting interview schedule",
       badgeClass:
         "bg-blue-50 text-blue-900 ring-1 ring-blue-200/80",
       lines: [],
@@ -193,7 +270,7 @@ export function resolveSupportStatus(
     lines.push("Awaiting Zoom details");
     return {
       kind: "interview_draft",
-      title: "Interview draft — awaiting Zoom",
+      title: "Interview scheduled (Zoom pending)",
       badgeClass:
         "bg-amber-50 text-amber-900 ring-1 ring-amber-200/80",
       lines,
@@ -207,7 +284,7 @@ export function resolveSupportStatus(
     lines.push(`Interviewer: ${interview.interviewer}`);
     return {
       kind: "scheduled",
-      title: "Interview Scheduled",
+      title: "Interview scheduled",
       badgeClass:
         "bg-blue-50 text-blue-900 ring-1 ring-blue-200/80",
       lines,
@@ -223,7 +300,7 @@ export function resolveSupportStatus(
     lines.push(`Interviewer: ${interview.interviewer}`);
     return {
       kind: "rescheduled",
-      title: "Interview Rescheduled",
+      title: "Interview rescheduled",
       badgeClass:
         "bg-orange-50 text-orange-900 ring-1 ring-orange-200/80",
       lines,
@@ -234,7 +311,7 @@ export function resolveSupportStatus(
   if (!dispatch) {
     return {
       kind: "completed",
-      title: "Interview Completed",
+      title: "Interview done",
       badgeClass:
         "bg-emerald-50 text-emerald-900 ring-1 ring-emerald-200/80",
       lines: [],
@@ -246,7 +323,7 @@ export function resolveSupportStatus(
   if (ds === "pending") {
     return {
       kind: "reward_processing",
-      title: "Reward Being Processed",
+      title: "Reward processing",
       badgeClass:
         "bg-emerald-50 text-emerald-900 ring-1 ring-emerald-200/80",
       lines: [],
@@ -262,7 +339,7 @@ export function resolveSupportStatus(
     if (exp) lines.push(`Expected delivery: ${exp}`);
     return {
       kind: "reward_dispatched",
-      title: "Reward Dispatched",
+      title: "Dispatched",
       badgeClass:
         "bg-emerald-50 text-emerald-900 ring-1 ring-emerald-200/80",
       lines,
@@ -272,7 +349,7 @@ export function resolveSupportStatus(
   // delivered
   return {
     kind: "reward_delivered",
-    title: "Reward Delivered ✓",
+    title: "Delivered ✓",
     badgeClass:
       "bg-emerald-50 text-emerald-900 ring-1 ring-emerald-200/80",
     lines: [],

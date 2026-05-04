@@ -13,6 +13,7 @@ import {
 import { LogoOnDark, LogoOnLight } from "@/components/brand-logo";
 import {
   digitsOnly,
+  pickBestInterviewForLookup,
   resolveFollowupStatusPublicDisplay,
   resolveSupportStatus,
   type SupportDispatch,
@@ -28,7 +29,7 @@ const CANDIDATE_LOOKUP_SELECT =
   "id, full_name, email, whatsapp_number, eligibility_status, interview_type, poc_assigned, followup_status, followup_count, callback_datetime, not_interested_reason";
 
 const INTERVIEW_LOOKUP_SELECT =
-  "interview_status, scheduled_date, interviewer, reschedule_reason, interview_type, reward_item";
+  "id, interview_status, scheduled_date, interviewer, reschedule_reason, interview_type, reward_item, completed_at, created_at";
 
 const DISPATCH_LOOKUP_SELECT =
   "dispatch_status, tracking_id, expected_delivery_date, reward_item";
@@ -39,7 +40,10 @@ function CandidateLookupResultCard({
   payload: SupportLookupPayload;
 }) {
   const status = resolveSupportStatus(payload);
-  const followupDisplay = resolveFollowupStatusPublicDisplay(payload.candidate);
+  const followupDisplay = resolveFollowupStatusPublicDisplay(
+    payload.candidate,
+    payload.interview,
+  );
   const { candidate, interview, dispatch } = payload;
   const typeForBadge = interview?.interview_type ?? candidate.interview_type;
   const reward =
@@ -76,7 +80,7 @@ function CandidateLookupResultCard({
       </div>
       <div className="mt-4 border-t border-[#e5e5e5] pt-4">
         <p className="mb-2 text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
-          Current status
+          Pipeline status
         </p>
         <span
           className={`inline-flex flex-wrap items-center gap-x-1 rounded-full px-3 py-1.5 text-xs font-semibold ${status.badgeClass}`}
@@ -323,9 +327,11 @@ export default function LoginPage() {
         .select(INTERVIEW_LOOKUP_SELECT)
         .eq("candidate_id", candidate.id)
         .order("created_at", { ascending: false })
-        .limit(1);
+        .limit(40);
 
-      const interview = (intRows?.[0] ?? null) as SupportInterview | null;
+      const interview = pickBestInterviewForLookup(
+        (intRows ?? []) as SupportInterview[],
+      );
 
       const { data: dispRows } = await supabase
         .from("dispatch")
