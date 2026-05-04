@@ -120,6 +120,8 @@ export type PostProductionRow = {
   youtube_link: string | null;
   youtube_status: YoutubeStatus;
   summary: string | null;
+  /** Notes from reviewers/interviewers for the assigned editor */
+  editor_comments: string | null;
   cx_mail_sent: boolean;
   cx_mail_sent_at: string | null;
   updated_at: string;
@@ -229,7 +231,7 @@ export type PostProductionRow = {
 type LinkField = "raw_video_link" | "edited_video_link" | "youtube_link";
 
 const PP_SELECT =
-  "id, created_at, interview_id, project_interview_id, candidate_id, project_candidate_id, source_type, candidate_name, raw_video_link, edited_video_link, pre_edit_review, pre_edit_review_by, post_edit_review, post_edit_review_by, edited_by, youtube_link, youtube_status, summary, cx_mail_sent, cx_mail_sent_at, updated_at, interview_language, candidates ( domain, job_role, is_deleted ), project_candidates ( id, email, full_name, whatsapp_number, project_title, problem_statement, target_user, ai_usage, demo_link, status, poc_assigned, poc_assigned_at, interview_type, is_deleted ), interviews:interview_id ( scheduled_date, completed_at, interviewer, zoom_account, interview_language, candidates ( full_name, email, domain, job_role, achievement_summary ) ), project_interviews:project_interview_id ( scheduled_date, completed_at, interviewer, zoom_account, project_candidates ( full_name, email, project_title, problem_statement, demo_link ) )";
+  "id, created_at, interview_id, project_interview_id, candidate_id, project_candidate_id, source_type, candidate_name, raw_video_link, edited_video_link, pre_edit_review, pre_edit_review_by, post_edit_review, post_edit_review_by, edited_by, youtube_link, youtube_status, summary, editor_comments, cx_mail_sent, cx_mail_sent_at, updated_at, interview_language, candidates ( domain, job_role, is_deleted ), project_candidates ( id, email, full_name, whatsapp_number, project_title, problem_statement, target_user, ai_usage, demo_link, status, poc_assigned, poc_assigned_at, interview_type, is_deleted ), interviews:interview_id ( scheduled_date, completed_at, interviewer, zoom_account, interview_language, candidates ( full_name, email, domain, job_role, achievement_summary ) ), project_interviews:project_interview_id ( scheduled_date, completed_at, interviewer, zoom_account, project_candidates ( full_name, email, project_title, problem_statement, demo_link ) )";
 
 function chunkIds<T>(arr: T[], size: number): T[][] {
   const out: T[][] = [];
@@ -534,6 +536,10 @@ export function PostProductionDashboard() {
   const [projectDetailCandidate, setProjectDetailCandidate] =
     useState<ProjectCandidateRow | null>(null);
   const [summaryModalText, setSummaryModalText] = useState<string | null>(null);
+  const [editorCommentsEdit, setEditorCommentsEdit] = useState<{
+    rowId: string;
+    value: string;
+  } | null>(null);
 
   const [addOpen, setAddOpen] = useState(false);
   const [addTab, setAddTab] = useState<"testimonial" | "project">(
@@ -784,6 +790,7 @@ export function PostProductionDashboard() {
       "Post-Edit Review",
       "Post-Edit Review By",
       "Edited By",
+      "Notes for editor",
       "YouTube Link",
       "YouTube Status",
       "Language",
@@ -802,6 +809,7 @@ export function PostProductionDashboard() {
         r.post_edit_review,
         r.post_edit_review_by ?? "",
         r.edited_by ?? "",
+        r.editor_comments ?? "",
         r.youtube_link ?? "",
         r.youtube_status,
         r.interview_language ?? "",
@@ -1304,6 +1312,28 @@ export function PostProductionDashboard() {
     void loadRows();
   };
 
+  const saveEditorComments = async (row: PostProductionRow) => {
+    if (!editorCommentsEdit || editorCommentsEdit.rowId !== row.id) return;
+    const next = editorCommentsEdit.value.trim() || null;
+    const prev = (row.editor_comments ?? "").trim() || null;
+    if (next === prev) {
+      setEditorCommentsEdit(null);
+      return;
+    }
+    const name = row.candidate_name?.trim() || "Candidate";
+    await patchRow(
+      row.id,
+      { editor_comments: next },
+      {
+        description: next
+          ? `Updated notes for editor for ${name}`
+          : `Cleared notes for editor for ${name}`,
+        candidateName: name,
+      },
+    );
+    setEditorCommentsEdit(null);
+  };
+
   const saveLink = async (row: PostProductionRow, field: LinkField) => {
     if (!linkEdit || linkEdit.rowId !== row.id || linkEdit.field !== field)
       return;
@@ -1431,6 +1461,84 @@ export function PostProductionDashboard() {
     } finally {
       setSavingId(null);
     }
+  };
+
+  const renderEditorCommentsCell = (row: PostProductionRow) => {
+    const busy = savingId === row.id;
+    const stored = row.editor_comments?.trim() ?? "";
+    const editing = editorCommentsEdit?.rowId === row.id;
+
+    if (!canEditCurrentPage) {
+      return (
+        <div className="max-h-28 overflow-y-auto whitespace-pre-wrap break-words text-xs leading-snug text-[#1d1d1f]">
+          {stored ? (
+            stored
+          ) : (
+            <span className="text-[#aeaeb2]">—</span>
+          )}
+        </div>
+      );
+    }
+
+    if (editing && editorCommentsEdit) {
+      return (
+        <div className="flex min-w-0 flex-col gap-1.5">
+          <textarea
+            rows={4}
+            className="w-full resize-y rounded-lg border border-[#e5e5e5] px-2 py-1.5 text-xs text-[#1d1d1f] focus:border-[#3b82f6] focus:outline-none disabled:opacity-50"
+            value={editorCommentsEdit.value}
+            onChange={(e) =>
+              setEditorCommentsEdit({ rowId: row.id, value: e.target.value })
+            }
+            placeholder="Notes for the editor…"
+            disabled={busy}
+            aria-label="Notes for editor"
+          />
+          <div className="flex flex-wrap gap-1.5">
+            <button
+              type="button"
+              disabled={busy}
+              className="rounded-lg bg-[#1d1d1f] px-2.5 py-1 text-[11px] font-medium text-white disabled:opacity-50"
+              onClick={() => void saveEditorComments(row)}
+            >
+              Save
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              className="rounded-lg border border-[#e5e5e5] px-2.5 py-1 text-[11px] font-medium text-[#6e6e73] disabled:opacity-50"
+              onClick={() => setEditorCommentsEdit(null)}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="flex min-w-0 flex-col gap-1">
+        <div
+          className="max-h-20 overflow-y-auto whitespace-pre-wrap break-words text-xs leading-snug text-[#1d1d1f]"
+          title={stored || undefined}
+        >
+          {stored ? (
+            stored
+          ) : (
+            <span className="text-[#aeaeb2]">No notes yet</span>
+          )}
+        </div>
+        <button
+          type="button"
+          className="self-start text-xs font-medium text-[#3b82f6] hover:underline"
+          onClick={() =>
+            setEditorCommentsEdit({ rowId: row.id, value: stored })
+          }
+        >
+          {stored ? "Edit" : "Add notes"}
+        </button>
+      </div>
+    );
   };
 
   const renderLinkCell = (row: PostProductionRow, field: LinkField) => {
@@ -1612,6 +1720,7 @@ export function PostProductionDashboard() {
     pre: "w-[130px] max-w-[130px]",
     post: "w-[130px] max-w-[130px]",
     editedBy: "w-[120px] max-w-[120px]",
+    editorNotes: "w-[200px] min-w-[200px] max-w-[240px]",
     youtube: "w-[100px] max-w-[100px]",
     status: "w-[120px] max-w-[120px]",
     summary: "w-[90px] max-w-[90px]",
@@ -1877,7 +1986,7 @@ export function PostProductionDashboard() {
 
             <div className="overflow-hidden rounded-2xl border border-[#f0f0f0] bg-white shadow-sm">
               <div className="w-full min-w-0 max-w-full overflow-x-auto">
-                <table className="w-full min-w-[1240px] table-fixed border-collapse text-sm">
+                <table className="w-full min-w-[1480px] table-fixed border-collapse text-sm">
                   <thead>
                     <tr>
                       <th className={`${th} ${ppCol.name}`}>Name</th>
@@ -1889,6 +1998,9 @@ export function PostProductionDashboard() {
                         Post-edit review
                       </th>
                       <th className={`${th} ${ppCol.editedBy}`}>Edited by</th>
+                      <th className={`${th} ${ppCol.editorNotes}`}>
+                        Notes for editor
+                      </th>
                       <th className={`${th} ${ppCol.youtube}`}>YouTube</th>
                       <th className={`${th} ${ppCol.status}`}>Status</th>
                       <th className={`${th} ${ppCol.summary}`}>Summary</th>
@@ -1902,7 +2014,7 @@ export function PostProductionDashboard() {
                       <tr>
                         <td
                           className={`${td} py-16 text-center text-[#aeaeb2]`}
-                          colSpan={11}
+                          colSpan={12}
                         >
                           {rows.length === 0
                             ? "No entries yet. Add completed interviews to start the post production pipeline."
@@ -1986,6 +2098,9 @@ export function PostProductionDashboard() {
                                   </option>
                                 ))}
                               </select>
+                            </td>
+                            <td className={`${td} ${ppCol.editorNotes}`}>
+                              {renderEditorCommentsCell(row)}
                             </td>
                             <td className={`${td} ${ppCol.youtube}`}>
                               {renderLinkCell(row, "youtube_link")}

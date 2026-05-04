@@ -115,12 +115,25 @@ function pocMatchesFilter(
   return interviewerRowMatchesFilter(filter, rowPoc);
 }
 
+/** Sentinel for interviewer filter (no interviewer assigned on the interview). */
+const INTERVIEWER_FILTER_UNASSIGNED = "__interviewer_unassigned__";
+
+function interviewerMatchesFilter(
+  filter: string,
+  rowInterviewer: string | null | undefined,
+): boolean {
+  if (filter === "all") return true;
+  if (filter === INTERVIEWER_FILTER_UNASSIGNED) return !rowInterviewer?.trim();
+  return interviewerRowMatchesFilter(filter, rowInterviewer);
+}
+
 type TableFilters = {
   search: string;
   interviewType: InterviewTypeFilter;
   language: InterviewLanguageFilter;
   zoomStatus: ZoomStatusFilter;
   poc: string;
+  interviewer: string;
   page: number;
 };
 
@@ -128,7 +141,6 @@ type PostInterviewEligibleFilter = "all" | "eligible" | "not_eligible";
 
 type CompletedTabFilters = TableFilters & {
   postInterviewEligible: PostInterviewEligibleFilter;
-  interviewer: string;
   completedFrom: string;
   completedTo: string;
   category: string;
@@ -142,13 +154,13 @@ const emptyFilters = (): TableFilters => ({
   language: "all",
   zoomStatus: "all",
   poc: "all",
+  interviewer: "all",
   page: 0,
 });
 
 const defaultCompletedFilters = (): CompletedTabFilters => ({
   ...emptyFilters(),
   postInterviewEligible: "all",
-  interviewer: "all",
   completedFrom: "",
   completedTo: "",
   category: "",
@@ -213,7 +225,7 @@ function filterCompletedInterviews(
       i.post_interview_eligible !== false
     )
       return false;
-    if (!interviewerRowMatchesFilter(f.interviewer, i.interviewer))
+    if (!interviewerMatchesFilter(f.interviewer, i.interviewer))
       return false;
     if (f.category) {
       const lines = interviewCategoryLines(i.category);
@@ -1002,6 +1014,20 @@ export function InterviewsBoard() {
     );
   }, [pocRoster, eligibleQueue, interviews]);
 
+  const interviewerFilterOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const o of interviewerRoster) {
+      if (o.value.trim()) set.add(o.value);
+    }
+    for (const i of interviews) {
+      const v = i.interviewer?.trim();
+      if (v) set.add(v);
+    }
+    return [...set].sort((a, b) =>
+      a.localeCompare(b, undefined, { sensitivity: "base" }),
+    );
+  }, [interviewerRoster, interviews]);
+
   const updateFilter = useCallback(
     (tab: SimpleTab, patch: Partial<Omit<TableFilters, "page">>) => {
       setFilters((prev) => ({
@@ -1014,7 +1040,8 @@ export function InterviewsBoard() {
             "interviewType" in patch ||
             "language" in patch ||
             "zoomStatus" in patch ||
-            "poc" in patch
+            "poc" in patch ||
+            "interviewer" in patch
               ? 0
               : prev[tab].page,
         },
@@ -1070,6 +1097,8 @@ export function InterviewsBoard() {
         )
           return false;
         if (!pocMatchesFilter(f.poc, c.poc_assigned)) return false;
+        if (!interviewerMatchesFilter(f.interviewer, null))
+          return false;
         return matchesRowSearch(c.full_name, c.email, f.search);
       }),
     [],
@@ -1093,6 +1122,8 @@ export function InterviewsBoard() {
           if (z !== f.zoomStatus) return false;
         }
         if (!pocMatchesFilter(f.poc, effectivePocForInterview(i)))
+          return false;
+        if (!interviewerMatchesFilter(f.interviewer, i.interviewer))
           return false;
         const name = i.candidates?.full_name;
         const email = i.candidates?.email;
@@ -1147,6 +1178,7 @@ export function InterviewsBoard() {
     filters.eligible.search,
     filters.eligible.interviewType,
     filters.eligible.poc,
+    filters.eligible.interviewer,
     linkedInTrackFiltered.length,
   ]);
 
@@ -1916,6 +1948,30 @@ export function InterviewsBoard() {
                         ))}
                       </select>
                     </label>
+                    <label className="flex w-full flex-col gap-1 sm:w-48">
+                      <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+                        Interviewer
+                      </span>
+                      <select
+                        className={filterInp}
+                        value={filters.eligible.interviewer}
+                        onChange={(e) =>
+                          updateFilter("eligible", {
+                            interviewer: e.target.value,
+                          })
+                        }
+                      >
+                        <option value="all">All</option>
+                        <option value={INTERVIEWER_FILTER_UNASSIGNED}>
+                          Unassigned
+                        </option>
+                        {interviewerFilterOptions.map((n) => (
+                          <option key={n} value={n}>
+                            {n}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
                   </div>
                 </div>
 
@@ -2483,6 +2539,30 @@ export function InterviewsBoard() {
                         ))}
                       </select>
                     </label>
+                    <label className="flex w-full flex-col gap-1 sm:w-48">
+                      <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+                        Interviewer
+                      </span>
+                      <select
+                        className={filterInp}
+                        value={filters.scheduled.interviewer}
+                        onChange={(e) =>
+                          updateFilter("scheduled", {
+                            interviewer: e.target.value,
+                          })
+                        }
+                      >
+                        <option value="all">All</option>
+                        <option value={INTERVIEWER_FILTER_UNASSIGNED}>
+                          Unassigned
+                        </option>
+                        {interviewerFilterOptions.map((n) => (
+                          <option key={n} value={n}>
+                            {n}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
                   </div>
                 </div>
 
@@ -2787,9 +2867,12 @@ export function InterviewsBoard() {
                         }
                       >
                         <option value="all">All</option>
-                        {interviewerRoster.map((o) => (
-                          <option key={o.value} value={o.value}>
-                            {o.label}
+                        <option value={INTERVIEWER_FILTER_UNASSIGNED}>
+                          Unassigned
+                        </option>
+                        {interviewerFilterOptions.map((n) => (
+                          <option key={n} value={n}>
+                            {n}
                           </option>
                         ))}
                       </select>
@@ -3207,6 +3290,30 @@ export function InterviewsBoard() {
                           Unassigned
                         </option>
                         {pocFilterNames.map((n) => (
+                          <option key={n} value={n}>
+                            {n}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="flex w-full flex-col gap-1 sm:w-48">
+                      <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+                        Interviewer
+                      </span>
+                      <select
+                        className={filterInp}
+                        value={filters.notEligible.interviewer}
+                        onChange={(e) =>
+                          updateFilter("notEligible", {
+                            interviewer: e.target.value,
+                          })
+                        }
+                      >
+                        <option value="all">All</option>
+                        <option value={INTERVIEWER_FILTER_UNASSIGNED}>
+                          Unassigned
+                        </option>
+                        {interviewerFilterOptions.map((n) => (
                           <option key={n} value={n}>
                             {n}
                           </option>

@@ -12,8 +12,10 @@ import { ZoomDetailsModal } from "@/components/ZoomDetailsModal";
 import { logActivity } from "@/lib/activity-logger";
 import { displayNameFromUser, getUserSafe } from "@/lib/supabase-auth";
 import {
+  buildInterviewerSelectOptions,
   formatInterviewerStoredForUi,
   interviewerRowMatchesFilter,
+  type InterviewerSelectOption,
 } from "@/lib/interviewer-enum";
 import {
   canMoveToPostProduction,
@@ -68,7 +70,23 @@ function pocMatchesFilter(
   return interviewerRowMatchesFilter(filter, rowPoc);
 }
 
-type TabFilters = { search: string; page: number; poc: string };
+const INTERVIEWER_FILTER_UNASSIGNED = "__interviewer_unassigned__";
+
+function interviewerMatchesFilter(
+  filter: string,
+  rowInterviewer: string | null | undefined,
+): boolean {
+  if (filter === "all") return true;
+  if (filter === INTERVIEWER_FILTER_UNASSIGNED) return !rowInterviewer?.trim();
+  return interviewerRowMatchesFilter(filter, rowInterviewer);
+}
+
+type TabFilters = {
+  search: string;
+  page: number;
+  poc: string;
+  interviewer: string;
+};
 
 function formatDateTime(iso: string | null | undefined) {
   if (!iso) return "—";
@@ -377,10 +395,10 @@ type Props = {
 };
 
 const defaultFilters = (): Record<ProjectSubTab, TabFilters> => ({
-  pending: { search: "", page: 0, poc: "all" },
-  scheduled: { search: "", page: 0, poc: "all" },
-  completed: { search: "", page: 0, poc: "all" },
-  notEligible: { search: "", page: 0, poc: "all" },
+  pending: { search: "", page: 0, poc: "all", interviewer: "all" },
+  scheduled: { search: "", page: 0, poc: "all", interviewer: "all" },
+  completed: { search: "", page: 0, poc: "all", interviewer: "all" },
+  notEligible: { search: "", page: 0, poc: "all", interviewer: "all" },
 });
 
 function hasAssignedProjectInterviewer(
@@ -410,6 +428,9 @@ export function ProjectInterviewsPanel({
   const [pocSavingId, setPocSavingId] = useState<string | null>(null);
   const [pocEditingId, setPocEditingId] = useState<string | null>(null);
   const [pocRoster, setPocRoster] = useState<string[]>([]);
+  const [interviewerRoster, setInterviewerRoster] = useState<
+    InterviewerSelectOption[]
+  >([]);
   const [detail, setDetail] = useState<ProjectCandidateRow | null>(null);
   const [completedPopoverId, setCompletedPopoverId] = useState<string | null>(
     null,
@@ -628,9 +649,13 @@ export function ProjectInterviewsPanel({
     [canEditScheduledTab, supabase, onError, onToast],
   );
 
-  const loadPocRoster = useCallback(async () => {
-    const names = await fetchTeamRosterNames(supabase, "poc", true);
-    setPocRoster(names);
+  const loadRosters = useCallback(async () => {
+    const [pocNames, interviewerNames] = await Promise.all([
+      fetchTeamRosterNames(supabase, "poc", true),
+      fetchTeamRosterNames(supabase, "interviewer", true),
+    ]);
+    setPocRoster(pocNames);
+    setInterviewerRoster(buildInterviewerSelectOptions(interviewerNames, null));
   }, [supabase]);
 
   useEffect(() => {
@@ -642,8 +667,8 @@ export function ProjectInterviewsPanel({
   }, [loadProjectData]);
 
   useEffect(() => {
-    void loadPocRoster();
-  }, [loadPocRoster]);
+    void loadRosters();
+  }, [loadRosters]);
 
   useEffect(() => {
     const ch = supabase
@@ -671,11 +696,18 @@ export function ProjectInterviewsPanel({
           void loadProjectData();
         },
       )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "team_members" },
+        () => {
+          void loadRosters();
+        },
+      )
       .subscribe();
     return () => {
       void supabase.removeChannel(ch);
     };
-  }, [supabase, loadProjectData, onPipelineChanged]);
+  }, [supabase, loadProjectData, onPipelineChanged, loadRosters]);
 
   useEffect(() => {
     if (subTab !== "completed") setCompletedPopoverId(null);
@@ -792,7 +824,8 @@ export function ProjectInterviewsPanel({
       return (
         qualifiesPending &&
         matchesPendingSearch(c, q) &&
-        pocMatchesFilter(pocF, c.poc_assigned)
+        pocMatchesFilter(pocF, c.poc_assigned) &&
+        interviewerMatchesFilter(filters.pending.interviewer, null)
       );
     });
     return [...rows].sort(compareProjectCandidateCreatedAsc);
@@ -803,6 +836,7 @@ export function ProjectInterviewsPanel({
     completedCandidateIds,
     filters.pending.search,
     filters.pending.poc,
+    filters.pending.interviewer,
   ]);
 
   const scheduledFiltered = useMemo(
@@ -810,15 +844,23 @@ export function ProjectInterviewsPanel({
       [...byStatus.scheduled.filter((i) => {
         if (!matchesInterviewSearch(i, filters.scheduled.search))
           return false;
-        return pocMatchesFilter(
-          filters.scheduled.poc,
-          effectivePocForProjectInterview(i),
+        if (
+          !pocMatchesFilter(
+            filters.scheduled.poc,
+            effectivePocForProjectInterview(i),
+          )
+        )
+          return false;
+        return interviewerMatchesFilter(
+          filters.scheduled.interviewer,
+          i.interviewer,
         );
       })].sort(compareProjectInterviewScheduledAsc),
     [
       byStatus.scheduled,
       filters.scheduled.search,
       filters.scheduled.poc,
+      filters.scheduled.interviewer,
     ],
   );
 
@@ -827,15 +869,23 @@ export function ProjectInterviewsPanel({
       [...byStatus.completed.filter((i) => {
         if (!matchesInterviewSearch(i, filters.completed.search))
           return false;
-        return pocMatchesFilter(
-          filters.completed.poc,
-          effectivePocForProjectInterview(i),
+        if (
+          !pocMatchesFilter(
+            filters.completed.poc,
+            effectivePocForProjectInterview(i),
+          )
+        )
+          return false;
+        return interviewerMatchesFilter(
+          filters.completed.interviewer,
+          i.interviewer,
         );
       })].sort(compareProjectInterviewCompletedDesc),
     [
       byStatus.completed,
       filters.completed.search,
       filters.completed.poc,
+      filters.completed.interviewer,
     ],
   );
 
@@ -844,15 +894,23 @@ export function ProjectInterviewsPanel({
       [...byStatus.notEligible.filter((i) => {
         if (!matchesInterviewSearch(i, filters.notEligible.search))
           return false;
-        return pocMatchesFilter(
-          filters.notEligible.poc,
-          effectivePocForProjectInterview(i),
+        if (
+          !pocMatchesFilter(
+            filters.notEligible.poc,
+            effectivePocForProjectInterview(i),
+          )
+        )
+          return false;
+        return interviewerMatchesFilter(
+          filters.notEligible.interviewer,
+          i.interviewer,
         );
       })].sort(compareProjectInterviewCompletedDesc),
     [
       byStatus.notEligible,
       filters.notEligible.search,
       filters.notEligible.poc,
+      filters.notEligible.interviewer,
     ],
   );
 
@@ -897,13 +955,29 @@ export function ProjectInterviewsPanel({
     );
   }, [pocRoster, candidates, interviews]);
 
+  const interviewerFilterOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const o of interviewerRoster) {
+      if (o.value.trim()) set.add(o.value);
+    }
+    for (const i of interviews) {
+      const v = i.interviewer?.trim();
+      if (v) set.add(v);
+    }
+    return [...set].sort((a, b) =>
+      a.localeCompare(b, undefined, { sensitivity: "base" }),
+    );
+  }, [interviewerRoster, interviews]);
+
   const patchFilter = (tab: ProjectSubTab, patch: Partial<TabFilters>) => {
     setFilters((prev) => ({
       ...prev,
       [tab]: {
         ...prev[tab],
         ...patch,
-        ...(patch.search !== undefined || patch.poc !== undefined
+        ...(patch.search !== undefined ||
+        patch.poc !== undefined ||
+        patch.interviewer !== undefined
           ? { page: 0 }
           : {}),
       },
@@ -1174,7 +1248,7 @@ export function ProjectInterviewsPanel({
 
       {subTab === "pending" && (
         <section className="space-y-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
             <label className="flex min-w-0 flex-1 flex-col gap-1 sm:max-w-md">
               <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
                 Search
@@ -1203,6 +1277,28 @@ export function ProjectInterviewsPanel({
                 <option value="all">All</option>
                 <option value={POC_FILTER_UNASSIGNED}>Unassigned</option>
                 {pocFilterNames.map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex w-full flex-col gap-1 sm:w-48 sm:shrink-0">
+              <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+                Interviewer
+              </span>
+              <select
+                className={filterInp}
+                value={filters.pending.interviewer}
+                onChange={(e) =>
+                  patchFilter("pending", { interviewer: e.target.value })
+                }
+              >
+                <option value="all">All</option>
+                <option value={INTERVIEWER_FILTER_UNASSIGNED}>
+                  Unassigned
+                </option>
+                {interviewerFilterOptions.map((n) => (
                   <option key={n} value={n}>
                     {n}
                   </option>
@@ -1404,7 +1500,7 @@ export function ProjectInterviewsPanel({
 
       {subTab === "scheduled" && (
         <section className="space-y-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
             <label className="flex min-w-0 flex-1 flex-col gap-1 sm:max-w-md">
               <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
                 Search
@@ -1433,6 +1529,28 @@ export function ProjectInterviewsPanel({
                 <option value="all">All</option>
                 <option value={POC_FILTER_UNASSIGNED}>Unassigned</option>
                 {pocFilterNames.map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex w-full flex-col gap-1 sm:w-48 sm:shrink-0">
+              <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+                Interviewer
+              </span>
+              <select
+                className={filterInp}
+                value={filters.scheduled.interviewer}
+                onChange={(e) =>
+                  patchFilter("scheduled", { interviewer: e.target.value })
+                }
+              >
+                <option value="all">All</option>
+                <option value={INTERVIEWER_FILTER_UNASSIGNED}>
+                  Unassigned
+                </option>
+                {interviewerFilterOptions.map((n) => (
                   <option key={n} value={n}>
                     {n}
                   </option>
@@ -1661,7 +1779,7 @@ export function ProjectInterviewsPanel({
 
       {subTab === "completed" && (
         <section className="space-y-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
             <label className="flex min-w-0 flex-1 flex-col gap-1 sm:max-w-md">
               <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
                 Search
@@ -1690,6 +1808,28 @@ export function ProjectInterviewsPanel({
                 <option value="all">All</option>
                 <option value={POC_FILTER_UNASSIGNED}>Unassigned</option>
                 {pocFilterNames.map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex w-full flex-col gap-1 sm:w-48 sm:shrink-0">
+              <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+                Interviewer
+              </span>
+              <select
+                className={filterInp}
+                value={filters.completed.interviewer}
+                onChange={(e) =>
+                  patchFilter("completed", { interviewer: e.target.value })
+                }
+              >
+                <option value="all">All</option>
+                <option value={INTERVIEWER_FILTER_UNASSIGNED}>
+                  Unassigned
+                </option>
+                {interviewerFilterOptions.map((n) => (
                   <option key={n} value={n}>
                     {n}
                   </option>
@@ -1961,7 +2101,7 @@ export function ProjectInterviewsPanel({
 
       {subTab === "notEligible" && (
         <section className="space-y-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
             <label className="flex min-w-0 flex-1 flex-col gap-1 sm:max-w-md">
               <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
                 Search
@@ -1990,6 +2130,30 @@ export function ProjectInterviewsPanel({
                 <option value="all">All</option>
                 <option value={POC_FILTER_UNASSIGNED}>Unassigned</option>
                 {pocFilterNames.map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex w-full flex-col gap-1 sm:w-48 sm:shrink-0">
+              <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+                Interviewer
+              </span>
+              <select
+                className={filterInp}
+                value={filters.notEligible.interviewer}
+                onChange={(e) =>
+                  patchFilter("notEligible", {
+                    interviewer: e.target.value,
+                  })
+                }
+              >
+                <option value="all">All</option>
+                <option value={INTERVIEWER_FILTER_UNASSIGNED}>
+                  Unassigned
+                </option>
+                {interviewerFilterOptions.map((n) => (
                   <option key={n} value={n}>
                     {n}
                   </option>
