@@ -17,9 +17,9 @@ import {
   modalPanelClass,
 } from "@/lib/modal-responsive";
 import {
+  INTERVIEW_LANG_PRESETS,
   effectiveInterviewLanguage,
   formatInterviewLanguageLabel,
-  interviewLanguageBadgeClass,
   matchesInterviewLanguageFilter,
   type InterviewLanguageFilter,
 } from "@/lib/interview-language";
@@ -529,6 +529,8 @@ export function PostProductionDashboard() {
   const [sourceFilter, setSourceFilter] = useState<SourceType | "all">("all");
   const [domainFilter, setDomainFilter] = useState<DomainFilterValue>("all");
   const [jobRoleFilter, setJobRoleFilter] = useState<string>("all");
+  const [interviewLanguageFilter, setInterviewLanguageFilter] =
+    useState<InterviewLanguageFilter>("all");
 
   const [detailCandidateId, setDetailCandidateId] = useState<string | null>(
     null,
@@ -761,6 +763,20 @@ export function PostProductionDashboard() {
           if (jr !== jobRoleFilter) return false;
         }
       }
+      if (interviewLanguageFilter !== "all") {
+        if (r.source_type !== "testimonial") return false;
+        const ivRaw = r.interviews;
+        const interview = Array.isArray(ivRaw)
+          ? (ivRaw[0] ?? null)
+          : (ivRaw ?? null);
+        const lang = effectiveInterviewLanguage({
+          interview_language:
+            trimOrNull(interview?.interview_language) ??
+            trimOrNull(r.interview_language),
+        });
+        if (!matchesInterviewLanguageFilter(lang, interviewLanguageFilter))
+          return false;
+      }
       if (ytFilter !== "all" && r.youtube_status !== ytFilter) return false;
       if (preFilter !== "all" && r.pre_edit_review !== preFilter) return false;
       if (postFilter !== "all" && r.post_edit_review !== postFilter)
@@ -773,6 +789,7 @@ export function PostProductionDashboard() {
     sourceFilter,
     domainFilter,
     jobRoleFilter,
+    interviewLanguageFilter,
     ytFilter,
     preFilter,
     postFilter,
@@ -1915,6 +1932,7 @@ export function PostProductionDashboard() {
                     setSourceFilter("all");
                     setDomainFilter("all");
                     setJobRoleFilter("all");
+                    setInterviewLanguageFilter("all");
                     setYtFilter("all");
                     setPreFilter("all");
                     setPostFilter("all");
@@ -1925,7 +1943,7 @@ export function PostProductionDashboard() {
               </div>
               <div className="border-t border-[#f0f0f0] pt-3">
                 <p className="mb-2 text-[11px] text-[#aeaeb2]">
-                  Domain and job role apply to testimonial rows only.
+                  Domain, job role, and interview language apply to testimonial rows only.
                 </p>
                 <div className="flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-end">
                   <label className="flex w-full flex-col gap-1 sm:w-36">
@@ -1978,6 +1996,28 @@ export function PostProductionDashboard() {
                           {jr}
                         </option>
                       ))}
+                    </select>
+                  </label>
+                  <label className="flex w-full min-w-[160px] flex-col gap-1 sm:w-48">
+                    <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+                      Interview language
+                    </span>
+                    <select
+                      className="rounded-xl border border-[#e5e5e5] px-3 py-2 text-sm"
+                      value={interviewLanguageFilter}
+                      onChange={(e) =>
+                        setInterviewLanguageFilter(
+                          e.target.value as InterviewLanguageFilter,
+                        )
+                      }
+                    >
+                      <option value="all">All</option>
+                      {INTERVIEW_LANG_PRESETS.map((lang) => (
+                        <option key={lang} value={lang}>
+                          {formatInterviewLanguageLabel(lang)}
+                        </option>
+                      ))}
+                      <option value="other">Other</option>
                     </select>
                   </label>
                 </div>
