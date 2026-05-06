@@ -1610,6 +1610,42 @@ export function InterviewsBoard() {
     void loadData();
   };
 
+  const revokeLinkedInTrack = async (c: EligibleCandidate) => {
+    if (!supabase) return;
+    const confirmed = window.confirm(
+      "Revoke LinkedIn track for this candidate?\n\nThey will move back to the interview scheduling queue.",
+    );
+    if (!confirmed) return;
+    setLiBusyId(c.id);
+    const { error: uErr } = await supabase
+      .from("candidates")
+      .update({
+        linkedin_track: false,
+        linkedin_track_status: "pending_post",
+      })
+      .eq("id", c.id)
+      .eq("is_deleted", false);
+    setLiBusyId(null);
+    if (uErr) {
+      setError(uErr.message);
+      return;
+    }
+    const display = c.full_name?.trim() || c.email || "Candidate";
+    const authUser = await getUserSafe(supabase);
+    if (authUser) {
+      await logActivity({
+        supabase,
+        user: authUser,
+        action_type: "interviews",
+        entity_type: "candidate",
+        entity_id: c.id,
+        candidate_name: display,
+        description: `LinkedIn track: revoked ${display} back to interview queue`,
+      });
+    }
+    void loadData();
+  };
+
   const markLinkedInEligibleWithDispatch = async (c: EligibleCandidate) => {
     if (!supabase) return;
     if (c.linkedin_track_status === "eligible") return;
@@ -2388,6 +2424,16 @@ export function InterviewsBoard() {
                                           —
                                         </span>
                                       ) : null}
+                                      <button
+                                        type="button"
+                                        disabled={busy}
+                                        className="rounded-lg border border-[#e5e5e5] bg-white px-2.5 py-1.5 text-xs font-medium text-[#6e6e73] hover:bg-[#f5f5f7] disabled:opacity-50"
+                                        onClick={() =>
+                                          void revokeLinkedInTrack(c)
+                                        }
+                                      >
+                                        Revoke
+                                      </button>
                                     </div>
                                   </td>
                                 </tr>
