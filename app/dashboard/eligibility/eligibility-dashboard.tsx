@@ -1,6 +1,6 @@
 "use client";
 
-import { endOfDay, parseISO, startOfDay, startOfWeek } from "date-fns";
+import { endOfDay, parseISO, startOfDay } from "date-fns";
 import { Check, Loader2, RefreshCw, Trash2, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
@@ -9,6 +9,12 @@ import {
   formatAchievementSummary,
   truncateText,
 } from "@/lib/candidate-summary";
+import {
+  defaultIstWeeklyDateInput,
+  formatDashboardPeriodRangeIST,
+  resolveDashboardStatsBounds,
+  type DashboardPeriod,
+} from "@/lib/dashboard-ist-dates";
 import { logActivity } from "@/lib/activity-logger";
 import { displayNameFromUser, getUserSafe } from "@/lib/supabase-auth";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
@@ -49,7 +55,7 @@ export type CandidateRow = {
 };
 
 type DashboardStats = {
-  weekTotal: number;
+  total: number;
   pending: number;
   eligible: number;
   notEligible: number;
@@ -91,6 +97,16 @@ function statusLabel(status: EligibilityStatus): string {
     default:
       return status;
   }
+}
+
+function periodLabel(period: DashboardPeriod): string {
+  if (period === "total") return "Overall";
+  if (period === "monthly") return "Monthly";
+  return "Weekly";
+}
+
+function hasCustomDateRange(dateFrom: string, dateTo: string): boolean {
+  return Boolean(dateFrom || dateTo);
 }
 
 function interviewTypeTableCell(t: InterviewTrack | null | undefined) {
@@ -148,6 +164,10 @@ export function EligibilityDashboard() {
   const [industryFilter, setIndustryFilter] = useState<string>("");
   const [dateFrom, setDateFrom] = useState<string>("");
   const [dateTo, setDateTo] = useState<string>("");
+  const [period, setPeriod] = useState<DashboardPeriod>("total");
+  const [weeklyDateInput, setWeeklyDateInput] = useState(
+    defaultIstWeeklyDateInput,
+  );
 
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [detailCandidate, setDetailCandidate] = useState<CandidateRow | null>(
@@ -180,38 +200,46 @@ export function EligibilityDashboard() {
 
   const loadStats = useCallback(async () => {
     if (!supabase) return;
-    const weekStart = startOfWeek(new Date(), { weekStartsOn: 1 });
+    const customRangeActive = hasCustomDateRange(dateFrom, dateTo);
+    const bounds = customRangeActive
+      ? null
+      : resolveDashboardStatsBounds(period, weeklyDateInput, "");
+    const rangeStart = customRangeActive
+      ? dateFrom
+        ? startOfDay(parseISO(dateFrom)).toISOString()
+        : null
+      : (bounds?.startIso ?? null);
+    const rangeEnd = customRangeActive
+      ? dateTo
+        ? endOfDay(parseISO(dateTo)).toISOString()
+        : null
+      : (bounds?.endIso ?? null);
 
-    const [weekRes, pendingRes, eligibleRes, notRes] = await Promise.all([
-      supabase
+    const buildCountQuery = (status?: EligibilityStatus) => {
+      let q = supabase
         .from("candidates")
         .select("id", { count: "exact", head: true })
-        .eq("is_deleted", false)
-        .gte("created_at", weekStart.toISOString()),
-      supabase
-        .from("candidates")
-        .select("id", { count: "exact", head: true })
-        .eq("is_deleted", false)
-        .eq("eligibility_status", "pending_review"),
-      supabase
-        .from("candidates")
-        .select("id", { count: "exact", head: true })
-        .eq("is_deleted", false)
-        .eq("eligibility_status", "eligible"),
-      supabase
-        .from("candidates")
-        .select("id", { count: "exact", head: true })
-        .eq("is_deleted", false)
-        .eq("eligibility_status", "not_eligible"),
+        .eq("is_deleted", false);
+      if (status) q = q.eq("eligibility_status", status);
+      if (rangeStart) q = q.gte("created_at", rangeStart);
+      if (rangeEnd) q = q.lt("created_at", rangeEnd);
+      return q;
+    };
+
+    const [totalRes, pendingRes, eligibleRes, notRes] = await Promise.all([
+      buildCountQuery(),
+      buildCountQuery("pending_review"),
+      buildCountQuery("eligible"),
+      buildCountQuery("not_eligible"),
     ]);
 
     setStats({
-      weekTotal: weekRes.count ?? 0,
+      total: totalRes.count ?? 0,
       pending: pendingRes.count ?? 0,
       eligible: eligibleRes.count ?? 0,
       notEligible: notRes.count ?? 0,
     });
-  }, [supabase]);
+  }, [supabase, period, weeklyDateInput, dateFrom, dateTo]);
 
   useEffect(() => {
     if (!supabase) {
@@ -640,6 +668,19 @@ export function EligibilityDashboard() {
     filteredRows.length > 0 &&
     filteredRows.every((r) => selected.has(r.id));
 
+  const customRangeActive = hasCustomDateRange(dateFrom, dateTo);
+
+  const periodRangeLabel = useMemo(() => {
+    if (customRangeActive) {
+      if (dateFrom && dateTo) return `Range: ${dateFrom} to ${dateTo}`;
+      if (dateFrom) return `Range: from ${dateFrom}`;
+      if (dateTo) return `Range: until ${dateTo}`;
+      return null;
+    }
+    const bounds = resolveDashboardStatsBounds(period, weeklyDateInput, "");
+    return formatDashboardPeriodRangeIST(period, bounds);
+  }, [period, weeklyDateInput, customRangeActive, dateFrom, dateTo]);
+
   return (
     <>
       <header className="sticky top-14 z-30 bg-[#f5f5f7]/90 px-4 py-4 backdrop-blur-md sm:px-6 sm:py-5 lg:top-0 lg:px-8 lg:py-6">
@@ -690,27 +731,85 @@ export function EligibilityDashboard() {
           </div>
         )}
 
+        <section className="mb-4 flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-end">
+          <div className="inline-flex rounded-full bg-white p-1 shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
+            {(["total", "weekly"] as const).map((p) => (
+              <button
+                key={p}
+                type="button"
+                onClick={() => setPeriod(p)}
+                className={`rounded-full px-4 py-1.5 text-sm transition-all duration-200 ease-in-out ${
+                  period === p
+                    ? "bg-[#1d1d1f] font-medium text-white"
+                    : "text-[#6e6e73] hover:text-[#1d1d1f]"
+                }`}
+              >
+                {periodLabel(p)}
+              </button>
+            ))}
+          </div>
+          {period === "weekly" ? (
+            <label className="flex min-w-[220px] flex-col gap-1">
+              <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+                Select week
+              </span>
+              <input
+                type="date"
+                value={weeklyDateInput}
+                onChange={(e) => setWeeklyDateInput(e.target.value)}
+                className="rounded-xl border border-[#e5e5e5] bg-white px-3 py-2 text-sm text-[#1d1d1f] focus:border-[#3b82f6] focus:outline-none focus:ring-0"
+              />
+            </label>
+          ) : null}
+        </section>
+
+        {periodRangeLabel ? (
+          <p className="mb-4 text-sm text-[#6e6e73]">{periodRangeLabel}</p>
+        ) : null}
+
         <section className="mb-8 grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
           {[
             {
-              label: "New this week",
-              value: stats?.weekTotal ?? "—",
-              sub: "Created since Monday",
+              label: customRangeActive
+                ? "New in range"
+                : period === "weekly"
+                  ? "New this week"
+                  : "Total candidates",
+              value: stats?.total ?? "—",
+              sub:
+                customRangeActive
+                  ? "Created in selected date range"
+                  : period === "weekly"
+                  ? "Created Saturday to Friday"
+                  : "All-time entries",
             },
             {
               label: "Pending review",
               value: stats?.pending ?? "—",
-              sub: "Awaiting decision",
+              sub:
+                customRangeActive
+                  ? "Awaiting decision in range"
+                  : period === "weekly"
+                  ? "Awaiting decision this week"
+                  : "Awaiting decision overall",
             },
             {
               label: "Eligible",
               value: stats?.eligible ?? "—",
-              sub: "Approved",
+              sub: customRangeActive
+                ? "Approved in range"
+                : period === "weekly"
+                  ? "Approved this week"
+                  : "Approved overall",
             },
             {
               label: "Not eligible",
               value: stats?.notEligible ?? "—",
-              sub: "Declined",
+              sub: customRangeActive
+                ? "Declined in range"
+                : period === "weekly"
+                  ? "Declined this week"
+                  : "Declined overall",
             },
           ].map((card) => (
             <div key={card.label} className={`p-4 sm:p-6 ${cardChrome}`}>
