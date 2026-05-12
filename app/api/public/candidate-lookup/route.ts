@@ -1,7 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 
-import { runPublicCandidateLookup } from "@/lib/candidate-public-lookup";
+import { runCandidateLookup } from "@/lib/candidate-lookup";
 
 export async function POST(req: Request) {
   try {
@@ -13,7 +13,7 @@ export async function POST(req: Request) {
     const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
     if (!url || (!serviceKey && !anonKey)) {
       return NextResponse.json(
-        { ok: false, error: "Server misconfigured" },
+        { ok: false, reason: "error", message: "Server misconfigured" } as const,
         { status: 503 },
       );
     }
@@ -22,7 +22,7 @@ export async function POST(req: Request) {
       auth: { persistSession: false, autoRefreshToken: false },
     });
 
-    const result = await runPublicCandidateLookup(supabase, query);
+    const result = await runCandidateLookup(supabase, query);
     return NextResponse.json(result, {
       headers: {
         "Cache-Control": "no-store, max-age=0",
@@ -30,7 +30,7 @@ export async function POST(req: Request) {
     });
   } catch {
     return NextResponse.json(
-      { ok: false, error: "Lookup failed" },
+      { ok: false, reason: "error", message: "Lookup failed" } as const,
       { status: 500 },
     );
   }

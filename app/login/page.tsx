@@ -1,141 +1,19 @@
 "use client";
 
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
-import { Eye, EyeOff, Loader2, X } from "lucide-react";
+import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import {
   type FormEvent,
-  useCallback,
   useEffect,
   useState,
 } from "react";
 
 import { LogoOnDark, LogoOnLight } from "@/components/brand-logo";
-import {
-  effectiveInterviewStatus,
-  resolveFollowupStatusPublicDisplay,
-  resolveSupportStatus,
-  type SupportLookupPayload,
-} from "@/lib/support-lookup";
-import type { PublicCandidateLookupResponse } from "@/lib/candidate-public-lookup";
+import { CandidateLookupSection } from "@/components/candidate-lookup/candidate-lookup-section";
 
 const inputClass =
   "w-full rounded-xl border border-[#e5e5e5] px-4 py-3 text-sm text-[#1d1d1f] placeholder:text-[#aeaeb2] focus:border-[#3b82f6] focus:outline-none focus:ring-1 focus:ring-[#3b82f6]";
-
-function CandidateLookupResultCard({
-  payload,
-}: {
-  payload: SupportLookupPayload;
-}) {
-  const status = resolveSupportStatus(payload);
-  const followupDisplay = resolveFollowupStatusPublicDisplay(payload);
-  const { candidate, interview, dispatch } = payload;
-  const typeForBadge = interview?.interview_type ?? candidate.interview_type;
-  const reward =
-    dispatch?.reward_item?.trim() ||
-    (interview && effectiveInterviewStatus(interview) === "completed"
-      ? interview.reward_item?.trim()
-      : null) ||
-    null;
-
-  return (
-    <div className="mt-5 rounded-2xl border border-[#f0f0f0] bg-[#fafafa] p-5 text-left">
-      <p className="text-xl font-bold text-[#1d1d1f]">
-        {candidate.full_name?.trim() || "—"}
-      </p>
-      <div className="mt-3 space-y-1 text-sm text-[#6e6e73]">
-        <p className="break-all">
-          <span className="text-[#9ca3af]">Email </span>
-          {candidate.email}
-        </p>
-        <p>
-          <span className="text-[#9ca3af]">Phone </span>
-          {candidate.whatsapp_number?.trim() ? (
-            candidate.whatsapp_number
-          ) : (
-            <span className="text-[#d1d5db]">—</span>
-          )}
-        </p>
-      </div>
-      <div className="mt-4">
-        <p className="mb-2 text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
-          Interview type
-        </p>
-        {interviewTypeBadge(typeForBadge)}
-      </div>
-      <div className="mt-4 border-t border-[#e5e5e5] pt-4">
-        <p className="mb-2 text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
-          Current status
-        </p>
-        <span
-          className={`inline-flex flex-wrap items-center gap-x-1 rounded-full px-3 py-1.5 text-xs font-semibold ${status.badgeClass}`}
-        >
-          {status.title}
-        </span>
-        {status.lines.length > 0 ? (
-          <div className="mt-3 space-y-1.5 text-sm leading-snug text-[#6e6e73]">
-            {status.lines.map((line, i) => (
-              <p key={i}>{line}</p>
-            ))}
-          </div>
-        ) : null}
-      </div>
-      {followupDisplay ? (
-        <div className="mt-4 border-t border-[#e5e5e5] pt-4">
-          <p className="mb-2 text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
-            Follow-up status
-          </p>
-          <p className="text-sm font-medium text-[#1d1d1f]">
-            {followupDisplay.title}
-          </p>
-          {followupDisplay.subtitle ? (
-            <p className="mt-1 text-sm leading-snug text-[#6e6e73]">
-              {followupDisplay.subtitle}
-            </p>
-          ) : null}
-        </div>
-      ) : null}
-      {candidate.poc_assigned?.trim() ? (
-        <div className="mt-4 border-t border-[#e5e5e5] pt-4">
-          <p className="text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
-            POC assigned
-          </p>
-          <p className="mt-1 text-sm font-medium text-[#1d1d1f]">
-            {candidate.poc_assigned}
-          </p>
-        </div>
-      ) : null}
-      {reward ? (
-        <div className="mt-4 border-t border-[#e5e5e5] pt-4">
-          <p className="text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
-            Reward item
-          </p>
-          <p className="mt-1 text-sm text-[#1d1d1f]">{reward}</p>
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function interviewTypeBadge(t: string | null | undefined) {
-  if (t === "testimonial") {
-    return (
-      <span className="inline-flex rounded-full bg-[#f0fdf4] px-2.5 py-1 text-xs font-medium text-[#16a34a]">
-        Testimonial
-      </span>
-    );
-  }
-  if (t === "project") {
-    return (
-      <span className="inline-flex rounded-full bg-[#eff6ff] px-2.5 py-1 text-xs font-medium text-[#2563eb]">
-        Project
-      </span>
-    );
-  }
-  return (
-    <span className="text-xs font-medium text-[#6e6e73]">Not set</span>
-  );
-}
 
 function authFormErrorMessage(message: string): string {
   if (message === "Invalid login credentials") {
@@ -158,27 +36,8 @@ export default function LoginPage() {
   const [resetLoading, setResetLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [rightVisible, setRightVisible] = useState(false);
-  const [lookupModalOpen, setLookupModalOpen] = useState(false);
-  const [lookupModalQuery, setLookupModalQuery] = useState("");
-  const [lookupLoading, setLookupLoading] = useState(false);
-  const [lookupPayload, setLookupPayload] = useState<SupportLookupPayload | null>(
-    null,
-  );
-  const [lookupNotFound, setLookupNotFound] = useState(false);
-  const [lookupMultiPhone, setLookupMultiPhone] = useState(false);
-  const [lookupError, setLookupError] = useState<string | null>(null);
   const router = useRouter();
   const supabase = createClientComponentClient();
-
-  const closeLookupModal = useCallback(() => {
-    setLookupModalOpen(false);
-    setLookupModalQuery("");
-    setLookupPayload(null);
-    setLookupNotFound(false);
-    setLookupMultiPhone(false);
-    setLookupError(null);
-    setLookupLoading(false);
-  }, []);
 
   useEffect(() => {
     const id = requestAnimationFrame(() => setRightVisible(true));
@@ -195,28 +54,15 @@ export default function LoginPage() {
     window.history.replaceState(null, "", window.location.pathname);
   }, []);
 
-  useEffect(() => {
-    if (!lookupModalOpen) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") closeLookupModal();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [lookupModalOpen, closeLookupModal]);
-
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError("");
     setLoading(true);
-    const { data, error } = await supabase.auth.signInWithPassword({
+    const { error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
     setLoading(false);
-
-    console.log("Login attempt:", { email });
-    console.log("Login error:", error);
-    console.log("Login data:", data);
 
     if (error) {
       setError(error.message);
@@ -249,43 +95,6 @@ export default function LoginPage() {
     }
     setResetSuccess("Check your email for a reset link");
   }
-
-  const runSupportLookup = useCallback(async () => {
-    const raw = lookupModalQuery.trim();
-    setLookupPayload(null);
-    setLookupNotFound(false);
-    setLookupMultiPhone(false);
-    setLookupError(null);
-    if (!raw) return;
-
-    setLookupLoading(true);
-    try {
-      const res = await fetch("/api/public/candidate-lookup", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: raw }),
-        cache: "no-store",
-      });
-      let json: PublicCandidateLookupResponse;
-      try {
-        json = (await res.json()) as PublicCandidateLookupResponse;
-      } catch {
-        setLookupError("Could not read response");
-        return;
-      }
-      if (!json.ok) {
-        if ("multiPhone" in json && json.multiPhone) setLookupMultiPhone(true);
-        else if ("notFound" in json && json.notFound) setLookupNotFound(true);
-        else if ("error" in json && json.error)
-          setLookupError(json.error);
-        else setLookupNotFound(true);
-        return;
-      }
-      setLookupPayload(json.payload);
-    } finally {
-      setLookupLoading(false);
-    }
-  }, [lookupModalQuery]);
 
   return (
     <div className="flex min-h-screen flex-col font-sans lg:flex-row">
@@ -453,19 +262,7 @@ export default function LoginPage() {
                   </button>
                 </form>
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    setLookupModalOpen(true);
-                    setLookupPayload(null);
-                    setLookupNotFound(false);
-                    setLookupMultiPhone(false);
-                    setLookupError(null);
-                  }}
-                  className="mt-3 flex w-full items-center justify-center rounded-xl border-2 border-[#1d1d1f] bg-white py-3 text-sm font-medium text-[#1d1d1f] transition-colors hover:bg-[#fafafa]"
-                >
-                  🔍 Candidate Lookup
-                </button>
+                <CandidateLookupSection />
               </>
             ) : (
               <>
@@ -549,110 +346,6 @@ export default function LoginPage() {
         </div>
       </div>
 
-      {lookupModalOpen ? (
-        <div
-          className="fixed inset-0 z-[100] flex items-stretch justify-center p-0 sm:items-center sm:p-4"
-          role="presentation"
-        >
-          <button
-            type="button"
-            className="absolute inset-0 bg-[#0f1729]/65 backdrop-blur-[2px] sm:bg-[#0f1729]/65"
-            aria-label="Close dialog"
-            onClick={closeLookupModal}
-          />
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="candidate-lookup-title"
-            className="relative z-10 flex h-full min-h-[100dvh] w-full max-w-none flex-col overflow-hidden rounded-none bg-white shadow-xl sm:h-auto sm:min-h-0 sm:max-h-[min(90vh,720px)] sm:max-w-md sm:rounded-2xl"
-          >
-            <div className="flex shrink-0 items-start justify-between gap-4 border-b border-[#f0f0f0] px-6 pb-4 pt-5">
-              <div className="min-w-0 pr-2">
-                <h2
-                  id="candidate-lookup-title"
-                  className="text-lg font-semibold text-[#1d1d1f]"
-                >
-                  Candidate Lookup
-                </h2>
-                <p className="mt-1 text-sm text-[#6e6e73]">
-                  Enter mobile number or email to check status
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={closeLookupModal}
-                className="shrink-0 rounded-lg p-2 text-[#6e6e73] transition-colors hover:bg-[#f5f5f7] hover:text-[#1d1d1f]"
-                aria-label="Close"
-              >
-                <X className="h-5 w-5" strokeWidth={2} />
-              </button>
-            </div>
-
-            <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-6 py-5">
-              <input
-                type="text"
-                value={lookupModalQuery}
-                onChange={(e) => setLookupModalQuery(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    void runSupportLookup();
-                  }
-                }}
-                placeholder="Mobile number or email…"
-                autoComplete="off"
-                className={inputClass}
-                aria-label="Mobile number or email"
-              />
-              <button
-                type="button"
-                disabled={lookupLoading}
-                onClick={() => void runSupportLookup()}
-                className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-[#1d1d1f] py-3 text-sm font-medium text-white transition-colors hover:bg-[#2d2d2f] disabled:cursor-not-allowed disabled:opacity-70"
-              >
-                {lookupLoading ? (
-                  <>
-                    <Loader2
-                      className="h-4 w-4 shrink-0 animate-spin"
-                      aria-hidden
-                    />
-                    Searching…
-                  </>
-                ) : (
-                  "Search"
-                )}
-              </button>
-
-              <div className="mt-6 min-h-[120px]">
-                {lookupLoading ? (
-                  <div className="flex flex-col items-center justify-center py-10">
-                    <Loader2
-                      className="h-8 w-8 animate-spin text-[#1d1d1f]"
-                      aria-hidden
-                    />
-                    <p className="mt-3 text-sm text-[#6e6e73]">Searching…</p>
-                  </div>
-                ) : lookupMultiPhone ? (
-                  <p className="py-8 text-center text-sm text-[#6e6e73]">
-                    Several records match this number. Please search using the
-                    email on your application.
-                  </p>
-                ) : lookupError ? (
-                  <p className="py-8 text-center text-sm text-[#dc2626]">
-                    {lookupError}
-                  </p>
-                ) : lookupNotFound && !lookupPayload ? (
-                  <p className="py-8 text-center text-sm text-[#6e6e73]">
-                    No candidate found
-                  </p>
-                ) : lookupPayload ? (
-                  <CandidateLookupResultCard payload={lookupPayload} />
-                ) : null}
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 }
