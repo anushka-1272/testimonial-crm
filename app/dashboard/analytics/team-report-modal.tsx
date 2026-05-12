@@ -82,11 +82,24 @@ function followupActorKey(r: FollowupRow): string {
   return "unknown";
 }
 
+/** One readable line; avoid `email (email)` when CRM stored the same value twice. */
 function followupActorDisplay(r: FollowupRow): string {
-  const name = r.logged_by?.trim();
-  const em = r.logged_by_email?.trim();
-  if (name && em) return `${name} (${em})`;
+  const name = r.logged_by?.trim() ?? "";
+  const em = r.logged_by_email?.trim() ?? "";
+  if (name && em) {
+    if (name.toLowerCase() === em.toLowerCase()) return em;
+    return `${name} (${em})`;
+  }
   return name || em || "Unknown";
+}
+
+function collapseRedundantPersonLabel(label: string): string {
+  const m = label.match(/^(.+?)\s+\(([^)]+)\)\s*$/);
+  if (!m) return label;
+  const inner = m[2]!.trim();
+  const outer = m[1]!.trim();
+  if (outer.toLowerCase() === inner.toLowerCase()) return inner;
+  return label;
 }
 
 function increment(map: Map<string, number>, key: string, by = 1): void {
@@ -178,7 +191,7 @@ export function TeamReportModal({ open, supabase, onClose }: TeamReportModalProp
 
     const followRowsSorted = [...byActor.entries()]
       .map(([key, count]) => ({
-        label: displayByActorKey.get(key) ?? "Unknown",
+        label: collapseRedundantPersonLabel(displayByActorKey.get(key) ?? "Unknown"),
         count,
       }))
       .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
@@ -310,8 +323,9 @@ export function TeamReportModal({ open, supabase, onClose }: TeamReportModalProp
   const rangeLabel = `${format(start, "MMM d, yyyy")} – ${format(end, "MMM d, yyyy")}`;
 
   const th =
-    "border-b border-gray-200 px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-500";
-  const td = "border-b border-gray-100 px-3 py-2 text-sm tabular-nums text-gray-900";
+    "bg-gray-50 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-600 first:rounded-tl-xl last:rounded-tr-xl";
+  const td = "px-4 py-2.5 text-sm text-gray-900";
+  const tdNum = "px-4 py-2.5 text-right text-sm font-semibold tabular-nums text-gray-900";
 
   return (
     <div className={modalOverlayClass}>
@@ -333,9 +347,9 @@ export function TeamReportModal({ open, supabase, onClose }: TeamReportModalProp
               Team report
             </h2>
             <p className="mt-1 text-sm text-gray-500">{rangeLabel}</p>
-            <p className="mt-1 text-xs text-gray-400">
-              Week starts Monday (device local time). Follow-up counts use who logged the call;
-              interview counts use the assigned interviewer on the completed row.
+            <p className="mt-1 text-xs text-gray-500">
+              Monday–Sunday weeks, your device time zone. Follow-ups = who saved the log;
+              interviews = assigned interviewer on the completed row.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -373,107 +387,28 @@ export function TeamReportModal({ open, supabase, onClose }: TeamReportModalProp
         {loading ? (
           <p className="mt-8 text-sm text-gray-500">Loading numbers…</p>
         ) : (
-          <div className="mt-6 space-y-8">
+          <div className="mt-6 space-y-10">
             <section>
-              <h3 className="text-sm font-semibold text-gray-800">Pipeline totals</h3>
-              <ul className="mt-3 grid gap-2 text-sm text-gray-700 sm:grid-cols-2">
-                <li>
-                  Follow-up calls logged (testimonial / eligible pipeline):{" "}
-                  <span className="font-semibold tabular-nums text-gray-900">
-                    {totals.followupTestimonialPipeline}
-                  </span>
-                </li>
-                <li>
-                  Follow-up calls logged (project pipeline):{" "}
-                  <span className="font-semibold tabular-nums text-gray-900">
-                    {totals.followupProjectPipeline}
-                  </span>
-                </li>
-                <li>
-                  Follow-up calls logged (all):{" "}
-                  <span className="font-semibold tabular-nums text-gray-900">
-                    {totals.followupTestimonialPipeline + totals.followupProjectPipeline}
-                  </span>
-                </li>
-                <li>
-                  Follow-up outcomes — interested:{" "}
-                  <span className="font-semibold tabular-nums text-gray-900">
-                    {totals.followupInterested}
-                  </span>
-                </li>
-                <li>
-                  Follow-up outcomes — callback requested:{" "}
-                  <span className="font-semibold tabular-nums text-gray-900">
-                    {totals.followupCallback}
-                  </span>
-                </li>
-                <li>
-                  Testimonial interviews — slots with{" "}
-                  <code className="rounded bg-gray-100 px-1 text-xs">scheduled_date</code> in
-                  range:{" "}
-                  <span className="font-semibold tabular-nums text-gray-900">
-                    {totals.testimonialScheduledSlots}
-                  </span>
-                </li>
-                <li>
-                  Project interviews — slots with{" "}
-                  <code className="rounded bg-gray-100 px-1 text-xs">scheduled_date</code> in
-                  range:{" "}
-                  <span className="font-semibold tabular-nums text-gray-900">
-                    {totals.projectScheduledSlots}
-                  </span>
-                </li>
-                <li>
-                  Testimonial interviews completed (
-                  <code className="rounded bg-gray-100 px-1 text-xs">completed_at</code> in
-                  range):{" "}
-                  <span className="font-semibold tabular-nums text-gray-900">
-                    {totals.testimonialCompleted}
-                  </span>
-                </li>
-                <li>
-                  Project interviews completed (
-                  <code className="rounded bg-gray-100 px-1 text-xs">completed_at</code> in
-                  range):{" "}
-                  <span className="font-semibold tabular-nums text-gray-900">
-                    {totals.projectCompleted}
-                  </span>
-                </li>
-                <li>
-                  Dispatch records created (
-                  <code className="rounded bg-gray-100 px-1 text-xs">dispatch.created_at</code>{" "}
-                  in range):{" "}
-                  <span className="font-semibold tabular-nums text-gray-900">
-                    {totals.dispatches}
-                  </span>
-                </li>
-              </ul>
-            </section>
-
-            <section>
-              <h3 className="text-sm font-semibold text-gray-800">
-                Follow-up calls by person (logged)
-              </h3>
-              <p className="mt-1 text-xs text-gray-500">
-                From <code className="rounded bg-gray-100 px-1">followup_log</code> — whoever
-                saved the log entry (name / email when available).
+              <h3 className="text-base font-semibold text-gray-900">Follow-up calls by person</h3>
+              <p className="mt-0.5 text-sm text-gray-500">
+                Counts who saved each follow-up for this period.
               </p>
               {followupByActor.length === 0 ? (
-                <p className="mt-2 text-sm text-gray-500">No follow-up logs in this period.</p>
+                <p className="mt-3 text-sm text-gray-500">No follow-ups in this period.</p>
               ) : (
-                <div className="mt-3 overflow-x-auto rounded-lg border border-gray-100">
+                <div className="mt-4 overflow-hidden rounded-xl border border-gray-200 shadow-sm">
                   <table className="min-w-full border-collapse text-left">
                     <thead>
                       <tr>
                         <th className={th}>Person</th>
-                        <th className={`${th} text-right`}>Calls logged</th>
+                        <th className={`${th} text-right`}>Calls</th>
                       </tr>
                     </thead>
-                    <tbody>
+                    <tbody className="divide-y divide-gray-100 bg-white">
                       {followupByActor.map((row) => (
-                        <tr key={row.label}>
+                        <tr key={row.label} className="hover:bg-gray-50/80">
                           <td className={td}>{row.label}</td>
-                          <td className={`${td} text-right font-medium`}>{row.count}</td>
+                          <td className={tdNum}>{row.count}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -483,13 +418,14 @@ export function TeamReportModal({ open, supabase, onClose }: TeamReportModalProp
             </section>
 
             <section>
-              <h3 className="text-sm font-semibold text-gray-800">
-                Testimonial interviews completed — by interviewer
+              <h3 className="text-base font-semibold text-gray-900">
+                Testimonial interviews completed
               </h3>
+              <p className="mt-0.5 text-sm text-gray-500">By interviewer, completed in this period.</p>
               {testimonialIvByPerson.length === 0 ? (
-                <p className="mt-2 text-sm text-gray-500">None in this period.</p>
+                <p className="mt-3 text-sm text-gray-500">None in this period.</p>
               ) : (
-                <div className="mt-3 overflow-x-auto rounded-lg border border-gray-100">
+                <div className="mt-4 overflow-hidden rounded-xl border border-gray-200 shadow-sm">
                   <table className="min-w-full border-collapse text-left">
                     <thead>
                       <tr>
@@ -497,11 +433,11 @@ export function TeamReportModal({ open, supabase, onClose }: TeamReportModalProp
                         <th className={`${th} text-right`}>Completed</th>
                       </tr>
                     </thead>
-                    <tbody>
+                    <tbody className="divide-y divide-gray-100 bg-white">
                       {testimonialIvByPerson.map((row) => (
-                        <tr key={`t-${row.label}`}>
+                        <tr key={`t-${row.label}`} className="hover:bg-gray-50/80">
                           <td className={td}>{row.label}</td>
-                          <td className={`${td} text-right font-medium`}>{row.count}</td>
+                          <td className={tdNum}>{row.count}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -511,13 +447,12 @@ export function TeamReportModal({ open, supabase, onClose }: TeamReportModalProp
             </section>
 
             <section>
-              <h3 className="text-sm font-semibold text-gray-800">
-                Project interviews completed — by interviewer
-              </h3>
+              <h3 className="text-base font-semibold text-gray-900">Project interviews completed</h3>
+              <p className="mt-0.5 text-sm text-gray-500">By interviewer, completed in this period.</p>
               {projectIvByPerson.length === 0 ? (
-                <p className="mt-2 text-sm text-gray-500">None in this period.</p>
+                <p className="mt-3 text-sm text-gray-500">None in this period.</p>
               ) : (
-                <div className="mt-3 overflow-x-auto rounded-lg border border-gray-100">
+                <div className="mt-4 overflow-hidden rounded-xl border border-gray-200 shadow-sm">
                   <table className="min-w-full border-collapse text-left">
                     <thead>
                       <tr>
@@ -525,17 +460,86 @@ export function TeamReportModal({ open, supabase, onClose }: TeamReportModalProp
                         <th className={`${th} text-right`}>Completed</th>
                       </tr>
                     </thead>
-                    <tbody>
+                    <tbody className="divide-y divide-gray-100 bg-white">
                       {projectIvByPerson.map((row) => (
-                        <tr key={`p-${row.label}`}>
+                        <tr key={`p-${row.label}`} className="hover:bg-gray-50/80">
                           <td className={td}>{row.label}</td>
-                          <td className={`${td} text-right font-medium`}>{row.count}</td>
+                          <td className={tdNum}>{row.count}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
               )}
+            </section>
+
+            <section className="rounded-xl border border-gray-200 bg-gradient-to-b from-gray-50 to-white p-5 shadow-sm">
+              <h3 className="text-base font-semibold text-gray-900">Period summary</h3>
+              <p className="mt-0.5 text-sm text-gray-500">
+                Org-wide totals for the same range (includes rows not tied to a single person above).
+              </p>
+              <dl className="mt-4 divide-y divide-gray-200">
+                <div className="flex items-baseline justify-between gap-4 py-2.5 first:pt-0">
+                  <dt className="text-sm text-gray-600">Follow-up calls (testimonial pipeline)</dt>
+                  <dd className="text-sm font-semibold tabular-nums text-gray-900">
+                    {totals.followupTestimonialPipeline}
+                  </dd>
+                </div>
+                <div className="flex items-baseline justify-between gap-4 py-2.5">
+                  <dt className="text-sm text-gray-600">Follow-up calls (project pipeline)</dt>
+                  <dd className="text-sm font-semibold tabular-nums text-gray-900">
+                    {totals.followupProjectPipeline}
+                  </dd>
+                </div>
+                <div className="flex items-baseline justify-between gap-4 py-2.5">
+                  <dt className="text-sm text-gray-600">Follow-up calls (all)</dt>
+                  <dd className="text-sm font-semibold tabular-nums text-gray-900">
+                    {totals.followupTestimonialPipeline + totals.followupProjectPipeline}
+                  </dd>
+                </div>
+                <div className="flex items-baseline justify-between gap-4 py-2.5">
+                  <dt className="text-sm text-gray-600">Follow-up marked interested</dt>
+                  <dd className="text-sm font-semibold tabular-nums text-gray-900">
+                    {totals.followupInterested}
+                  </dd>
+                </div>
+                <div className="flex items-baseline justify-between gap-4 py-2.5">
+                  <dt className="text-sm text-gray-600">Follow-up callback requested</dt>
+                  <dd className="text-sm font-semibold tabular-nums text-gray-900">
+                    {totals.followupCallback}
+                  </dd>
+                </div>
+                <div className="flex items-baseline justify-between gap-4 py-2.5">
+                  <dt className="text-sm text-gray-600">Testimonial interviews scheduled</dt>
+                  <dd className="text-sm font-semibold tabular-nums text-gray-900">
+                    {totals.testimonialScheduledSlots}
+                  </dd>
+                </div>
+                <div className="flex items-baseline justify-between gap-4 py-2.5">
+                  <dt className="text-sm text-gray-600">Project interviews scheduled</dt>
+                  <dd className="text-sm font-semibold tabular-nums text-gray-900">
+                    {totals.projectScheduledSlots}
+                  </dd>
+                </div>
+                <div className="flex items-baseline justify-between gap-4 py-2.5">
+                  <dt className="text-sm text-gray-600">Testimonial interviews completed</dt>
+                  <dd className="text-sm font-semibold tabular-nums text-gray-900">
+                    {totals.testimonialCompleted}
+                  </dd>
+                </div>
+                <div className="flex items-baseline justify-between gap-4 py-2.5">
+                  <dt className="text-sm text-gray-600">Project interviews completed</dt>
+                  <dd className="text-sm font-semibold tabular-nums text-gray-900">
+                    {totals.projectCompleted}
+                  </dd>
+                </div>
+                <div className="flex items-baseline justify-between gap-4 py-2.5 last:pb-0">
+                  <dt className="text-sm text-gray-600">Dispatches recorded</dt>
+                  <dd className="text-sm font-semibold tabular-nums text-gray-900">
+                    {totals.dispatches}
+                  </dd>
+                </div>
+              </dl>
             </section>
           </div>
         )}
