@@ -12,27 +12,14 @@ import {
 
 import { LogoOnDark, LogoOnLight } from "@/components/brand-logo";
 import {
-  digitsOnly,
-  pickBestInterviewForLookup,
   resolveFollowupStatusPublicDisplay,
   resolveSupportStatus,
-  type SupportDispatch,
-  type SupportInterview,
   type SupportLookupPayload,
-  type SupportCandidate,
 } from "@/lib/support-lookup";
+import type { PublicCandidateLookupResponse } from "@/lib/candidate-public-lookup";
 
 const inputClass =
   "w-full rounded-xl border border-[#e5e5e5] px-4 py-3 text-sm text-[#1d1d1f] placeholder:text-[#aeaeb2] focus:border-[#3b82f6] focus:outline-none focus:ring-1 focus:ring-[#3b82f6]";
-
-const CANDIDATE_LOOKUP_SELECT =
-  "id, full_name, email, whatsapp_number, eligibility_status, interview_type, poc_assigned, followup_status, followup_count, callback_datetime, not_interested_reason";
-
-const INTERVIEW_LOOKUP_SELECT =
-  "id, interview_status, scheduled_date, interviewer, reschedule_reason, interview_type, reward_item, completed_at, created_at";
-
-const DISPATCH_LOOKUP_SELECT =
-  "dispatch_status, tracking_id, expected_delivery_date, reward_item";
 
 function CandidateLookupResultCard({
   payload,
@@ -80,7 +67,7 @@ function CandidateLookupResultCard({
       </div>
       <div className="mt-4 border-t border-[#e5e5e5] pt-4">
         <p className="mb-2 text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
-          Pipeline status
+          Current status
         </p>
         <span
           className={`inline-flex flex-wrap items-center gap-x-1 rounded-full px-3 py-1.5 text-xs font-semibold ${status.badgeClass}`}
@@ -181,6 +168,7 @@ export default function LoginPage() {
   );
   const [lookupNotFound, setLookupNotFound] = useState(false);
   const [lookupMultiPhone, setLookupMultiPhone] = useState(false);
+  const [lookupError, setLookupError] = useState<string | null>(null);
   const router = useRouter();
   const supabase = createClientComponentClient();
 
@@ -190,6 +178,7 @@ export default function LoginPage() {
     setLookupPayload(null);
     setLookupNotFound(false);
     setLookupMultiPhone(false);
+    setLookupError(null);
     setLookupLoading(false);
   }, []);
 
@@ -268,89 +257,36 @@ export default function LoginPage() {
     setLookupPayload(null);
     setLookupNotFound(false);
     setLookupMultiPhone(false);
+    setLookupError(null);
     if (!raw) return;
 
     setLookupLoading(true);
     try {
-      let candidate: SupportCandidate | null = null;
-
-      if (raw.includes("@")) {
-        const { data, error } = await supabase
-          .from("candidates")
-          .select(CANDIDATE_LOOKUP_SELECT)
-          .eq("is_deleted", false)
-          .ilike("email", raw)
-          .limit(2);
-        if (error) {
-          setLookupNotFound(true);
-          return;
-        }
-        const rows = (data ?? []) as SupportCandidate[];
-        if (rows.length === 1) candidate = rows[0];
-        else setLookupNotFound(true);
-      } else {
-        const digits = digitsOnly(raw);
-        if (digits.length < 8) {
-          setLookupNotFound(true);
-          return;
-        }
-        const { data, error } = await supabase
-          .from("candidates")
-          .select(CANDIDATE_LOOKUP_SELECT)
-          .eq("is_deleted", false)
-          .ilike("whatsapp_number", `%${digits}%`)
-          .limit(15);
-        if (error) {
-          setLookupNotFound(true);
-          return;
-        }
-        const rows = (data ?? []) as SupportCandidate[];
-        const normalized = rows.filter((r) => {
-          const w = digitsOnly(r.whatsapp_number ?? "");
-          if (!w) return false;
-          return (
-            w === digits ||
-            w.endsWith(digits) ||
-            digits.endsWith(w) ||
-            w.includes(digits)
-          );
-        });
-        if (normalized.length === 1) candidate = normalized[0];
-        else if (normalized.length === 0) setLookupNotFound(true);
-        else setLookupMultiPhone(true);
-      }
-
-      if (!candidate) return;
-
-      const { data: intRows } = await supabase
-        .from("interviews")
-        .select(INTERVIEW_LOOKUP_SELECT)
-        .eq("candidate_id", candidate.id)
-        .order("created_at", { ascending: false })
-        .limit(40);
-
-      const interview = pickBestInterviewForLookup(
-        (intRows ?? []) as SupportInterview[],
-      );
-
-      const { data: dispRows } = await supabase
-        .from("dispatch")
-        .select(DISPATCH_LOOKUP_SELECT)
-        .eq("candidate_id", candidate.id)
-        .order("created_at", { ascending: false })
-        .limit(1);
-
-      const dispatch = (dispRows?.[0] ?? null) as SupportDispatch | null;
-
-      setLookupPayload({
-        candidate,
-        interview,
-        dispatch,
+      const res = await fetch("/api/public/candidate-lookup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: raw }),
       });
+      let json: PublicCandidateLookupResponse;
+      try {
+        json = (await res.json()) as PublicCandidateLookupResponse;
+      } catch {
+        setLookupError("Could not read response");
+        return;
+      }
+      if (!json.ok) {
+        if ("multiPhone" in json && json.multiPhone) setLookupMultiPhone(true);
+        else if ("notFound" in json && json.notFound) setLookupNotFound(true);
+        else if ("error" in json && json.error)
+          setLookupError(json.error);
+        else setLookupNotFound(true);
+        return;
+      }
+      setLookupPayload(json.payload);
     } finally {
       setLookupLoading(false);
     }
-  }, [lookupModalQuery, supabase]);
+  }, [lookupModalQuery]);
 
   return (
     <div className="flex min-h-screen flex-col font-sans lg:flex-row">
@@ -525,6 +461,7 @@ export default function LoginPage() {
                     setLookupPayload(null);
                     setLookupNotFound(false);
                     setLookupMultiPhone(false);
+                    setLookupError(null);
                   }}
                   className="mt-3 flex w-full items-center justify-center rounded-xl border-2 border-[#1d1d1f] bg-white py-3 text-sm font-medium text-[#1d1d1f] transition-colors hover:bg-[#fafafa]"
                 >
@@ -700,6 +637,10 @@ export default function LoginPage() {
                   <p className="py-8 text-center text-sm text-[#6e6e73]">
                     Several records match this number. Please search using the
                     email on your application.
+                  </p>
+                ) : lookupError ? (
+                  <p className="py-8 text-center text-sm text-[#dc2626]">
+                    {lookupError}
                   </p>
                 ) : lookupNotFound && !lookupPayload ? (
                   <p className="py-8 text-center text-sm text-[#6e6e73]">

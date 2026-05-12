@@ -1,0 +1,110 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
+
+import {
+  digitsOnly,
+  pickBestInterviewForLookup,
+  type SupportCandidate,
+  type SupportDispatch,
+  type SupportInterview,
+  type SupportLookupPayload,
+} from "@/lib/support-lookup";
+
+const CANDIDATE_SELECT =
+  "id, full_name, email, whatsapp_number, eligibility_status, interview_type, poc_assigned, congratulation_call_pending, followup_status, followup_count, callback_datetime, not_interested_reason";
+
+const INTERVIEW_SELECT =
+  "id, interview_status, scheduled_date, interviewer, reschedule_reason, interview_type, reward_item, completed_at, created_at";
+
+const DISPATCH_SELECT =
+  "dispatch_status, tracking_id, expected_delivery_date, reward_item";
+
+export type PublicCandidateLookupResponse =
+  | { ok: true; payload: SupportLookupPayload }
+  | { ok: false; notFound: true }
+  | { ok: false; multiPhone: true }
+  | { ok: false; error: string };
+
+/**
+ * Shared lookup used by the login modal and POST /api/public/candidate-lookup.
+ * Pass a service-role client in production so interview/dispatch rows are visible
+ * even when browser RLS policies differ.
+ */
+export async function runPublicCandidateLookup(
+  supabase: SupabaseClient,
+  raw: string,
+): Promise<PublicCandidateLookupResponse> {
+  const query = raw.trim();
+  if (!query || query.length > 200) {
+    return { ok: false, error: "Invalid query" };
+  }
+
+  let candidate: SupportCandidate | null = null;
+
+  if (query.includes("@")) {
+    const { data, error } = await supabase
+      .from("candidates")
+      .select(CANDIDATE_SELECT)
+      .eq("is_deleted", false)
+      .ilike("email", query)
+      .limit(2);
+    if (error) return { ok: false, error: error.message };
+    const rows = (data ?? []) as SupportCandidate[];
+    if (rows.length === 1) candidate = rows[0]!;
+    else return { ok: false, notFound: true };
+  } else {
+    const digits = digitsOnly(query);
+    if (digits.length < 8) return { ok: false, notFound: true };
+    const { data, error } = await supabase
+      .from("candidates")
+      .select(CANDIDATE_SELECT)
+      .eq("is_deleted", false)
+      .ilike("whatsapp_number", `%${digits}%`)
+      .limit(15);
+    if (error) return { ok: false, error: error.message };
+    const rows = (data ?? []) as SupportCandidate[];
+    const normalized = rows.filter((r) => {
+      const w = digitsOnly(r.whatsapp_number ?? "");
+      if (!w) return false;
+      return (
+        w === digits ||
+        w.endsWith(digits) ||
+        digits.endsWith(w) ||
+        w.includes(digits)
+      );
+    });
+    if (normalized.length === 1) candidate = normalized[0]!;
+    else if (normalized.length === 0) return { ok: false, notFound: true };
+    else return { ok: false, multiPhone: true };
+  }
+
+  if (!candidate) return { ok: false, notFound: true };
+
+  const { data: intRows, error: intErr } = await supabase
+    .from("interviews")
+    .select(INTERVIEW_SELECT)
+    .eq("candidate_id", candidate.id)
+    .order("created_at", { ascending: false })
+    .limit(80);
+
+  if (intErr) return { ok: false, error: intErr.message };
+
+  const interview = pickBestInterviewForLookup(
+    (intRows ?? []) as SupportInterview[],
+  );
+
+  const { data: dispRows, error: dispErr } = await supabase
+    .from("dispatch")
+    .select(DISPATCH_SELECT)
+    .eq("candidate_id", candidate.id)
+    .order("created_at", { ascending: false })
+    .limit(1);
+
+  if (dispErr) return { ok: false, error: dispErr.message };
+
+  const dispatch = (dispRows?.[0] ?? null) as SupportDispatch | null;
+
+  return {
+    ok: true,
+    payload: { candidate, interview, dispatch },
+  };
+}
