@@ -482,8 +482,8 @@ export function TeamReportModal({ open, supabase, onClose }: TeamReportModalProp
             </h2>
             <p className="mt-1 text-sm text-gray-500">{rangeLabel}</p>
             <p className="mt-1 text-xs text-gray-500">
-              Monday–Sunday weeks (your device time zone). Follow-up counts are by whoever saved
-              the call. Interview counts use the interviewer name stored on each finished
+              Monday–Sunday weeks (your device time zone). Total calls count each saved outreach
+              log for the selected range. Interview tables use the interviewer on each finished
               interview.
             </p>
           </div>
@@ -524,9 +524,9 @@ export function TeamReportModal({ open, supabase, onClose }: TeamReportModalProp
         ) : (
           <div className="mt-6 space-y-10">
             <section>
-              <h3 className="text-base font-semibold text-gray-900">Follow-up calls by name</h3>
+              <h3 className="text-base font-semibold text-gray-900">Total calls</h3>
               {followupByActor.length === 0 ? (
-                <p className="mt-4 text-sm text-gray-500">No follow-ups in this period.</p>
+                <p className="mt-4 text-sm text-gray-500">No calls in this period.</p>
               ) : (
                 <div className="mt-4 overflow-hidden rounded-xl border border-gray-200 shadow-sm">
                   <table className="min-w-full border-collapse text-left">
@@ -551,13 +551,8 @@ export function TeamReportModal({ open, supabase, onClose }: TeamReportModalProp
 
             <section>
               <h3 className="text-base font-semibold text-gray-900">Testimonial interviews</h3>
-              <p className="mt-0.5 text-sm text-gray-500">
-                Assigned = linked to that interviewer during this date range. Completed = finished
-                during this date range (can differ if assignment and completion fall in different
-                periods).
-              </p>
               {testimonialIvByPerson.length === 0 ? (
-                <p className="mt-3 text-sm text-gray-500">None in this period.</p>
+                <p className="mt-4 text-sm text-gray-500">None in this period.</p>
               ) : (
                 <div className="mt-4 overflow-hidden rounded-xl border border-gray-200 shadow-sm">
                   <table className="min-w-full border-collapse text-left">
@@ -584,12 +579,8 @@ export function TeamReportModal({ open, supabase, onClose }: TeamReportModalProp
 
             <section>
               <h3 className="text-base font-semibold text-gray-900">Project interviews</h3>
-              <p className="mt-0.5 text-sm text-gray-500">
-                Assigned = linked to that interviewer during this date range. Completed = finished
-                during this date range.
-              </p>
               {projectIvByPerson.length === 0 ? (
-                <p className="mt-3 text-sm text-gray-500">None in this period.</p>
+                <p className="mt-4 text-sm text-gray-500">None in this period.</p>
               ) : (
                 <div className="mt-4 overflow-hidden rounded-xl border border-gray-200 shadow-sm">
                   <table className="min-w-full border-collapse text-left">
@@ -616,31 +607,27 @@ export function TeamReportModal({ open, supabase, onClose }: TeamReportModalProp
 
             <section className="rounded-xl border border-gray-200 bg-gradient-to-b from-gray-50 to-white p-5 shadow-sm">
               <h3 className="text-base font-semibold text-gray-900">Period summary</h3>
-              <p className="mt-0.5 text-sm text-gray-500">
-                Whole-team counts for the same dates as the header. Some items cannot be split by
-                person in the tables above.
-              </p>
               <dl className="mt-4 divide-y divide-gray-200">
                 <div className="flex items-baseline justify-between gap-4 py-2.5 first:pt-0">
-                  <dt className="text-sm text-gray-600">Follow-up calls (testimonial side)</dt>
+                  <dt className="text-sm text-gray-600">Total calls (testimonial pipeline)</dt>
                   <dd className="text-sm font-semibold tabular-nums text-gray-900">
                     {totals.followupTestimonialPipeline}
                   </dd>
                 </div>
                 <div className="flex items-baseline justify-between gap-4 py-2.5">
-                  <dt className="text-sm text-gray-600">Follow-up calls (project side)</dt>
+                  <dt className="text-sm text-gray-600">Total calls (project pipeline)</dt>
                   <dd className="text-sm font-semibold tabular-nums text-gray-900">
                     {totals.followupProjectPipeline}
                   </dd>
                 </div>
                 <div className="flex items-baseline justify-between gap-4 py-2.5">
-                  <dt className="text-sm text-gray-600">Follow-up marked interested</dt>
+                  <dt className="text-sm text-gray-600">Interested</dt>
                   <dd className="text-sm font-semibold tabular-nums text-gray-900">
                     {totals.followupInterested}
                   </dd>
                 </div>
                 <div className="flex items-baseline justify-between gap-4 py-2.5">
-                  <dt className="text-sm text-gray-600">Follow-up callback requested</dt>
+                  <dt className="text-sm text-gray-600">Callback requested</dt>
                   <dd className="text-sm font-semibold tabular-nums text-gray-900">
                     {totals.followupCallback}
                   </dd>
