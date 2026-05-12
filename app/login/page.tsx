@@ -28,10 +28,7 @@ function CandidateLookupResultCard({
   payload: SupportLookupPayload;
 }) {
   const status = resolveSupportStatus(payload);
-  const followupDisplay = resolveFollowupStatusPublicDisplay(
-    payload.candidate,
-    payload.interview,
-  );
+  const followupDisplay = resolveFollowupStatusPublicDisplay(payload);
   const { candidate, interview, dispatch } = payload;
   const typeForBadge = interview?.interview_type ?? candidate.interview_type;
   const reward =
@@ -267,6 +264,7 @@ export default function LoginPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ query: raw }),
+        cache: "no-store",
       });
       let json: PublicCandidateLookupResponse;
       try {

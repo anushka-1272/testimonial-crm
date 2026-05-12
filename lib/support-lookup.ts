@@ -41,6 +41,7 @@ export type SupportDispatch = {
   tracking_id: string | null;
   expected_delivery_date: string | null;
   reward_item: string | null;
+  dispatch_date?: string | null;
   /** Set when dispatch row was created (shipping pipeline intake). */
   created_at?: string | null;
   /** LinkedIn track rewards use a fixed comment pattern — not post-interview. */
@@ -52,6 +53,74 @@ export type SupportLookupPayload = {
   interview: SupportInterview | null;
   dispatch: SupportDispatch | null;
 };
+
+/** LinkedIn-only reward rows must not imply a completed testimonial interview. */
+export function isLinkedInTrackDispatchRow(d: SupportDispatch | null): boolean {
+  if (!d) return false;
+  return (d.special_comments ?? "").toLowerCase().includes("linkedin track");
+}
+
+function dispatchRecencyKey(d: SupportDispatch): number {
+  const iso =
+    d.dispatch_date?.trim() ??
+    d.created_at?.trim() ??
+    d.expected_delivery_date?.trim() ??
+    "";
+  const t = Date.parse(iso);
+  return Number.isFinite(t) ? t : 0;
+}
+
+/**
+ * When several `dispatch` rows exist (e.g. LinkedIn JBL after testimonial AirPods),
+ * pick the row that best represents the testimonial reward pipeline.
+ */
+export function chooseDispatchForLookup(
+  rows: SupportDispatch[],
+): SupportDispatch | null {
+  if (!rows?.length) return null;
+  const nonLi = rows.filter((r) => !isLinkedInTrackDispatchRow(r));
+  const pool = nonLi.length ? nonLi : rows;
+  const withReward = pool.filter((r) => r.reward_item?.trim());
+  const candidates = withReward.length ? withReward : pool;
+  return [...candidates].sort(
+    (a, b) => dispatchRecencyKey(b) - dispatchRecencyKey(a),
+  )[0]!;
+}
+
+export function syntheticInterviewFromDispatch(
+  candidate: SupportCandidate,
+  dispatch: SupportDispatch,
+): SupportInterview {
+  const completedHint =
+    dispatch.dispatch_date?.trim() ??
+    dispatch.created_at?.trim() ??
+    null;
+  return {
+    interview_status: "completed",
+    scheduled_date: null,
+    interviewer: null,
+    reschedule_reason: null,
+    interview_type: candidate.interview_type ?? "testimonial",
+    reward_item: dispatch.reward_item,
+    completed_at: completedHint,
+  };
+}
+
+/** Ensures interview is inferred from dispatch when the CRM has post-interview shipping but no interview row in the payload. */
+export function normalizeSupportLookupPayload(
+  payload: SupportLookupPayload,
+): SupportLookupPayload {
+  const { candidate, interview, dispatch } = payload;
+  if (interview) return payload;
+  if (dispatch && !isLinkedInTrackDispatchRow(dispatch)) {
+    return {
+      candidate,
+      interview: syntheticInterviewFromDispatch(candidate, dispatch),
+      dispatch,
+    };
+  }
+  return payload;
+}
 
 /** Candidate-facing follow-up line shown on the login lookup card. */
 export type SupportFollowupStatusDisplay = {
@@ -206,9 +275,9 @@ export function pickBestInterviewForLookup(
  * so viewers don't see stale "called — no answer" after the pipeline moved forward.
  */
 export function resolveFollowupStatusPublicDisplay(
-  candidate: SupportCandidate,
-  interview: SupportInterview | null,
+  payload: SupportLookupPayload,
 ): SupportFollowupStatusDisplay | null {
+  const { candidate, interview } = normalizeSupportLookupPayload(payload);
   // Eligible + no interview row: outreach copy is folded into resolveSupportStatus.
   if (candidate.eligibility_status === "eligible" && !interview) {
     return null;
@@ -263,7 +332,8 @@ export function resolveFollowupStatusPublicDisplay(
 export function resolveSupportStatus(
   payload: SupportLookupPayload,
 ): SupportStatusDisplay {
-  const { candidate, interview, dispatch } = payload;
+  const { candidate, interview, dispatch } =
+    normalizeSupportLookupPayload(payload);
 
   if (candidate.eligibility_status === "not_eligible") {
     return {

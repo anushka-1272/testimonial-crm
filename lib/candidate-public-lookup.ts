@@ -1,7 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import {
+  chooseDispatchForLookup,
   digitsOnly,
+  normalizeSupportLookupPayload,
   pickBestInterviewForLookup,
   type SupportCandidate,
   type SupportDispatch,
@@ -17,28 +19,7 @@ const INTERVIEW_SELECT =
   "id, interview_status, scheduled_date, interviewer, reschedule_reason, interview_type, reward_item, completed_at";
 
 const DISPATCH_SELECT =
-  "dispatch_status, tracking_id, expected_delivery_date, reward_item, special_comments, created_at";
-
-function isLinkedInTrackDispatch(d: SupportDispatch): boolean {
-  const c = (d.special_comments ?? "").toLowerCase();
-  return c.includes("linkedin track");
-}
-
-/** When a reward dispatch exists, the testimonial interview is done (dispatch is created post-interview). */
-function syntheticCompletedInterview(
-  candidate: SupportCandidate,
-  dispatch: SupportDispatch,
-): SupportInterview {
-  return {
-    interview_status: "completed",
-    scheduled_date: null,
-    interviewer: null,
-    reschedule_reason: null,
-    interview_type: candidate.interview_type ?? "testimonial",
-    reward_item: dispatch.reward_item,
-    completed_at: dispatch.created_at ?? null,
-  };
-}
+  "dispatch_status, tracking_id, expected_delivery_date, reward_item, special_comments, created_at, dispatch_date";
 
 export type PublicCandidateLookupResponse =
   | { ok: true; payload: SupportLookupPayload }
@@ -138,27 +119,36 @@ export async function runPublicCandidateLookup(
     }
   }
 
+  let dispatchList: SupportDispatch[] = [];
   const { data: dispRows, error: dispErr } = await supabase
     .from("dispatch")
     .select(DISPATCH_SELECT)
     .eq("candidate_id", candidate.id)
-    .order("created_at", { ascending: false })
-    .limit(1);
+    .order("dispatch_date", { ascending: false, nullsFirst: false })
+    .limit(30);
 
-  if (dispErr) return { ok: false, error: dispErr.message };
-
-  const dispatch = (dispRows?.[0] ?? null) as SupportDispatch | null;
-
-  if (
-    !interview &&
-    dispatch &&
-    !isLinkedInTrackDispatch(dispatch)
-  ) {
-    interview = syntheticCompletedInterview(candidate, dispatch);
+  if (dispErr) {
+    const { data: dispRetry, error: dispRetryErr } = await supabase
+      .from("dispatch")
+      .select(
+        "dispatch_status, tracking_id, expected_delivery_date, reward_item, special_comments",
+      )
+      .eq("candidate_id", candidate.id)
+      .limit(30);
+    if (dispRetryErr) return { ok: false, error: dispRetryErr.message };
+    dispatchList = (dispRetry ?? []) as SupportDispatch[];
+  } else {
+    dispatchList = (dispRows ?? []) as SupportDispatch[];
   }
+
+  let dispatch = chooseDispatchForLookup(dispatchList);
 
   return {
     ok: true,
-    payload: { candidate, interview, dispatch },
+    payload: normalizeSupportLookupPayload({
+      candidate,
+      interview,
+      dispatch,
+    }),
   };
 }
