@@ -1,6 +1,14 @@
 "use client";
 
-import { endOfDay, format, startOfMonth, startOfQuarter, startOfWeek } from "date-fns";
+import {
+  endOfDay,
+  endOfMonth,
+  format,
+  startOfMonth,
+  startOfQuarter,
+  startOfWeek,
+  subMonths,
+} from "date-fns";
 import { useCallback, useEffect, useState } from "react";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -8,15 +16,31 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { modalOverlayClass, modalPanelWideClass } from "@/lib/modal-responsive";
 import { teamMemberDisplayName } from "@/lib/team-roster";
 
-export type TeamReportPeriodPreset = "week" | "month" | "quarter";
+export type TeamReportPeriodPreset =
+  | "week"
+  | "month"
+  | "prev_month"
+  | "quarter"
+  | "all";
 
 const PERIOD_LABELS: Record<TeamReportPeriodPreset, string> = {
   week: "This week",
   month: "This month",
+  prev_month: "Previous month",
   quarter: "This quarter",
+  all: "All time",
 };
 
-function rangeForPreset(preset: TeamReportPeriodPreset): { start: Date; end: Date } {
+const PERIOD_ORDER: TeamReportPeriodPreset[] = [
+  "week",
+  "month",
+  "prev_month",
+  "quarter",
+  "all",
+];
+
+/** `start` null means entire history (no lower bound on query filters). */
+function rangeForPreset(preset: TeamReportPeriodPreset): { start: Date | null; end: Date } {
   const end = endOfDay(new Date());
   const now = new Date();
   if (preset === "week") {
@@ -25,11 +49,25 @@ function rangeForPreset(preset: TeamReportPeriodPreset): { start: Date; end: Dat
   if (preset === "month") {
     return { start: startOfMonth(now), end };
   }
-  return { start: startOfQuarter(now), end };
+  if (preset === "prev_month") {
+    const ref = subMonths(now, 1);
+    return { start: startOfMonth(ref), end: endOfMonth(ref) };
+  }
+  if (preset === "quarter") {
+    return { start: startOfQuarter(now), end };
+  }
+  return { start: null, end };
 }
 
-function isoRange(start: Date, end: Date): { startIso: string; endIso: string } {
-  return { startIso: start.toISOString(), endIso: end.toISOString() };
+function rangeFilterIso(preset: TeamReportPeriodPreset): {
+  startIso: string | null;
+  endIso: string;
+} {
+  const { start, end } = rangeForPreset(preset);
+  return {
+    startIso: start ? start.toISOString() : null,
+    endIso: end.toISOString(),
+  };
 }
 
 const PAGE = 1000;
@@ -226,20 +264,18 @@ export function TeamReportModal({ open, supabase, onClose }: TeamReportModalProp
     setLoading(true);
     setError(null);
 
-    const { start, end } = rangeForPreset(period);
-    const { startIso, endIso } = isoRange(start, end);
+    const { startIso, endIso } = rangeFilterIso(period);
 
-    const followRes = await fetchAllPages<FollowupRow>(async (from, to) =>
-      supabase
+    const followRes = await fetchAllPages<FollowupRow>(async (from, to) => {
+      let q = supabase
         .from("followup_log")
         .select(
           "created_at, logged_by, logged_by_email, candidate_id, project_candidate_id, status",
         )
-        .gte("created_at", startIso)
-        .lte("created_at", endIso)
-        .order("created_at", { ascending: true })
-        .range(from, to),
-    );
+        .order("created_at", { ascending: true });
+      if (startIso) q = q.gte("created_at", startIso).lte("created_at", endIso);
+      return q.range(from, to);
+    });
     if (followRes.error) {
       setError(followRes.error);
       setLoading(false);
@@ -275,18 +311,17 @@ export function TeamReportModal({ open, supabase, onClose }: TeamReportModalProp
       }))
       .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
 
-    const testimonialCompletedRes = await fetchAllPages<InterviewRow>(async (from, to) =>
-      supabase
+    const testimonialCompletedRes = await fetchAllPages<InterviewRow>(async (from, to) => {
+      let q = supabase
         .from("interviews")
         .select("interviewer, completed_at, interview_status, candidates!inner(is_deleted)")
         .eq("candidates.is_deleted", false)
         .eq("interview_type", "testimonial")
         .or("interview_status.eq.completed,completed_at.not.is.null")
-        .not("completed_at", "is", null)
-        .gte("completed_at", startIso)
-        .lte("completed_at", endIso)
-        .range(from, to),
-    );
+        .not("completed_at", "is", null);
+      if (startIso) q = q.gte("completed_at", startIso).lte("completed_at", endIso);
+      return q.range(from, to);
+    });
     if (testimonialCompletedRes.error) {
       setError(testimonialCompletedRes.error);
       setLoading(false);
@@ -294,17 +329,19 @@ export function TeamReportModal({ open, supabase, onClose }: TeamReportModalProp
     }
 
     const testimonialAssignedRes = await fetchAllPages<Pick<InterviewRow, "interviewer">>(
-      async (from, to) =>
-        supabase
+      async (from, to) => {
+        let q = supabase
           .from("interviews")
           .select("interviewer, interviewer_assigned_at, candidates!inner(is_deleted)")
           .eq("candidates.is_deleted", false)
           .eq("interview_type", "testimonial")
           .not("interviewer", "is", null)
-          .not("interviewer_assigned_at", "is", null)
-          .gte("interviewer_assigned_at", startIso)
-          .lte("interviewer_assigned_at", endIso)
-          .range(from, to),
+          .not("interviewer_assigned_at", "is", null);
+        if (startIso) {
+          q = q.gte("interviewer_assigned_at", startIso).lte("interviewer_assigned_at", endIso);
+        }
+        return q.range(from, to);
+      },
     );
     if (testimonialAssignedRes.error) {
       setError(testimonialAssignedRes.error);
@@ -313,16 +350,16 @@ export function TeamReportModal({ open, supabase, onClose }: TeamReportModalProp
     }
 
     const testimonialScheduledRes = await fetchAllPages<Pick<InterviewRow, "interviewer">>(
-      async (from, to) =>
-        supabase
+      async (from, to) => {
+        let q = supabase
           .from("interviews")
           .select("interviewer, candidates!inner(is_deleted)")
           .eq("candidates.is_deleted", false)
           .eq("interview_type", "testimonial")
-          .not("scheduled_date", "is", null)
-          .gte("scheduled_date", startIso)
-          .lte("scheduled_date", endIso)
-          .range(from, to),
+          .not("scheduled_date", "is", null);
+        if (startIso) q = q.gte("scheduled_date", startIso).lte("scheduled_date", endIso);
+        return q.range(from, to);
+      },
     );
     if (testimonialScheduledRes.error) {
       setError(testimonialScheduledRes.error);
@@ -330,19 +367,18 @@ export function TeamReportModal({ open, supabase, onClose }: TeamReportModalProp
       return;
     }
 
-    const projectCompletedRes = await fetchAllPages<ProjectInterviewRow>(async (from, to) =>
-      supabase
+    const projectCompletedRes = await fetchAllPages<ProjectInterviewRow>(async (from, to) => {
+      let q = supabase
         .from("project_interviews")
         .select(
           "interviewer, completed_at, interview_status, project_candidates!inner(is_deleted)",
         )
         .eq("project_candidates.is_deleted", false)
         .or("interview_status.eq.completed,completed_at.not.is.null")
-        .not("completed_at", "is", null)
-        .gte("completed_at", startIso)
-        .lte("completed_at", endIso)
-        .range(from, to),
-    );
+        .not("completed_at", "is", null);
+      if (startIso) q = q.gte("completed_at", startIso).lte("completed_at", endIso);
+      return q.range(from, to);
+    });
     if (projectCompletedRes.error) {
       setError(projectCompletedRes.error);
       setLoading(false);
@@ -350,18 +386,20 @@ export function TeamReportModal({ open, supabase, onClose }: TeamReportModalProp
     }
 
     const projectAssignedRes = await fetchAllPages<Pick<ProjectInterviewRow, "interviewer">>(
-      async (from, to) =>
-        supabase
+      async (from, to) => {
+        let q = supabase
           .from("project_interviews")
           .select(
             "interviewer, interviewer_assigned_at, project_candidates!inner(is_deleted)",
           )
           .eq("project_candidates.is_deleted", false)
           .not("interviewer", "is", null)
-          .not("interviewer_assigned_at", "is", null)
-          .gte("interviewer_assigned_at", startIso)
-          .lte("interviewer_assigned_at", endIso)
-          .range(from, to),
+          .not("interviewer_assigned_at", "is", null);
+        if (startIso) {
+          q = q.gte("interviewer_assigned_at", startIso).lte("interviewer_assigned_at", endIso);
+        }
+        return q.range(from, to);
+      },
     );
     if (projectAssignedRes.error) {
       setError(projectAssignedRes.error);
@@ -370,15 +408,15 @@ export function TeamReportModal({ open, supabase, onClose }: TeamReportModalProp
     }
 
     const projectScheduledRes = await fetchAllPages<Pick<ProjectInterviewRow, "interviewer">>(
-      async (from, to) =>
-        supabase
+      async (from, to) => {
+        let q = supabase
           .from("project_interviews")
           .select("interviewer, project_candidates!inner(is_deleted)")
           .eq("project_candidates.is_deleted", false)
-          .not("scheduled_date", "is", null)
-          .gte("scheduled_date", startIso)
-          .lte("scheduled_date", endIso)
-          .range(from, to),
+          .not("scheduled_date", "is", null);
+        if (startIso) q = q.gte("scheduled_date", startIso).lte("scheduled_date", endIso);
+        return q.range(from, to);
+      },
     );
     if (projectScheduledRes.error) {
       setError(projectScheduledRes.error);
@@ -412,15 +450,14 @@ export function TeamReportModal({ open, supabase, onClose }: TeamReportModalProp
       increment(projectCompletedMap, label);
     }
 
-    const dispRes = await fetchAllPages<DispatchRow>(async (from, to) =>
-      supabase
+    const dispRes = await fetchAllPages<DispatchRow>(async (from, to) => {
+      let q = supabase
         .from("dispatch")
         .select("id, candidates!inner(is_deleted)")
-        .eq("candidates.is_deleted", false)
-        .gte("created_at", startIso)
-        .lte("created_at", endIso)
-        .range(from, to),
-    );
+        .eq("candidates.is_deleted", false);
+      if (startIso) q = q.gte("created_at", startIso).lte("created_at", endIso);
+      return q.range(from, to);
+    });
     if (dispRes.error) {
       setError(dispRes.error);
       setLoading(false);
@@ -454,7 +491,9 @@ export function TeamReportModal({ open, supabase, onClose }: TeamReportModalProp
   if (!open) return null;
 
   const { start, end } = rangeForPreset(period);
-  const rangeLabel = `${format(start, "MMM d, yyyy")} – ${format(end, "MMM d, yyyy")}`;
+  const rangeLabel = start
+    ? `${format(start, "MMM d, yyyy")} – ${format(end, "MMM d, yyyy")}`
+    : "All time";
 
   const th =
     "bg-gray-50 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-600 first:rounded-tl-xl last:rounded-tr-xl";
@@ -481,14 +520,9 @@ export function TeamReportModal({ open, supabase, onClose }: TeamReportModalProp
               Team report
             </h2>
             <p className="mt-1 text-sm text-gray-500">{rangeLabel}</p>
-            <p className="mt-1 text-xs text-gray-500">
-              Monday–Sunday weeks (your device time zone). Total calls count each saved outreach
-              log for the selected range. Interview tables use the interviewer on each finished
-              interview.
-            </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            {(Object.keys(PERIOD_LABELS) as TeamReportPeriodPreset[]).map((p) => (
+            {PERIOD_ORDER.map((p) => (
               <button
                 key={p}
                 type="button"
