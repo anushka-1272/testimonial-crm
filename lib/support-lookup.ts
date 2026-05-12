@@ -41,6 +41,10 @@ export type SupportDispatch = {
   tracking_id: string | null;
   expected_delivery_date: string | null;
   reward_item: string | null;
+  /** Set when dispatch row was created (shipping pipeline intake). */
+  created_at?: string | null;
+  /** LinkedIn track rewards use a fixed comment pattern — not post-interview. */
+  special_comments?: string | null;
 };
 
 export type SupportLookupPayload = {
@@ -282,9 +286,10 @@ export function resolveSupportStatus(
   }
 
   // eligible — no interview row: fold congratulation + follow-up into one status.
+  // (Dispatch-only / synthetic-interview paths are handled before this branch.)
   if (!interview) {
     const lines: string[] = [];
-    let title = "Eligible — interview not scheduled yet";
+    let title = "Eligible — not yet scheduled";
 
     if (candidate.congratulation_call_pending === true) {
       title = "Eligible — calling pending";

@@ -12,11 +12,33 @@ import {
 const CANDIDATE_SELECT =
   "id, full_name, email, whatsapp_number, eligibility_status, interview_type, poc_assigned, congratulation_call_pending, followup_status, followup_count, callback_datetime, not_interested_reason";
 
+/** Omit `created_at` on interviews — not present in all deployed DBs; pickBest runs in memory. */
 const INTERVIEW_SELECT =
-  "id, interview_status, scheduled_date, interviewer, reschedule_reason, interview_type, reward_item, completed_at, created_at";
+  "id, interview_status, scheduled_date, interviewer, reschedule_reason, interview_type, reward_item, completed_at";
 
 const DISPATCH_SELECT =
-  "dispatch_status, tracking_id, expected_delivery_date, reward_item";
+  "dispatch_status, tracking_id, expected_delivery_date, reward_item, special_comments, created_at";
+
+function isLinkedInTrackDispatch(d: SupportDispatch): boolean {
+  const c = (d.special_comments ?? "").toLowerCase();
+  return c.includes("linkedin track");
+}
+
+/** When a reward dispatch exists, the testimonial interview is done (dispatch is created post-interview). */
+function syntheticCompletedInterview(
+  candidate: SupportCandidate,
+  dispatch: SupportDispatch,
+): SupportInterview {
+  return {
+    interview_status: "completed",
+    scheduled_date: null,
+    interviewer: null,
+    reschedule_reason: null,
+    interview_type: candidate.interview_type ?? "testimonial",
+    reward_item: dispatch.reward_item,
+    completed_at: dispatch.created_at ?? null,
+  };
+}
 
 export type PublicCandidateLookupResponse =
   | { ok: true; payload: SupportLookupPayload }
@@ -83,14 +105,38 @@ export async function runPublicCandidateLookup(
     .from("interviews")
     .select(INTERVIEW_SELECT)
     .eq("candidate_id", candidate.id)
-    .order("created_at", { ascending: false })
-    .limit(80);
+    .limit(120);
 
   if (intErr) return { ok: false, error: intErr.message };
 
-  const interview = pickBestInterviewForLookup(
+  let interview = pickBestInterviewForLookup(
     (intRows ?? []) as SupportInterview[],
   );
+
+  if (!interview) {
+    const { data: ppRows, error: ppErr } = await supabase
+      .from("post_production")
+      .select("interview_id")
+      .eq("candidate_id", candidate.id)
+      .not("interview_id", "is", null)
+      .order("created_at", { ascending: false })
+      .limit(1);
+
+    if (ppErr) return { ok: false, error: ppErr.message };
+
+    const interviewId = (ppRows?.[0] as { interview_id?: string } | undefined)
+      ?.interview_id;
+    if (interviewId) {
+      const { data: ivRow, error: ivErr } = await supabase
+        .from("interviews")
+        .select(INTERVIEW_SELECT)
+        .eq("id", interviewId)
+        .maybeSingle();
+
+      if (ivErr) return { ok: false, error: ivErr.message };
+      if (ivRow) interview = ivRow as SupportInterview;
+    }
+  }
 
   const { data: dispRows, error: dispErr } = await supabase
     .from("dispatch")
@@ -102,6 +148,14 @@ export async function runPublicCandidateLookup(
   if (dispErr) return { ok: false, error: dispErr.message };
 
   const dispatch = (dispRows?.[0] ?? null) as SupportDispatch | null;
+
+  if (
+    !interview &&
+    dispatch &&
+    !isLinkedInTrackDispatch(dispatch)
+  ) {
+    interview = syntheticCompletedInterview(candidate, dispatch);
+  }
 
   return {
     ok: true,

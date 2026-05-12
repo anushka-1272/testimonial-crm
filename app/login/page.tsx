@@ -12,6 +12,7 @@ import {
 
 import { LogoOnDark, LogoOnLight } from "@/components/brand-logo";
 import {
+  effectiveInterviewStatus,
   resolveFollowupStatusPublicDisplay,
   resolveSupportStatus,
   type SupportLookupPayload,
@@ -35,7 +36,7 @@ function CandidateLookupResultCard({
   const typeForBadge = interview?.interview_type ?? candidate.interview_type;
   const reward =
     dispatch?.reward_item?.trim() ||
-    (interview?.interview_status === "completed"
+    (interview && effectiveInterviewStatus(interview) === "completed"
       ? interview.reward_item?.trim()
       : null) ||
     null;
