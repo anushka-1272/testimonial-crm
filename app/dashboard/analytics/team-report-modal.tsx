@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { modalOverlayClass, modalPanelWideClass } from "@/lib/modal-responsive";
+import { teamMemberDisplayName } from "@/lib/team-roster";
 
 export type TeamReportPeriodPreset = "week" | "month" | "quarter";
 
@@ -64,52 +65,128 @@ type InterviewRow = {
   interviewer: string | null;
   completed_at: string | null;
   interview_status: string | null;
+  interviewer_assigned_at?: string | null;
 };
 
 type ProjectInterviewRow = {
   interviewer: string | null;
   completed_at: string | null;
   interview_status: string | null;
+  interviewer_assigned_at?: string | null;
 };
 
 type DispatchRow = { id: string };
 
+function isProbablyEmail(s: string): boolean {
+  const t = s.trim();
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/i.test(t);
+}
+
+/** Stable merge key: prefer email when present (including email stored only in logged_by). */
 function followupActorKey(r: FollowupRow): string {
-  const em = r.logged_by_email?.trim().toLowerCase();
-  if (em) return `e:${em}`;
-  const n = r.logged_by?.trim().toLowerCase();
-  if (n) return `n:${n}`;
+  const by = r.logged_by?.trim() ?? "";
+  const emField = r.logged_by_email?.trim().toLowerCase();
+  const email = emField || (by && isProbablyEmail(by) ? by.toLowerCase() : "");
+  if (email) return `e:${email}`;
+  const nameKey = by.toLowerCase();
+  if (nameKey) return `n:${nameKey}`;
   return "unknown";
 }
 
-/** One readable line; avoid `email (email)` when CRM stored the same value twice. */
-function followupActorDisplay(r: FollowupRow): string {
-  const name = r.logged_by?.trim() ?? "";
-  const em = r.logged_by_email?.trim() ?? "";
-  if (name && em) {
-    if (name.toLowerCase() === em.toLowerCase()) return em;
-    return `${name} (${em})`;
+/** Display name only (no email). Trusts a non-email `logged_by`, else team roster / pretty local-part. */
+function followupPersonLabel(r: FollowupRow, emailToName: Map<string, string>): string {
+  const by = r.logged_by?.trim() ?? "";
+  const emRaw = r.logged_by_email?.trim();
+  const em = (emRaw?.toLowerCase() ?? "") || (by && isProbablyEmail(by) ? by.toLowerCase() : "");
+
+  if (by && !isProbablyEmail(by)) {
+    return by;
   }
-  return name || em || "Unknown";
+  if (em && emailToName.has(em)) {
+    return emailToName.get(em)!;
+  }
+  if (em) {
+    return teamMemberDisplayName({ full_name: null, email: emRaw ?? by }) || "Unknown";
+  }
+  if (by && isProbablyEmail(by)) {
+    return teamMemberDisplayName({ full_name: null, email: by }) || "Unknown";
+  }
+  return "Unknown";
 }
 
-function collapseRedundantPersonLabel(label: string): string {
-  const m = label.match(/^(.+?)\s+\(([^)]+)\)\s*$/);
-  if (!m) return label;
-  const inner = m[2]!.trim();
-  const outer = m[1]!.trim();
-  if (outer.toLowerCase() === inner.toLowerCase()) return inner;
-  return label;
+function bestPersonDisplay(prev: string | undefined, next: string): string {
+  if (!prev) return next;
+  if (next === prev) return prev;
+  const prevEmailish = isProbablyEmail(prev);
+  const nextEmailish = isProbablyEmail(next);
+  if (nextEmailish && !prevEmailish) return prev;
+  if (prevEmailish && !nextEmailish) return next;
+  if (next.includes(" ") && !prev.includes(" ")) return next;
+  if (prev.includes(" ") && !next.includes(" ")) return prev;
+  return next.length > prev.length ? next : prev;
+}
+
+async function buildEmailToDisplayNameMap(
+  supabase: SupabaseClient,
+): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+
+  const tm = await supabase
+    .from("team_members")
+    .select("email, full_name, status")
+    .in("status", ["active", "invited"]);
+  if (!tm.error && tm.data) {
+    for (const row of tm.data as { email: string | null; full_name: string | null }[]) {
+      const em = row.email?.trim().toLowerCase();
+      if (!em) continue;
+      const label = teamMemberDisplayName({
+        full_name: row.full_name,
+        email: row.email,
+      });
+      if (label && !map.has(em)) map.set(em, label);
+    }
+  }
+
+  const tr = await supabase
+    .from("team_roster")
+    .select("name, email, is_active")
+    .eq("is_active", true);
+  if (!tr.error && tr.data) {
+    for (const row of tr.data as { name: string | null; email: string | null }[]) {
+      const em = row.email?.trim().toLowerCase();
+      if (!em || map.has(em)) continue;
+      const n = row.name?.trim();
+      map.set(
+        em,
+        n || teamMemberDisplayName({ full_name: null, email: row.email }),
+      );
+    }
+  }
+
+  return map;
 }
 
 function increment(map: Map<string, number>, key: string, by = 1): void {
   map.set(key, (map.get(key) ?? 0) + by);
 }
 
-function mapToSortedRows(map: Map<string, number>): { label: string; count: number }[] {
-  const out = [...map.entries()].map(([label, count]) => ({ label, count }));
-  out.sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
-  return out;
+function mergeAssignedCompleted(
+  assignedMap: Map<string, number>,
+  completedMap: Map<string, number>,
+): { label: string; assigned: number; completed: number }[] {
+  const labels = new Set<string>([...assignedMap.keys(), ...completedMap.keys()]);
+  const rows = [...labels].map((label) => ({
+    label,
+    assigned: assignedMap.get(label) ?? 0,
+    completed: completedMap.get(label) ?? 0,
+  }));
+  rows.sort(
+    (a, b) =>
+      b.completed - a.completed ||
+      b.assigned - a.assigned ||
+      a.label.localeCompare(b.label),
+  );
+  return rows.filter((r) => r.assigned > 0 || r.completed > 0);
 }
 
 export type TeamReportModalProps = {
@@ -123,14 +200,14 @@ export function TeamReportModal({ open, supabase, onClose }: TeamReportModalProp
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [followupByActor, setFollowupByActor] = useState<{ label: string; count: number }[]>(
-    [],
-  );
+  const [followupByActor, setFollowupByActor] = useState<
+    { key: string; label: string; count: number }[]
+  >([]);
   const [testimonialIvByPerson, setTestimonialIvByPerson] = useState<
-    { label: string; count: number }[]
+    { label: string; assigned: number; completed: number }[]
   >([]);
   const [projectIvByPerson, setProjectIvByPerson] = useState<
-    { label: string; count: number }[]
+    { label: string; assigned: number; completed: number }[]
   >([]);
 
   const [totals, setTotals] = useState({
@@ -169,6 +246,8 @@ export function TeamReportModal({ open, supabase, onClose }: TeamReportModalProp
       return;
     }
 
+    const emailToName = await buildEmailToDisplayNameMap(supabase);
+
     const byActor = new Map<string, number>();
     const displayByActorKey = new Map<string, string>();
     let followT = 0;
@@ -179,9 +258,8 @@ export function TeamReportModal({ open, supabase, onClose }: TeamReportModalProp
     for (const r of followRes.rows) {
       const key = followupActorKey(r);
       increment(byActor, key);
-      if (!displayByActorKey.has(key)) {
-        displayByActorKey.set(key, followupActorDisplay(r));
-      }
+      const label = followupPersonLabel(r, emailToName);
+      displayByActorKey.set(key, bestPersonDisplay(displayByActorKey.get(key), label));
       if (r.candidate_id) followT += 1;
       else if (r.project_candidate_id) followP += 1;
       const st = (r.status ?? "").trim();
@@ -190,8 +268,9 @@ export function TeamReportModal({ open, supabase, onClose }: TeamReportModalProp
     }
 
     const followRowsSorted = [...byActor.entries()]
-      .map(([key, count]) => ({
-        label: collapseRedundantPersonLabel(displayByActorKey.get(key) ?? "Unknown"),
+      .map(([aggKey, count]) => ({
+        key: aggKey,
+        label: displayByActorKey.get(aggKey) ?? "Unknown",
         count,
       }))
       .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
@@ -210,6 +289,25 @@ export function TeamReportModal({ open, supabase, onClose }: TeamReportModalProp
     );
     if (testimonialCompletedRes.error) {
       setError(testimonialCompletedRes.error);
+      setLoading(false);
+      return;
+    }
+
+    const testimonialAssignedRes = await fetchAllPages<Pick<InterviewRow, "interviewer">>(
+      async (from, to) =>
+        supabase
+          .from("interviews")
+          .select("interviewer, interviewer_assigned_at, candidates!inner(is_deleted)")
+          .eq("candidates.is_deleted", false)
+          .eq("interview_type", "testimonial")
+          .not("interviewer", "is", null)
+          .not("interviewer_assigned_at", "is", null)
+          .gte("interviewer_assigned_at", startIso)
+          .lte("interviewer_assigned_at", endIso)
+          .range(from, to),
+    );
+    if (testimonialAssignedRes.error) {
+      setError(testimonialAssignedRes.error);
       setLoading(false);
       return;
     }
@@ -251,6 +349,26 @@ export function TeamReportModal({ open, supabase, onClose }: TeamReportModalProp
       return;
     }
 
+    const projectAssignedRes = await fetchAllPages<Pick<ProjectInterviewRow, "interviewer">>(
+      async (from, to) =>
+        supabase
+          .from("project_interviews")
+          .select(
+            "interviewer, interviewer_assigned_at, project_candidates!inner(is_deleted)",
+          )
+          .eq("project_candidates.is_deleted", false)
+          .not("interviewer", "is", null)
+          .not("interviewer_assigned_at", "is", null)
+          .gte("interviewer_assigned_at", startIso)
+          .lte("interviewer_assigned_at", endIso)
+          .range(from, to),
+    );
+    if (projectAssignedRes.error) {
+      setError(projectAssignedRes.error);
+      setLoading(false);
+      return;
+    }
+
     const projectScheduledRes = await fetchAllPages<Pick<ProjectInterviewRow, "interviewer">>(
       async (from, to) =>
         supabase
@@ -268,16 +386,30 @@ export function TeamReportModal({ open, supabase, onClose }: TeamReportModalProp
       return;
     }
 
-    const testimonialIvMap = new Map<string, number>();
-    for (const r of testimonialCompletedRes.rows) {
-      const label = r.interviewer?.trim() || "Unassigned";
-      increment(testimonialIvMap, label);
+    const testimonialAssignedMap = new Map<string, number>();
+    for (const r of testimonialAssignedRes.rows) {
+      const label = r.interviewer?.trim();
+      if (!label) continue;
+      increment(testimonialAssignedMap, label);
     }
 
-    const projectIvMap = new Map<string, number>();
+    const testimonialCompletedMap = new Map<string, number>();
+    for (const r of testimonialCompletedRes.rows) {
+      const label = r.interviewer?.trim() || "Unassigned";
+      increment(testimonialCompletedMap, label);
+    }
+
+    const projectAssignedMap = new Map<string, number>();
+    for (const r of projectAssignedRes.rows) {
+      const label = r.interviewer?.trim();
+      if (!label) continue;
+      increment(projectAssignedMap, label);
+    }
+
+    const projectCompletedMap = new Map<string, number>();
     for (const r of projectCompletedRes.rows) {
       const label = r.interviewer?.trim() || "Unassigned";
-      increment(projectIvMap, label);
+      increment(projectCompletedMap, label);
     }
 
     const dispRes = await fetchAllPages<DispatchRow>(async (from, to) =>
@@ -296,8 +428,10 @@ export function TeamReportModal({ open, supabase, onClose }: TeamReportModalProp
     }
 
     setFollowupByActor(followRowsSorted);
-    setTestimonialIvByPerson(mapToSortedRows(testimonialIvMap));
-    setProjectIvByPerson(mapToSortedRows(projectIvMap));
+    setTestimonialIvByPerson(
+      mergeAssignedCompleted(testimonialAssignedMap, testimonialCompletedMap),
+    );
+    setProjectIvByPerson(mergeAssignedCompleted(projectAssignedMap, projectCompletedMap));
     setTotals({
       followupTestimonialPipeline: followT,
       followupProjectPipeline: followP,
@@ -348,8 +482,9 @@ export function TeamReportModal({ open, supabase, onClose }: TeamReportModalProp
             </h2>
             <p className="mt-1 text-sm text-gray-500">{rangeLabel}</p>
             <p className="mt-1 text-xs text-gray-500">
-              Monday–Sunday weeks, your device time zone. Follow-ups = who saved the log;
-              interviews = assigned interviewer on the completed row.
+              Monday–Sunday weeks (your device time zone). Follow-up counts are by whoever saved
+              the call. Interview counts use the interviewer name stored on each finished
+              interview.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -389,9 +524,10 @@ export function TeamReportModal({ open, supabase, onClose }: TeamReportModalProp
         ) : (
           <div className="mt-6 space-y-10">
             <section>
-              <h3 className="text-base font-semibold text-gray-900">Follow-up calls by person</h3>
+              <h3 className="text-base font-semibold text-gray-900">Follow-up calls by name</h3>
               <p className="mt-0.5 text-sm text-gray-500">
-                Counts who saved each follow-up for this period.
+                Who saved each follow-up. Names come from the log or your team directory (no
+                emails shown).
               </p>
               {followupByActor.length === 0 ? (
                 <p className="mt-3 text-sm text-gray-500">No follow-ups in this period.</p>
@@ -400,13 +536,13 @@ export function TeamReportModal({ open, supabase, onClose }: TeamReportModalProp
                   <table className="min-w-full border-collapse text-left">
                     <thead>
                       <tr>
-                        <th className={th}>Person</th>
+                        <th className={th}>Name</th>
                         <th className={`${th} text-right`}>Calls</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100 bg-white">
                       {followupByActor.map((row) => (
-                        <tr key={row.label} className="hover:bg-gray-50/80">
+                        <tr key={row.key} className="hover:bg-gray-50/80">
                           <td className={td}>{row.label}</td>
                           <td className={tdNum}>{row.count}</td>
                         </tr>
@@ -418,10 +554,12 @@ export function TeamReportModal({ open, supabase, onClose }: TeamReportModalProp
             </section>
 
             <section>
-              <h3 className="text-base font-semibold text-gray-900">
-                Testimonial interviews completed
-              </h3>
-              <p className="mt-0.5 text-sm text-gray-500">By interviewer, completed in this period.</p>
+              <h3 className="text-base font-semibold text-gray-900">Testimonial interviews</h3>
+              <p className="mt-0.5 text-sm text-gray-500">
+                Assigned = linked to that interviewer during this date range. Completed = finished
+                during this date range (can differ if assignment and completion fall in different
+                periods).
+              </p>
               {testimonialIvByPerson.length === 0 ? (
                 <p className="mt-3 text-sm text-gray-500">None in this period.</p>
               ) : (
@@ -430,6 +568,7 @@ export function TeamReportModal({ open, supabase, onClose }: TeamReportModalProp
                     <thead>
                       <tr>
                         <th className={th}>Interviewer</th>
+                        <th className={`${th} text-right`}>Assigned</th>
                         <th className={`${th} text-right`}>Completed</th>
                       </tr>
                     </thead>
@@ -437,7 +576,8 @@ export function TeamReportModal({ open, supabase, onClose }: TeamReportModalProp
                       {testimonialIvByPerson.map((row) => (
                         <tr key={`t-${row.label}`} className="hover:bg-gray-50/80">
                           <td className={td}>{row.label}</td>
-                          <td className={tdNum}>{row.count}</td>
+                          <td className={tdNum}>{row.assigned}</td>
+                          <td className={tdNum}>{row.completed}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -447,8 +587,11 @@ export function TeamReportModal({ open, supabase, onClose }: TeamReportModalProp
             </section>
 
             <section>
-              <h3 className="text-base font-semibold text-gray-900">Project interviews completed</h3>
-              <p className="mt-0.5 text-sm text-gray-500">By interviewer, completed in this period.</p>
+              <h3 className="text-base font-semibold text-gray-900">Project interviews</h3>
+              <p className="mt-0.5 text-sm text-gray-500">
+                Assigned = linked to that interviewer during this date range. Completed = finished
+                during this date range.
+              </p>
               {projectIvByPerson.length === 0 ? (
                 <p className="mt-3 text-sm text-gray-500">None in this period.</p>
               ) : (
@@ -457,6 +600,7 @@ export function TeamReportModal({ open, supabase, onClose }: TeamReportModalProp
                     <thead>
                       <tr>
                         <th className={th}>Interviewer</th>
+                        <th className={`${th} text-right`}>Assigned</th>
                         <th className={`${th} text-right`}>Completed</th>
                       </tr>
                     </thead>
@@ -464,7 +608,8 @@ export function TeamReportModal({ open, supabase, onClose }: TeamReportModalProp
                       {projectIvByPerson.map((row) => (
                         <tr key={`p-${row.label}`} className="hover:bg-gray-50/80">
                           <td className={td}>{row.label}</td>
-                          <td className={tdNum}>{row.count}</td>
+                          <td className={tdNum}>{row.assigned}</td>
+                          <td className={tdNum}>{row.completed}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -476,25 +621,20 @@ export function TeamReportModal({ open, supabase, onClose }: TeamReportModalProp
             <section className="rounded-xl border border-gray-200 bg-gradient-to-b from-gray-50 to-white p-5 shadow-sm">
               <h3 className="text-base font-semibold text-gray-900">Period summary</h3>
               <p className="mt-0.5 text-sm text-gray-500">
-                Org-wide totals for the same range (includes rows not tied to a single person above).
+                Whole-team counts for the same dates as the header. Some items cannot be split by
+                person in the tables above.
               </p>
               <dl className="mt-4 divide-y divide-gray-200">
                 <div className="flex items-baseline justify-between gap-4 py-2.5 first:pt-0">
-                  <dt className="text-sm text-gray-600">Follow-up calls (testimonial pipeline)</dt>
+                  <dt className="text-sm text-gray-600">Follow-up calls (testimonial side)</dt>
                   <dd className="text-sm font-semibold tabular-nums text-gray-900">
                     {totals.followupTestimonialPipeline}
                   </dd>
                 </div>
                 <div className="flex items-baseline justify-between gap-4 py-2.5">
-                  <dt className="text-sm text-gray-600">Follow-up calls (project pipeline)</dt>
+                  <dt className="text-sm text-gray-600">Follow-up calls (project side)</dt>
                   <dd className="text-sm font-semibold tabular-nums text-gray-900">
                     {totals.followupProjectPipeline}
-                  </dd>
-                </div>
-                <div className="flex items-baseline justify-between gap-4 py-2.5">
-                  <dt className="text-sm text-gray-600">Follow-up calls (all)</dt>
-                  <dd className="text-sm font-semibold tabular-nums text-gray-900">
-                    {totals.followupTestimonialPipeline + totals.followupProjectPipeline}
                   </dd>
                 </div>
                 <div className="flex items-baseline justify-between gap-4 py-2.5">
@@ -510,31 +650,39 @@ export function TeamReportModal({ open, supabase, onClose }: TeamReportModalProp
                   </dd>
                 </div>
                 <div className="flex items-baseline justify-between gap-4 py-2.5">
-                  <dt className="text-sm text-gray-600">Testimonial interviews scheduled</dt>
+                  <dt className="text-sm text-gray-600">
+                    Testimonial interviews with a slot in this date range
+                  </dt>
                   <dd className="text-sm font-semibold tabular-nums text-gray-900">
                     {totals.testimonialScheduledSlots}
                   </dd>
                 </div>
                 <div className="flex items-baseline justify-between gap-4 py-2.5">
-                  <dt className="text-sm text-gray-600">Project interviews scheduled</dt>
+                  <dt className="text-sm text-gray-600">
+                    Project interviews with a slot in this date range
+                  </dt>
                   <dd className="text-sm font-semibold tabular-nums text-gray-900">
                     {totals.projectScheduledSlots}
                   </dd>
                 </div>
                 <div className="flex items-baseline justify-between gap-4 py-2.5">
-                  <dt className="text-sm text-gray-600">Testimonial interviews completed</dt>
+                  <dt className="text-sm text-gray-600">
+                    Testimonial interviews finished in this date range
+                  </dt>
                   <dd className="text-sm font-semibold tabular-nums text-gray-900">
                     {totals.testimonialCompleted}
                   </dd>
                 </div>
                 <div className="flex items-baseline justify-between gap-4 py-2.5">
-                  <dt className="text-sm text-gray-600">Project interviews completed</dt>
+                  <dt className="text-sm text-gray-600">
+                    Project interviews finished in this date range
+                  </dt>
                   <dd className="text-sm font-semibold tabular-nums text-gray-900">
                     {totals.projectCompleted}
                   </dd>
                 </div>
                 <div className="flex items-baseline justify-between gap-4 py-2.5 last:pb-0">
-                  <dt className="text-sm text-gray-600">Dispatches recorded</dt>
+                  <dt className="text-sm text-gray-600">Dispatches logged in this date range</dt>
                   <dd className="text-sm font-semibold tabular-nums text-gray-900">
                     {totals.dispatches}
                   </dd>
