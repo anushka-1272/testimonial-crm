@@ -525,19 +525,15 @@ export function TeamReportModal({ open, supabase, onClose }: TeamReportModalProp
           <div className="mt-6 space-y-10">
             <section>
               <h3 className="text-base font-semibold text-gray-900">Follow-up calls by name</h3>
-              <p className="mt-0.5 text-sm text-gray-500">
-                Who saved each follow-up. Names come from the log or your team directory (no
-                emails shown).
-              </p>
               {followupByActor.length === 0 ? (
-                <p className="mt-3 text-sm text-gray-500">No follow-ups in this period.</p>
+                <p className="mt-4 text-sm text-gray-500">No follow-ups in this period.</p>
               ) : (
                 <div className="mt-4 overflow-hidden rounded-xl border border-gray-200 shadow-sm">
                   <table className="min-w-full border-collapse text-left">
                     <thead>
                       <tr>
                         <th className={th}>Name</th>
-                        <th className={`${th} text-right`}>Calls</th>
+                        <th className={`${th} text-right`}>Total calls</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100 bg-white">
