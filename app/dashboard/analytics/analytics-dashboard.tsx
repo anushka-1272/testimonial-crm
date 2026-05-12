@@ -24,6 +24,8 @@ import {
 } from "recharts";
 
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
+
+import { TeamReportModal } from "./team-report-modal";
 import {
   effectiveInterviewLanguage,
   interviewLanguageFilterBucket,
@@ -252,17 +254,20 @@ function ChartCard({
   subtitle,
   children,
   empty,
+  chartHeightClass = "h-[280px]",
 }: {
   title: string;
   subtitle?: string;
   children: React.ReactNode;
   empty?: boolean;
+  /** Tailwind height for the chart area (taller helps horizontal bar charts). */
+  chartHeightClass?: string;
 }) {
   return (
     <div className={cardClass}>
       <h3 className={chartTitle}>{title}</h3>
       {subtitle ? <p className={chartSubtitle}>{subtitle}</p> : null}
-      <div className="mt-4 h-[280px] w-full">
+      <div className={`mt-4 w-full ${chartHeightClass}`}>
         {empty ? (
           <div className="flex h-full items-center justify-center text-sm text-gray-500">
             No data for this range
@@ -309,6 +314,7 @@ export function AnalyticsDashboard() {
   const [candidates, setCandidates] = useState<CandidateRow[]>([]);
   const [interviews, setInterviews] = useState<InterviewRow[]>([]);
   const [dispatches, setDispatches] = useState<DispatchRow[]>([]);
+  const [teamReportOpen, setTeamReportOpen] = useState(false);
 
   const load = useCallback(async () => {
     if (!supabase) {
@@ -457,7 +463,6 @@ export function AnalyticsDashboard() {
       const notEligiblePct = total > 0 ? (notEligible / total) * 100 : 0;
       return {
         domain,
-        domainShort: truncateLabel(domain, 22),
         eligible,
         notEligible,
         total,
@@ -487,7 +492,7 @@ export function AnalyticsDashboard() {
       if (!map.has(roleRaw))
         map.set(roleRaw, {
           role: roleRaw,
-          roleShort: truncateLabel(roleRaw, 24),
+          roleShort: truncateLabel(roleRaw, 36),
           eligible: 0,
           notEligible: 0,
         });
@@ -495,13 +500,32 @@ export function AnalyticsDashboard() {
       if (iv.post_interview_eligible === true) row.eligible += 1;
       else row.notEligible += 1;
     }
-    return [...map.values()]
+    const rows = [...map.values()]
       .map((r) => ({
         ...r,
         total: r.eligible + r.notEligible,
       }))
-      .sort((a, b) => b.total - a.total)
-      .slice(0, 10);
+      .sort((a, b) => b.total - a.total);
+
+    const TOP_N = 8;
+    const top = rows.slice(0, TOP_N);
+    const rest = rows.slice(TOP_N);
+    if (rest.length === 0) return top;
+
+    const eligible = rest.reduce((s, r) => s + r.eligible, 0);
+    const notEligible = rest.reduce((s, r) => s + r.notEligible, 0);
+    const restInterviews = eligible + notEligible;
+    const label = `Other (${rest.length} role${rest.length === 1 ? "" : "s"}, ${restInterviews} interview${restInterviews === 1 ? "" : "s"})`;
+    return [
+      ...top,
+      {
+        role: label,
+        roleShort: truncateLabel(label, 36),
+        eligible,
+        notEligible,
+        total: restInterviews,
+      },
+    ];
   }, [candidates, candidateLatestCompletedInterviewInRange]);
 
   const languageDonut = useMemo(() => {
@@ -545,7 +569,11 @@ export function AnalyticsDashboard() {
       }
     }
     return [...freq.entries()]
-      .map(([name, count]) => ({ name, count }))
+      .map(([name, count]) => ({
+        name,
+        nameShort: truncateLabel(name, 40),
+        count,
+      }))
       .sort((a, b) => b.count - a.count)
       .slice(0, 8);
   }, [testimonialInterviews, start, end]);
@@ -611,6 +639,25 @@ export function AnalyticsDashboard() {
 
   const domainChartTotal = domainData.reduce((s, r) => s + r.total, 0);
 
+  const jobRoleMaxTotal = useMemo(
+    () => jobRoleData.reduce((m, r) => Math.max(m, r.total), 0),
+    [jobRoleData],
+  );
+
+  const jobRoleTicks = useMemo(() => {
+    const max = Math.max(1, jobRoleMaxTotal);
+    const step = max <= 5 ? 1 : Math.ceil(max / 5);
+    const out: number[] = [];
+    for (let v = 0; v <= max; v += step) out.push(v);
+    if (out[out.length - 1] !== max) out.push(max);
+    return out;
+  }, [jobRoleMaxTotal]);
+
+  const categoryMaxCount = useMemo(
+    () => topCategories.reduce((m, r) => Math.max(m, r.count), 0),
+    [topCategories],
+  );
+
   const hasAnyData =
     candidates.length > 0 || interviews.length > 0 || dispatches.length > 0;
 
@@ -633,23 +680,38 @@ export function AnalyticsDashboard() {
             Testimonial CRM performance overview
           </p>
         </div>
-        <div className="-mx-1 flex flex-nowrap gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] sm:flex-wrap sm:overflow-visible [&::-webkit-scrollbar]:hidden">
-          {(Object.keys(RANGE_LABELS) as DateRangePreset[]).map((k) => (
-            <button
-              key={k}
-              type="button"
-              onClick={() => setPreset(k)}
-              className={`shrink-0 rounded-full px-3 py-2 text-sm font-medium transition-colors sm:px-4 ${
-                preset === k
-                  ? "bg-[#1d4ed8] text-white"
-                  : "border border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
-              }`}
-            >
-              {RANGE_LABELS[k]}
-            </button>
-          ))}
+        <div className="flex flex-col items-stretch gap-3 sm:items-end">
+          <button
+            type="button"
+            onClick={() => setTeamReportOpen(true)}
+            className="shrink-0 rounded-full border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-800 shadow-sm hover:bg-gray-50"
+          >
+            Team report
+          </button>
+          <div className="-mx-1 flex flex-nowrap justify-end gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] sm:flex-wrap sm:overflow-visible [&::-webkit-scrollbar]:hidden">
+            {(Object.keys(RANGE_LABELS) as DateRangePreset[]).map((k) => (
+              <button
+                key={k}
+                type="button"
+                onClick={() => setPreset(k)}
+                className={`shrink-0 rounded-full px-3 py-2 text-sm font-medium transition-colors sm:px-4 ${
+                  preset === k
+                    ? "bg-[#1d4ed8] text-white"
+                    : "border border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
+                }`}
+              >
+                {RANGE_LABELS[k]}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
+
+      <TeamReportModal
+        open={teamReportOpen}
+        supabase={supabase}
+        onClose={() => setTeamReportOpen(false)}
+      />
 
       {error ? (
         <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
@@ -718,13 +780,14 @@ export function AnalyticsDashboard() {
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             <ChartCard
               title="Domain breakdown"
-              subtitle="100% stacked — completed testimonial interviews in range only (status completed or completed_at set); domain from intake; green = post-interview eligible share, red = not"
+              subtitle="100% stacked by industry bucket (mapped from intake). One bar = people with a completed testimonial interview in this range (latest interview per person). Green / red = post-interview eligible vs not."
               empty={domainChartTotal === 0}
+              chartHeightClass="h-[300px]"
             >
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart
                   data={domainData}
-                  margin={{ top: 12, right: 12, left: 0, bottom: 52 }}
+                  margin={{ top: 12, right: 12, left: 0, bottom: 64 }}
                   barCategoryGap="14%"
                 >
                   <CartesianGrid
@@ -733,10 +796,13 @@ export function AnalyticsDashboard() {
                     vertical={false}
                   />
                   <XAxis
-                    dataKey="domainShort"
+                    dataKey="domain"
                     interval={0}
-                    height={44}
-                    tick={{ fontSize: 11, fill: COLORS.gray }}
+                    angle={-30}
+                    dy={8}
+                    textAnchor="end"
+                    height={56}
+                    tick={{ fontSize: 10, fill: COLORS.gray }}
                   />
                   <YAxis
                     domain={[0, 100]}
@@ -809,8 +875,9 @@ export function AnalyticsDashboard() {
 
             <ChartCard
               title="Job role breakdown"
-              subtitle="Top 10 job roles — completed testimonial interviews in range; green = eligible count, red = not (dual stack); sorted by total"
+              subtitle='Top 8 distinct job titles by interview count (latest completed testimonial per person). Remaining titles are combined into one "Other" bar so single-interview roles are not misleadingly listed as a false top 10.'
               empty={jobRoleData.length === 0}
+              chartHeightClass="h-[340px]"
             >
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart
@@ -824,12 +891,25 @@ export function AnalyticsDashboard() {
                     stroke="#e5e7eb"
                     horizontal={false}
                   />
-                  <XAxis type="number" tick={{ fontSize: 11, fill: COLORS.gray }} />
+                  <XAxis
+                    type="number"
+                    domain={[0, Math.max(1, jobRoleMaxTotal)]}
+                    ticks={jobRoleTicks}
+                    allowDecimals={false}
+                    tick={{ fontSize: 11, fill: COLORS.gray }}
+                    label={{
+                      value: "Interviews (people)",
+                      position: "insideBottom",
+                      offset: -4,
+                      fontSize: 11,
+                      fill: COLORS.gray,
+                    }}
+                  />
                   <YAxis
                     type="category"
                     dataKey="roleShort"
-                    width={108}
-                    tick={{ fontSize: 11, fill: COLORS.gray }}
+                    width={148}
+                    tick={{ fontSize: 10, fill: COLORS.gray }}
                   />
                   <Tooltip
                     content={({ active, payload }) => {
@@ -896,7 +976,7 @@ export function AnalyticsDashboard() {
 
             <ChartCard
               title="Interview language"
-              subtitle="Completed testimonial interviews in range"
+              subtitle="Every completed testimonial interview in this range (multiple interviews per person each count)."
               empty={languageTotal === 0}
             >
               <ResponsiveContainer width="100%" height="100%">
@@ -913,6 +993,18 @@ export function AnalyticsDashboard() {
                     innerRadius={58}
                     outerRadius={88}
                     paddingAngle={2}
+                    label={({
+                      name,
+                      percent,
+                    }: {
+                      name: string;
+                      percent: number;
+                    }) =>
+                      percent >= 0.04
+                        ? `${name} ${Math.round(percent * 100)}%`
+                        : ""
+                    }
+                    labelLine={false}
                   >
                     {languageDonut.map((_, i) => (
                       <Cell
@@ -946,8 +1038,9 @@ export function AnalyticsDashboard() {
 
             <ChartCard
               title="Top post-interview categories"
-              subtitle="From completed interviews in range (top 8)"
+              subtitle="Category lines from completed testimonial interviews in this range (an interview can contribute to more than one line). Top 8 by frequency."
               empty={topCategories.length === 0}
+              chartHeightClass="h-[320px]"
             >
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart
@@ -956,14 +1049,30 @@ export function AnalyticsDashboard() {
                   margin={{ top: 8, right: 16, left: 8, bottom: 8 }}
                 >
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                  <XAxis type="number" tick={{ fontSize: 11, fill: COLORS.gray }} />
+                  <XAxis
+                    type="number"
+                    domain={[0, Math.max(1, categoryMaxCount)]}
+                    allowDecimals={false}
+                    tick={{ fontSize: 11, fill: COLORS.gray }}
+                  />
                   <YAxis
                     type="category"
-                    dataKey="name"
-                    width={100}
-                    tick={{ fontSize: 9, fill: COLORS.gray }}
+                    dataKey="nameShort"
+                    width={158}
+                    tick={{ fontSize: 10, fill: COLORS.gray }}
                   />
-                  <Tooltip />
+                  <Tooltip
+                    content={({ active, payload }) => {
+                      if (!active || !payload?.length) return null;
+                      const p = payload[0]!.payload as (typeof topCategories)[0];
+                      return (
+                        <div className="max-w-xs rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs shadow-md">
+                          <p className="font-medium text-gray-900">{p.name}</p>
+                          <p className="mt-1 text-gray-600">Count: {p.count}</p>
+                        </div>
+                      );
+                    }}
+                  />
                   <Bar
                     dataKey="count"
                     fill={COLORS.primary}
