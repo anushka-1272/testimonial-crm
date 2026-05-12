@@ -109,6 +109,22 @@ function hasCustomDateRange(dateFrom: string, dateTo: string): boolean {
   return Boolean(dateFrom || dateTo);
 }
 
+/** Partial match on email (case-insensitive) or phone digits (ignores spaces, +, dashes). */
+function matchesEmailOrPhoneSearch(
+  email: string | null | undefined,
+  whatsapp: string | null | undefined,
+  rawQuery: string,
+): boolean {
+  const q = rawQuery.trim().toLowerCase();
+  if (!q) return true;
+  const em = (email ?? "").toLowerCase();
+  if (em.includes(q)) return true;
+  const phoneDigits = (whatsapp ?? "").replace(/\D/g, "");
+  const qDigits = q.replace(/\D/g, "");
+  if (qDigits.length > 0 && phoneDigits.includes(qDigits)) return true;
+  return false;
+}
+
 function interviewTypeTableCell(t: InterviewTrack | null | undefined) {
   if (t === "testimonial") {
     return (
@@ -164,6 +180,7 @@ export function EligibilityDashboard() {
   const [industryFilter, setIndustryFilter] = useState<string>("");
   const [dateFrom, setDateFrom] = useState<string>("");
   const [dateTo, setDateTo] = useState<string>("");
+  const [contactSearch, setContactSearch] = useState("");
   const [period, setPeriod] = useState<DashboardPeriod>("total");
   const [weeklyDateInput, setWeeklyDateInput] = useState(
     defaultIstWeeklyDateInput,
@@ -300,9 +317,12 @@ export function EligibilityDashboard() {
         const to = endOfDay(parseISO(dateTo));
         if (created > to) return false;
       }
+      if (!matchesEmailOrPhoneSearch(r.email, r.whatsapp_number, contactSearch)) {
+        return false;
+      }
       return true;
     });
-  }, [rows, statusFilter, industryFilter, dateFrom, dateTo]);
+  }, [rows, statusFilter, industryFilter, dateFrom, dateTo, contactSearch]);
 
   const toggleSelect = (id: string) => {
     setSelected((prev) => {
@@ -880,6 +900,20 @@ export function EligibilityDashboard() {
               onChange={(e) => setDateTo(e.target.value)}
             />
           </label>
+          <label className="flex w-full min-w-0 flex-col gap-1 text-sm md:min-w-[220px] md:flex-1">
+            <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+              Email or phone
+            </span>
+            <input
+              type="search"
+              enterKeyHint="search"
+              autoComplete="off"
+              placeholder="Search by email or number…"
+              className="w-full rounded-xl border border-[#e5e5e5] px-3 py-2 text-sm text-[#1d1d1f] placeholder:text-[#aeaeb2] focus:border-[#3b82f6] focus:outline-none focus:ring-0"
+              value={contactSearch}
+              onChange={(e) => setContactSearch(e.target.value)}
+            />
+          </label>
           <button
             type="button"
             className="rounded-xl px-4 py-2 text-sm font-medium text-[#3b82f6] transition-all hover:text-[#2563eb]"
@@ -888,6 +922,7 @@ export function EligibilityDashboard() {
               setIndustryFilter("");
               setDateFrom("");
               setDateTo("");
+              setContactSearch("");
             }}
           >
             Clear filters
