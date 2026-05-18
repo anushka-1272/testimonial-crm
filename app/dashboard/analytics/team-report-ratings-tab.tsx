@@ -7,6 +7,10 @@ import { useCallback, useEffect, useState } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import {
+  areAllTeamRatingsComplete,
+  filterTeamRatingsMemberNames,
+} from "@/lib/team-ratings-config";
+import {
   fetchTeamMemberRatings,
   upsertTeamMemberRating,
   type RatingScores,
@@ -41,16 +45,28 @@ function averageScore(scores: RatingScores): number | null {
   return Math.round(avg * 10) / 10;
 }
 
-function dedupeNames(names: string[]): string[] {
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const raw of names) {
-    const name = raw.trim();
-    if (!name || seen.has(name)) continue;
-    seen.add(name);
-    out.push(name);
-  }
-  return out.sort((a, b) => a.localeCompare(b));
+const emptyScores = (): RatingScores => ({
+  callings: null,
+  interviews: null,
+  reminder: null,
+});
+
+async function authFetch(
+  supabase: SupabaseClient,
+  path: string,
+  body: Record<string, string>,
+): Promise<Response> {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  return fetch(path, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${session?.access_token ?? ""}`,
+    },
+    body: JSON.stringify(body),
+  });
 }
 
 function StarRatingInput({
@@ -103,12 +119,6 @@ const th =
   "bg-gray-50 px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-600 first:rounded-tl-xl last:rounded-tr-xl";
 const td = "px-3 py-3 text-sm text-gray-900 align-middle";
 
-const emptyScores = (): RatingScores => ({
-  callings: null,
-  interviews: null,
-  reminder: null,
-});
-
 export type TeamReportRatingsTabProps = {
   supabase: SupabaseClient;
   period: TeamReportPeriodPreset;
@@ -122,8 +132,10 @@ export function TeamReportRatingsTab({
 }: TeamReportRatingsTabProps) {
   const bounds = periodDates(period);
   const [loading, setLoading] = useState(true);
+  const [resetting, setResetting] = useState(false);
   const [savingKey, setSavingKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
   const [memberNames, setMemberNames] = useState<string[]>([]);
   const [ratings, setRatings] = useState<Map<string, RatingScores>>(new Map());
   const [ratingsSchema, setRatingsSchema] = useState<"new" | "legacy">("new");
@@ -150,7 +162,7 @@ export function TeamReportRatingsTab({
       setLoading(false);
       return;
     }
-    const names = dedupeNames(
+    const names = filterTeamRatingsMemberNames(
       (rosterRes.data ?? []).map((r) => (r as { name: string | null }).name?.trim() ?? ""),
     );
     setMemberNames(names);
@@ -177,12 +189,43 @@ export function TeamReportRatingsTab({
     void load();
   }, [load]);
 
+  const notifyCompleteIfReady = useCallback(
+    async (allRatings: Map<string, RatingScores>) => {
+      if (!bounds || !canEdit || !areAllTeamRatingsComplete(memberNames, allRatings)) {
+        return;
+      }
+
+      try {
+        const res = await authFetch(supabase, "/api/team/ratings/notify-complete", {
+          periodStart: bounds.start,
+          periodEnd: bounds.end,
+        });
+        const json = (await res.json()) as {
+          notified?: boolean;
+          alreadySent?: boolean;
+          error?: string;
+        };
+        if (!res.ok) {
+          console.error("notify-complete:", json.error);
+          return;
+        }
+        if (json.notified) {
+          setInfo("Jay has been notified on Slack that this period’s ratings are complete.");
+        }
+      } catch (err) {
+        console.error("notify-complete:", err);
+      }
+    },
+    [supabase, bounds, canEdit, memberNames],
+  );
+
   const persist = useCallback(
-    async (memberName: string, next: RatingScores) => {
+    async (memberName: string, next: RatingScores, allRatings: Map<string, RatingScores>) => {
       if (!bounds || !canEdit) return;
 
       setSavingKey(memberName);
       setError(null);
+      setInfo(null);
 
       const user = await getUserSafe(supabase);
       const { error: upsertError, schema } = await upsertTeamMemberRating(supabase, {
@@ -200,8 +243,10 @@ export function TeamReportRatingsTab({
         setError(upsertError);
         return;
       }
+
+      await notifyCompleteIfReady(allRatings);
     },
-    [supabase, bounds, canEdit, ratingsSchema],
+    [supabase, bounds, canEdit, ratingsSchema, notifyCompleteIfReady],
   );
 
   const updateField = useCallback(
@@ -211,12 +256,46 @@ export function TeamReportRatingsTab({
         const next = { ...current, ...patch };
         const map = new Map(prev);
         map.set(memberName, next);
-        void persist(memberName, next);
+        void persist(memberName, next, map);
         return map;
       });
     },
     [persist],
   );
+
+  const handleReset = useCallback(async () => {
+    if (!bounds || !canEdit) return;
+    if (
+      !window.confirm(
+        "Reset all ratings for this period? This cannot be undone and Jay will be notified again only after everyone is re-rated.",
+      )
+    ) {
+      return;
+    }
+
+    setResetting(true);
+    setError(null);
+    setInfo(null);
+
+    try {
+      const res = await authFetch(supabase, "/api/team/ratings/reset", {
+        periodStart: bounds.start,
+        periodEnd: bounds.end,
+      });
+      const json = (await res.json()) as { error?: string };
+      if (!res.ok) {
+        setError(json.error ?? "Reset failed");
+        return;
+      }
+      setRatings(new Map());
+      await load();
+      setInfo("Ratings reset for this period.");
+    } catch {
+      setError("Reset failed");
+    } finally {
+      setResetting(false);
+    }
+  }, [bounds, canEdit, supabase, load]);
 
   if (!bounds) {
     return (
@@ -232,21 +311,36 @@ export function TeamReportRatingsTab({
 
   return (
     <div className="space-y-4">
-      <div>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <p className="text-sm text-gray-600">
           Rate POCs and interviewers from 1–5 for this period. Overall is the average of callings,
-          interviews, and reminder.
+          interviews, and reminder. When everyone is rated, Jay gets a Slack message automatically.
         </p>
-        {!canEdit ? (
-          <p className="mt-2 text-sm text-amber-800">
-            View only — only admins can edit ratings.
-          </p>
+        {canEdit ? (
+          <button
+            type="button"
+            onClick={() => void handleReset()}
+            disabled={resetting || savingKey != null}
+            className="shrink-0 rounded-full border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-800 shadow-sm hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {resetting ? "Resetting…" : "Reset ratings"}
+          </button>
         ) : null}
       </div>
+
+      {!canEdit ? (
+        <p className="text-sm text-amber-800">View only — only admins can edit ratings.</p>
+      ) : null}
 
       {error ? (
         <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
           {error}
+        </p>
+      ) : null}
+
+      {info ? (
+        <p className="rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-800">
+          {info}
         </p>
       ) : null}
 

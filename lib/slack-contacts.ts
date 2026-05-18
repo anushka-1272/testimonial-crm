@@ -20,6 +20,8 @@ export const SLACK_SAPNA_POST_PRODUCTION_EMAIL =
 export const SLACK_SOMOSHREE_POST_PRODUCTION_EMAIL =
   "somoshree.roy.chowdhury@houseofedtech.in";
 export const SLACK_ANUSHKA_WEEKLY_EMAIL = "anushka@houseofedtech.in";
+/** Team monthly ratings summary recipient */
+export const SLACK_JAY_EMAIL = "jay@houseofedtech.in";
 
 export async function slackEmailForTeamMember(
   supabase: SupabaseClient,
