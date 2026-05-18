@@ -311,12 +311,8 @@ export function TeamReportRatingsTab({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <p className="text-sm text-gray-600">
-          Rate POCs and interviewers from 1–5 for this period. Overall is the average of callings,
-          interviews, and reminder. When everyone is rated, Jay gets a Slack message automatically.
-        </p>
-        {canEdit ? (
+      {canEdit ? (
+        <div className="flex justify-end">
           <button
             type="button"
             onClick={() => void handleReset()}
@@ -325,8 +321,8 @@ export function TeamReportRatingsTab({
           >
             {resetting ? "Resetting…" : "Reset ratings"}
           </button>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
 
       {!canEdit ? (
         <p className="text-sm text-amber-800">View only — only admins can edit ratings.</p>
