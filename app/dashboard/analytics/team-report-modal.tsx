@@ -1,74 +1,26 @@
 "use client";
 
-import {
-  endOfDay,
-  endOfMonth,
-  format,
-  startOfMonth,
-  startOfQuarter,
-  startOfWeek,
-  subMonths,
-} from "date-fns";
-import { useCallback, useEffect, useState } from "react";
+import { format } from "date-fns";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { useAccessControl } from "@/components/access-control-context";
 import { modalOverlayClass, modalPanelWideClass } from "@/lib/modal-responsive";
 import { teamMemberDisplayName } from "@/lib/team-roster";
 
-export type TeamReportPeriodPreset =
-  | "week"
-  | "month"
-  | "prev_month"
-  | "quarter"
-  | "all";
+import { TeamReportRatingsTab } from "./team-report-ratings-tab";
+import {
+  PERIOD_LABELS,
+  PERIOD_ORDER,
+  rangeFilterIso,
+  rangeForPreset,
+  type TeamReportPeriodPreset,
+} from "./team-report-period";
 
-const PERIOD_LABELS: Record<TeamReportPeriodPreset, string> = {
-  week: "This week",
-  month: "This month",
-  prev_month: "Previous month",
-  quarter: "This quarter",
-  all: "All time",
-};
+export type { TeamReportPeriodPreset } from "./team-report-period";
 
-const PERIOD_ORDER: TeamReportPeriodPreset[] = [
-  "week",
-  "month",
-  "prev_month",
-  "quarter",
-  "all",
-];
-
-/** `start` null means entire history (no lower bound on query filters). */
-function rangeForPreset(preset: TeamReportPeriodPreset): { start: Date | null; end: Date } {
-  const end = endOfDay(new Date());
-  const now = new Date();
-  if (preset === "week") {
-    return { start: startOfWeek(now, { weekStartsOn: 1 }), end };
-  }
-  if (preset === "month") {
-    return { start: startOfMonth(now), end };
-  }
-  if (preset === "prev_month") {
-    const ref = subMonths(now, 1);
-    return { start: startOfMonth(ref), end: endOfMonth(ref) };
-  }
-  if (preset === "quarter") {
-    return { start: startOfQuarter(now), end };
-  }
-  return { start: null, end };
-}
-
-function rangeFilterIso(preset: TeamReportPeriodPreset): {
-  startIso: string | null;
-  endIso: string;
-} {
-  const { start, end } = rangeForPreset(preset);
-  return {
-    startIso: start ? start.toISOString() : null,
-    endIso: end.toISOString(),
-  };
-}
+type TeamReportTab = "metrics" | "ratings";
 
 const PAGE = 1000;
 
@@ -234,6 +186,8 @@ export type TeamReportModalProps = {
 };
 
 export function TeamReportModal({ open, supabase, onClose }: TeamReportModalProps) {
+  const { canManageTeam } = useAccessControl();
+  const [tab, setTab] = useState<TeamReportTab>("metrics");
   const [period, setPeriod] = useState<TeamReportPeriodPreset>("month");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -488,6 +442,14 @@ export function TeamReportModal({ open, supabase, onClose }: TeamReportModalProp
     void load();
   }, [open, load]);
 
+  const metricMemberNames = useMemo(() => {
+    const names = new Set<string>();
+    for (const row of followupByActor) names.add(row.label);
+    for (const row of testimonialIvByPerson) names.add(row.label);
+    for (const row of projectIvByPerson) names.add(row.label);
+    return [...names];
+  }, [followupByActor, testimonialIvByPerson, projectIvByPerson]);
+
   if (!open) return null;
 
   const { start, end } = rangeForPreset(period);
@@ -547,13 +509,47 @@ export function TeamReportModal({ open, supabase, onClose }: TeamReportModalProp
           </div>
         </div>
 
+        <div className="mt-4 flex gap-1 rounded-lg border border-gray-200 bg-gray-50 p-1">
+          <button
+            type="button"
+            onClick={() => setTab("metrics")}
+            className={`flex-1 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+              tab === "metrics"
+                ? "bg-white text-gray-900 shadow-sm"
+                : "text-gray-600 hover:text-gray-900"
+            }`}
+          >
+            Metrics
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab("ratings")}
+            className={`flex-1 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+              tab === "ratings"
+                ? "bg-white text-gray-900 shadow-sm"
+                : "text-gray-600 hover:text-gray-900"
+            }`}
+          >
+            Ratings
+          </button>
+        </div>
+
         {error ? (
           <p className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
             {error}
           </p>
         ) : null}
 
-        {loading ? (
+        {tab === "ratings" ? (
+          <div className="mt-6">
+            <TeamReportRatingsTab
+              supabase={supabase}
+              period={period}
+              canEdit={canManageTeam}
+              metricMemberNames={metricMemberNames}
+            />
+          </div>
+        ) : loading ? (
           <p className="mt-8 text-sm text-gray-500">Loading numbers…</p>
         ) : (
           <div className="mt-6 space-y-10">
