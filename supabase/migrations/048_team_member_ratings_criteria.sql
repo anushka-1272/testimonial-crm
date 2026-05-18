@@ -35,26 +35,50 @@ END $$;
 
 ALTER TABLE public.team_member_ratings DROP COLUMN IF EXISTS notes;
 
-ALTER TABLE public.team_member_ratings
-  DROP CONSTRAINT IF EXISTS team_member_ratings_callings_check;
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'team_member_ratings'
+      AND column_name = 'callings'
+  ) THEN
+    ALTER TABLE public.team_member_ratings
+      DROP CONSTRAINT IF EXISTS team_member_ratings_callings_check;
+    ALTER TABLE public.team_member_ratings
+      ADD CONSTRAINT team_member_ratings_callings_check CHECK (
+        callings IS NULL OR (callings >= 1 AND callings <= 5)
+      );
+  END IF;
 
-ALTER TABLE public.team_member_ratings
-  ADD CONSTRAINT team_member_ratings_callings_check CHECK (
-    callings IS NULL OR (callings >= 1 AND callings <= 5)
-  );
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'team_member_ratings'
+      AND column_name = 'interviews'
+  ) THEN
+    ALTER TABLE public.team_member_ratings
+      DROP CONSTRAINT IF EXISTS team_member_ratings_interviews_check;
+    ALTER TABLE public.team_member_ratings
+      ADD CONSTRAINT team_member_ratings_interviews_check CHECK (
+        interviews IS NULL OR (interviews >= 1 AND interviews <= 5)
+      );
+  END IF;
 
-ALTER TABLE public.team_member_ratings
-  DROP CONSTRAINT IF EXISTS team_member_ratings_interviews_check;
-
-ALTER TABLE public.team_member_ratings
-  ADD CONSTRAINT team_member_ratings_interviews_check CHECK (
-    interviews IS NULL OR (interviews >= 1 AND interviews <= 5)
-  );
-
-ALTER TABLE public.team_member_ratings
-  DROP CONSTRAINT IF EXISTS team_member_ratings_reminder_check;
-
-ALTER TABLE public.team_member_ratings
-  ADD CONSTRAINT team_member_ratings_reminder_check CHECK (
-    reminder IS NULL OR (reminder >= 1 AND reminder <= 5)
-  );
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'team_member_ratings'
+      AND column_name = 'reminder'
+  ) THEN
+    ALTER TABLE public.team_member_ratings
+      DROP CONSTRAINT IF EXISTS team_member_ratings_reminder_check;
+    ALTER TABLE public.team_member_ratings
+      ADD CONSTRAINT team_member_ratings_reminder_check CHECK (
+        reminder IS NULL OR (reminder >= 1 AND reminder <= 5)
+      );
+  END IF;
+END $$;

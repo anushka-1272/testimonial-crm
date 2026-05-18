@@ -6,17 +6,18 @@ import { useCallback, useEffect, useState } from "react";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import {
+  fetchTeamMemberRatings,
+  upsertTeamMemberRating,
+  type RatingScores,
+} from "@/lib/team-member-ratings-db";
 import { getUserSafe } from "@/lib/supabase-auth";
 
 import { rangeForPreset, type TeamReportPeriodPreset } from "./team-report-period";
 
 const RATING_ROLES = ["poc", "interviewer"] as const;
 
-export type RatingScores = {
-  callings: number | null;
-  interviews: number | null;
-  reminder: number | null;
-};
+export type { RatingScores };
 
 type RatingRow = RatingScores & {
   member_name: string;
@@ -125,6 +126,7 @@ export function TeamReportRatingsTab({
   const [error, setError] = useState<string | null>(null);
   const [memberNames, setMemberNames] = useState<string[]>([]);
   const [ratings, setRatings] = useState<Map<string, RatingScores>>(new Map());
+  const [ratingsSchema, setRatingsSchema] = useState<"new" | "legacy">("new");
 
   const load = useCallback(async () => {
     if (!bounds) {
@@ -153,33 +155,19 @@ export function TeamReportRatingsTab({
     );
     setMemberNames(names);
 
-    const ratingsRes = await supabase
-      .from("team_member_ratings")
-      .select("member_name, callings, interviews, reminder")
-      .eq("period_start", bounds.start)
-      .eq("period_end", bounds.end);
+    const ratingsRes = await fetchTeamMemberRatings(supabase, bounds.start, bounds.end);
     if (ratingsRes.error) {
-      setError(ratingsRes.error.message);
+      setError(ratingsRes.error);
       setLoading(false);
       return;
     }
 
+    setRatingsSchema(ratingsRes.schema);
     const allowed = new Set(names);
     const map = new Map<string, RatingScores>();
-    for (const row of ratingsRes.data ?? []) {
-      const r = row as {
-        member_name: string;
-        callings: number | null;
-        interviews: number | null;
-        reminder: number | null;
-      };
-      const name = r.member_name?.trim();
-      if (!name || !allowed.has(name)) continue;
-      map.set(name, {
-        callings: r.callings,
-        interviews: r.interviews,
-        reminder: r.reminder,
-      });
+    for (const [name, scores] of ratingsRes.rows) {
+      if (!allowed.has(name)) continue;
+      map.set(name, scores);
     }
     setRatings(map);
     setLoading(false);
@@ -197,28 +185,23 @@ export function TeamReportRatingsTab({
       setError(null);
 
       const user = await getUserSafe(supabase);
-      const payload = {
-        period_start: bounds.start,
-        period_end: bounds.end,
-        member_name: memberName,
-        callings: next.callings,
-        interviews: next.interviews,
-        reminder: next.reminder,
-        rated_by: user?.id ?? null,
-        updated_at: new Date().toISOString(),
-      };
+      const { error: upsertError, schema } = await upsertTeamMemberRating(supabase, {
+        periodStart: bounds.start,
+        periodEnd: bounds.end,
+        memberName,
+        scores: next,
+        ratedBy: user?.id ?? null,
+        schema: ratingsSchema,
+      });
 
-      const { error: upsertError } = await supabase
-        .from("team_member_ratings")
-        .upsert(payload, { onConflict: "period_start,period_end,member_name" });
-
+      setRatingsSchema(schema);
       setSavingKey(null);
       if (upsertError) {
-        setError(upsertError.message);
+        setError(upsertError);
         return;
       }
     },
-    [supabase, bounds, canEdit],
+    [supabase, bounds, canEdit, ratingsSchema],
   );
 
   const updateField = useCallback(
