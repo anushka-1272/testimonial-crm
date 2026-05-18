@@ -1,4 +1,5 @@
 -- Monthly / period team performance ratings (1–5) from Team report → Ratings tab
+-- POC and interviewers only: callings, interviews, reminder
 
 CREATE TABLE IF NOT EXISTS public.team_member_ratings (
   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -7,16 +8,15 @@ CREATE TABLE IF NOT EXISTS public.team_member_ratings (
   period_start date NOT NULL,
   period_end date NOT NULL,
   member_name text NOT NULL,
-  consistency smallint CHECK (
-    consistency IS NULL OR (consistency >= 1 AND consistency <= 5)
+  callings smallint CHECK (
+    callings IS NULL OR (callings >= 1 AND callings <= 5)
   ),
-  activeness smallint CHECK (
-    activeness IS NULL OR (activeness >= 1 AND activeness <= 5)
+  interviews smallint CHECK (
+    interviews IS NULL OR (interviews >= 1 AND interviews <= 5)
   ),
-  reminders smallint CHECK (
-    reminders IS NULL OR (reminders >= 1 AND reminders <= 5)
+  reminder smallint CHECK (
+    reminder IS NULL OR (reminder >= 1 AND reminder <= 5)
   ),
-  notes text,
   rated_by uuid REFERENCES auth.users(id) ON DELETE SET NULL,
   CONSTRAINT team_member_ratings_period_member_key
     UNIQUE (period_start, period_end, member_name)

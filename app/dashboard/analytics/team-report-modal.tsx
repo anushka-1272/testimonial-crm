@@ -1,7 +1,7 @@
 "use client";
 
 import { format } from "date-fns";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -442,14 +442,6 @@ export function TeamReportModal({ open, supabase, onClose }: TeamReportModalProp
     void load();
   }, [open, load]);
 
-  const metricMemberNames = useMemo(() => {
-    const names = new Set<string>();
-    for (const row of followupByActor) names.add(row.label);
-    for (const row of testimonialIvByPerson) names.add(row.label);
-    for (const row of projectIvByPerson) names.add(row.label);
-    return [...names];
-  }, [followupByActor, testimonialIvByPerson, projectIvByPerson]);
-
   if (!open) return null;
 
   const { start, end } = rangeForPreset(period);
@@ -546,7 +538,6 @@ export function TeamReportModal({ open, supabase, onClose }: TeamReportModalProp
               supabase={supabase}
               period={period}
               canEdit={canManageTeam}
-              metricMemberNames={metricMemberNames}
             />
           </div>
         ) : loading ? (
