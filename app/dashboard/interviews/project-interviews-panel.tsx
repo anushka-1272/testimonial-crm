@@ -10,6 +10,7 @@ import { useAccessControl } from "@/components/access-control-context";
 import { ProjectCandidateDetailModal } from "@/components/project-candidate-detail-modal";
 import { ZoomDetailsModal } from "@/components/ZoomDetailsModal";
 import { logActivity } from "@/lib/activity-logger";
+import { revertInterviewToCallings } from "@/lib/revert-interview";
 import { displayNameFromUser, getUserSafe } from "@/lib/supabase-auth";
 import {
   buildInterviewerSelectOptions,
@@ -445,6 +446,7 @@ export function ProjectInterviewsPanel({
   } | null>(null);
   const [sheetSyncBusy, setSheetSyncBusy] = useState(false);
   const [deleteBusyId, setDeleteBusyId] = useState<string | null>(null);
+  const [revertBusyId, setRevertBusyId] = useState<string | null>(null);
   const [addZoomFor, setAddZoomFor] =
     useState<ProjectInterviewWithProjectCandidate | null>(null);
   const [assignInterviewerFor, setAssignInterviewerFor] =
@@ -647,6 +649,44 @@ export function ProjectInterviewsPanel({
       onError(null);
     },
     [canEditScheduledTab, supabase, onError, onToast],
+  );
+
+  const handleRevertProjectInterview = useCallback(
+    async (i: ProjectInterviewWithProjectCandidate) => {
+      const pc = Array.isArray(i.project_candidates)
+        ? i.project_candidates[0] ?? null
+        : i.project_candidates;
+      const display =
+        pc?.project_title?.trim() ||
+        pc?.full_name?.trim() ||
+        pc?.email ||
+        "Candidate";
+      const confirmed = window.confirm(
+        `Revert ${display} from scheduled back to callings?\n\nThe interview will be deleted. The candidate stays with the same POC and can be called again.`,
+      );
+      if (!confirmed) return;
+
+      setRevertBusyId(i.id);
+      const authUser = await getUserSafe(supabase);
+      const { error: revertErr } = await revertInterviewToCallings({
+        supabase,
+        interviewId: i.id,
+        candidateId: i.project_candidate_id,
+        isProject: true,
+        candidateName: display,
+        user: authUser ?? null,
+      });
+      setRevertBusyId(null);
+      if (revertErr) {
+        onError(revertErr);
+        return;
+      }
+      onToast?.(`${display} reverted to callings.`);
+      onError(null);
+      await loadProjectData();
+      onPipelineChanged();
+    },
+    [supabase, loadProjectData, onError, onPipelineChanged, onToast],
   );
 
   const loadRosters = useCallback(async () => {
@@ -1734,6 +1774,32 @@ export function ProjectInterviewsPanel({
                                   Assign Interviewer
                                 </button>
                               ) : null}
+                              <button
+                                type="button"
+                                disabled={
+                                  !canEditScheduledTab ||
+                                  !canTakeInterviewActions ||
+                                  revertBusyId === i.id
+                                }
+                                title={
+                                  blockedActionTitle ??
+                                  "Send back to callings (same POC)"
+                                }
+                                className="rounded-lg border border-[#d4d4d8] bg-white px-3 py-1.5 text-xs font-medium text-[#1d1d1f] hover:bg-[#fafafa] disabled:cursor-not-allowed disabled:border-[#d1d5db] disabled:text-[#9ca3af]"
+                                onClick={() => {
+                                  if (
+                                    !canEditScheduledTab ||
+                                    !canTakeInterviewActions ||
+                                    revertBusyId === i.id
+                                  )
+                                    return;
+                                  void handleRevertProjectInterview(i);
+                                }}
+                              >
+                                {revertBusyId === i.id
+                                  ? "Reverting…"
+                                  : "Revert"}
+                              </button>
                               <button
                                 type="button"
                                 className="rounded-lg bg-[#ea580c] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#c2410c] disabled:cursor-not-allowed disabled:bg-[#d1d5db] disabled:text-[#6b7280]"

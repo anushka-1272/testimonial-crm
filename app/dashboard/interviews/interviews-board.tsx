@@ -29,6 +29,7 @@ import {
 } from "@/lib/interview-language";
 import { getUserSafe } from "@/lib/supabase-auth";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
+import { revertInterviewToCallings } from "@/lib/revert-interview";
 import { slackEmailForTeamMember } from "@/lib/slack-contacts";
 import { voidSlackNotify } from "@/lib/slack-client";
 import {
@@ -749,6 +750,7 @@ export function InterviewsBoard() {
     value: string;
   } | null>(null);
   const [incompleteBusyId, setIncompleteBusyId] = useState<string | null>(null);
+  const [revertBusyId, setRevertBusyId] = useState<string | null>(null);
   const [liBusyId, setLiBusyId] = useState<string | null>(null);
   const [linkedInListPage, setLinkedInListPage] = useState(0);
   const [pocRoster, setPocRoster] = useState<string[]>([]);
@@ -1502,6 +1504,37 @@ export function InterviewsBoard() {
       }
     }
     setPocEditingId((prev) => (prev === candidate.id ? null : prev));
+    void loadData();
+  };
+
+  const handleRevertInterview = async (i: InterviewWithCandidate) => {
+    if (!supabase) return;
+    const candidate = Array.isArray(i.candidates)
+      ? i.candidates[0] ?? null
+      : i.candidates;
+    const display =
+      candidate?.full_name?.trim() || candidate?.email || "Candidate";
+    const confirmed = window.confirm(
+      `Revert ${display} from scheduled back to callings?\n\nThe interview will be deleted. The candidate stays with the same POC and can be called again.`,
+    );
+    if (!confirmed) return;
+
+    setRevertBusyId(i.id);
+    const authUser = await getUserSafe(supabase);
+    const { error: revertErr } = await revertInterviewToCallings({
+      supabase,
+      interviewId: i.id,
+      candidateId: i.candidate_id,
+      isProject: false,
+      candidateName: display,
+      user: authUser ?? null,
+    });
+    setRevertBusyId(null);
+    if (revertErr) {
+      setError(revertErr);
+      return;
+    }
+    setToastMessage(`${display} reverted to callings.`);
     void loadData();
   };
 
@@ -2736,6 +2769,35 @@ export function InterviewsBoard() {
                                         Assign Interviewer
                                       </button>
                                     ) : null}
+                                    <button
+                                      type="button"
+                                      disabled={
+                                        !canEditScheduledTab ||
+                                        isCompletedRow ||
+                                        revertBusyId === i.id
+                                      }
+                                      title={
+                                        !canEditScheduledTab
+                                          ? "View only"
+                                          : isCompletedRow
+                                            ? "Already completed"
+                                            : "Send back to callings (same POC)"
+                                      }
+                                      className="rounded-lg border border-[#d4d4d8] bg-white px-3 py-1.5 text-xs font-medium text-[#1d1d1f] hover:bg-[#fafafa] disabled:cursor-not-allowed disabled:border-[#d1d5db] disabled:text-[#9ca3af]"
+                                      onClick={() => {
+                                        if (
+                                          !canEditScheduledTab ||
+                                          isCompletedRow ||
+                                          revertBusyId === i.id
+                                        )
+                                          return;
+                                        void handleRevertInterview(i);
+                                      }}
+                                    >
+                                      {revertBusyId === i.id
+                                        ? "Reverting…"
+                                        : "Revert"}
+                                    </button>
                                     <button
                                       type="button"
                                       disabled={
