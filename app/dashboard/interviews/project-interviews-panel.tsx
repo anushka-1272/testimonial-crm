@@ -10,7 +10,7 @@ import { useAccessControl } from "@/components/access-control-context";
 import { ProjectCandidateDetailModal } from "@/components/project-candidate-detail-modal";
 import { ZoomDetailsModal } from "@/components/ZoomDetailsModal";
 import { logActivity } from "@/lib/activity-logger";
-import { revertInterviewToCallings } from "@/lib/revert-interview";
+import { requestRevertInterview } from "@/lib/revert-interview-client";
 import { displayNameFromUser, getUserSafe } from "@/lib/supabase-auth";
 import {
   buildInterviewerSelectOptions,
@@ -667,14 +667,11 @@ export function ProjectInterviewsPanel({
       if (!confirmed) return;
 
       setRevertBusyId(i.id);
-      const authUser = await getUserSafe(supabase);
-      const { error: revertErr } = await revertInterviewToCallings({
-        supabase,
+      const { error: revertErr } = await requestRevertInterview(supabase, {
         interviewId: i.id,
         candidateId: i.project_candidate_id,
         isProject: true,
         candidateName: display,
-        user: authUser ?? null,
       });
       setRevertBusyId(null);
       if (revertErr) {
@@ -683,6 +680,7 @@ export function ProjectInterviewsPanel({
       }
       onToast?.(`${display} reverted to callings.`);
       onError(null);
+      setSubTab("pending");
       await loadProjectData();
       onPipelineChanged();
     },

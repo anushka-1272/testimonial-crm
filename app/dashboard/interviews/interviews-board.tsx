@@ -29,7 +29,7 @@ import {
 } from "@/lib/interview-language";
 import { getUserSafe } from "@/lib/supabase-auth";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
-import { revertInterviewToCallings } from "@/lib/revert-interview";
+import { requestRevertInterview } from "@/lib/revert-interview-client";
 import { slackEmailForTeamMember } from "@/lib/slack-contacts";
 import { voidSlackNotify } from "@/lib/slack-client";
 import {
@@ -1520,14 +1520,11 @@ export function InterviewsBoard() {
     if (!confirmed) return;
 
     setRevertBusyId(i.id);
-    const authUser = await getUserSafe(supabase);
-    const { error: revertErr } = await revertInterviewToCallings({
-      supabase,
+    const { error: revertErr } = await requestRevertInterview(supabase, {
       interviewId: i.id,
       candidateId: i.candidate_id,
       isProject: false,
       candidateName: display,
-      user: authUser ?? null,
     });
     setRevertBusyId(null);
     if (revertErr) {
@@ -1535,6 +1532,7 @@ export function InterviewsBoard() {
       return;
     }
     setToastMessage(`${display} reverted to callings.`);
+    setActiveTab("eligible");
     void loadData();
   };
 

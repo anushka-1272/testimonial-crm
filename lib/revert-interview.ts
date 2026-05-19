@@ -21,12 +21,19 @@ export async function revertInterviewToCallings(opts: {
   const interviewTable = isProject ? "project_interviews" : "interviews";
   const candidateTable = isProject ? "project_candidates" : "candidates";
 
-  const { error: delErr } = await supabase
+  const { data: deleted, error: delErr } = await supabase
     .from(interviewTable)
     .delete()
-    .eq("id", interviewId);
+    .eq("id", interviewId)
+    .select("id");
   if (delErr) {
     return { error: delErr.message };
+  }
+  if (!deleted?.length) {
+    return {
+      error:
+        "Could not remove the scheduled interview. Database delete permission may be missing — contact your admin.",
+    };
   }
 
   const candidateUpdate = isProject
