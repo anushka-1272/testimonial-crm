@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { CommentTableCell, StoredCommentText } from "@/components/comment-display";
 import { useAccessControl } from "@/components/access-control-context";
 import { CandidateDetailModal } from "@/components/candidate-detail-modal";
 import { ProjectCandidateDetailModal } from "@/components/project-candidate-detail-modal";
@@ -605,10 +606,30 @@ export function PostProductionDashboard() {
 
   const loadRows = useCallback(async (): Promise<boolean> => {
     if (!supabase) return false;
-    const { data, error: e } = await supabase
+    let { data, error: e } = await supabase
       .from("post_production")
       .select(PP_SELECT)
       .order("created_at", { ascending: false });
+    if (
+      e?.message?.includes(
+        "column post_production.editor_comments does not exist",
+      )
+    ) {
+      const legacySelect = PP_SELECT.replace(
+        ", editor_comments,",
+        ",",
+      );
+      const legacy = await supabase
+        .from("post_production")
+        .select(legacySelect)
+        .order("created_at", { ascending: false });
+      data =
+        legacy.data?.map((row) => ({
+          ...row,
+          editor_comments: null,
+        })) ?? null;
+      e = legacy.error;
+    }
     if (e) {
       setError(e.message);
       return false;
@@ -1486,15 +1507,7 @@ export function PostProductionDashboard() {
     const editing = editorCommentsEdit?.rowId === row.id;
 
     if (!canEditCurrentPage) {
-      return (
-        <div className="max-h-28 overflow-y-auto whitespace-pre-wrap break-words text-xs leading-snug text-[#1d1d1f]">
-          {stored ? (
-            stored
-          ) : (
-            <span className="text-[#aeaeb2]">—</span>
-          )}
-        </div>
-      );
+      return <CommentTableCell value={stored} />;
     }
 
     if (editing && editorCommentsEdit) {
@@ -1535,16 +1548,11 @@ export function PostProductionDashboard() {
 
     return (
       <div className="flex min-w-0 flex-col gap-1">
-        <div
-          className="max-h-20 overflow-y-auto whitespace-pre-wrap break-words text-xs leading-snug text-[#1d1d1f]"
-          title={stored || undefined}
-        >
-          {stored ? (
-            stored
-          ) : (
-            <span className="text-[#aeaeb2]">No notes yet</span>
-          )}
-        </div>
+        {stored ? (
+          <CommentTableCell value={stored} />
+        ) : (
+          <span className="text-xs text-[#aeaeb2]">No notes yet</span>
+        )}
         <button
           type="button"
           className="self-start text-xs font-medium text-[#3b82f6] hover:underline"
@@ -2369,6 +2377,16 @@ export function PostProductionDashboard() {
                       </p>
                     </>
                   )}
+                </section>
+
+                <section className="rounded-lg border border-[#e5e7eb] bg-white p-3">
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[#6b7280]">
+                    Notes for editor
+                  </p>
+                  <StoredCommentText
+                    value={modalRow.editor_comments}
+                    emptyLabel="No notes yet"
+                  />
                 </section>
               </div>
             ) : (

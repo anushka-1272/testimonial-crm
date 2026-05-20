@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { CommentTableCell } from "@/components/comment-display";
 import { useAccessControl } from "@/components/access-control-context";
 import { ProjectCandidateDetailModal } from "@/components/project-candidate-detail-modal";
 import { ZoomDetailsModal } from "@/components/ZoomDetailsModal";
@@ -406,6 +407,8 @@ function projectInterviewQualityScore(
   if (i.interview_status === "scheduled") score += 5;
   if (i.interview_status === "rescheduled") score += 3;
   if (i.interview_status === "draft") score += 1;
+  if ((i.comments ?? "").trim()) score += 50;
+  if ((i.remarks ?? "").trim()) score += 25;
   return score;
 }
 
@@ -1816,6 +1819,7 @@ export function ProjectInterviewsPanel({
                     <th className={thInterviewer}>Interviewer</th>
                     <th className={thZoomStatus}>Zoom status</th>
                     <th className={thPoc}>POC</th>
+                    <th className={thCommentsCol}>Remarks</th>
                     <th className={thFollowUp}>Follow-up</th>
                     <th className={thActions}>Actions</th>
                   </tr>
@@ -1823,7 +1827,7 @@ export function ProjectInterviewsPanel({
                 <tbody>
                   {scheduledPage.slice.length === 0 ? (
                     <tr>
-                      <td className={tdBase} colSpan={9}>
+                      <td className={tdBase} colSpan={10}>
                         {emptyState}
                       </td>
                     </tr>
@@ -1953,6 +1957,9 @@ export function ProjectInterviewsPanel({
                             {i.poc?.trim() ||
                               pc.poc_assigned?.trim() ||
                               "—"}
+                          </td>
+                          <td className={tdCommentsCol}>
+                            <CommentTableCell value={i.remarks} />
                           </td>
                           <td className={tdFollowUp}>
                             {followupBadgeForProjectCandidate(i.project_candidate_id)}
@@ -2152,10 +2159,6 @@ export function ProjectInterviewsPanel({
                     completedPage.slice.map((i) => {
                       const pc = i.project_candidates;
                       if (!pc) return null;
-                      const commentsPreview = truncateWithTooltip(
-                        i.comments,
-                        40,
-                      );
                       return (
                         <tr key={i.id}>
                           <td className={tdName}>
@@ -2194,13 +2197,8 @@ export function ProjectInterviewsPanel({
                           <td className={tdFunnelCol}>
                             {i.funnel?.trim() || "—"}
                           </td>
-                          <td
-                            className={tdCommentsCol}
-                            title={commentsPreview.title}
-                          >
-                            <span className="block max-w-[200px] truncate">
-                              {commentsPreview.display}
-                            </span>
+                          <td className={tdCommentsCol}>
+                            <CommentTableCell value={i.comments} />
                           </td>
                           <td className={tdFollowUp}>
                             {followupBadgeForProjectCandidate(i.project_candidate_id)}
@@ -2452,13 +2450,14 @@ export function ProjectInterviewsPanel({
                     <th className={thCompletedOn}>Completed on</th>
                     <th className={thZoomStatus}>Zoom</th>
                     <th className={thCommentsCol}>Recording</th>
+                    <th className={thCommentsCol}>Comments</th>
                     <th className={thFollowUp}>Follow-up</th>
                   </tr>
                 </thead>
                 <tbody>
                   {notEligiblePage.slice.length === 0 ? (
                     <tr>
-                      <td className={tdBase} colSpan={8}>
+                      <td className={tdBase} colSpan={9}>
                         {emptyState}
                       </td>
                     </tr>
@@ -2599,6 +2598,9 @@ export function ProjectInterviewsPanel({
                                 Add recording
                               </button>
                             )}
+                          </td>
+                          <td className={tdCommentsCol}>
+                            <CommentTableCell value={i.comments} />
                           </td>
                           <td className={tdFollowUp}>
                             {followupBadgeForProjectCandidate(i.project_candidate_id)}

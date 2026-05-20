@@ -11,6 +11,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 
+import { CommentTableCell } from "@/components/comment-display";
 import { useAccessControl } from "@/components/access-control-context";
 import { CandidateDetailModal } from "@/components/candidate-detail-modal";
 import { logActivity } from "@/lib/activity-logger";
@@ -1097,6 +1098,9 @@ export function DispatchDashboard() {
                   <th className="px-3 py-3 text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
                     Expected delivery
                   </th>
+                  <th className="min-w-[160px] px-3 py-3 text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
+                    Special comments
+                  </th>
                   <th className="px-3 py-3 text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
                     Actions
                   </th>
@@ -1106,7 +1110,7 @@ export function DispatchDashboard() {
                 {loading ? (
                   <tr>
                     <td
-                      colSpan={10}
+                      colSpan={11}
                       className="px-4 py-12 text-center text-sm text-[#6e6e73]"
                     >
                       Loading…
@@ -1115,7 +1119,7 @@ export function DispatchDashboard() {
                 ) : filtered.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={10}
+                      colSpan={11}
                       className="px-4 py-12 text-center text-sm text-[#6e6e73]"
                     >
                       No dispatch records for this filter.
@@ -1176,6 +1180,9 @@ export function DispatchDashboard() {
                         </td>
                         <td className="whitespace-nowrap px-3 py-3 text-[#6e6e73]">
                           {formatDisplayDate(r.expected_delivery_date)}
+                        </td>
+                        <td className="px-3 py-3 align-top">
+                          <CommentTableCell value={r.special_comments} />
                         </td>
                         <td className="px-3 py-3">
                           <div className="flex flex-col items-start gap-2">
