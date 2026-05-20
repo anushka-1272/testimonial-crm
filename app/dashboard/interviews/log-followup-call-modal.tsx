@@ -356,9 +356,13 @@ export function LogFollowupCallModal({
       }
 
       if (isProject && outcome === "already_completed") {
+        const completedAtIso = new Date().toISOString();
         const { error: piErr } = await supabase
           .from("project_interviews")
-          .update({ interview_status: "completed" })
+          .update({
+            interview_status: "completed",
+            completed_at: completedAtIso,
+          })
           .eq("project_candidate_id", projectCandidate!.id)
           .neq("interview_status", "completed");
         if (piErr) {

@@ -29,6 +29,7 @@ import {
 
 import { AssignInterviewerModal } from "./assign-interviewer-modal";
 import { EditInterviewDetailsModal } from "./edit-interview-details-modal";
+import { isPostRescheduleDraftRow } from "./interview-reschedule-workflow";
 import {
   followupStatusBadgeFromSnapshot,
   getFollowUpStatus,
@@ -243,6 +244,145 @@ function normalizeProjectInterviewRow(
   } as ProjectInterviewWithProjectCandidate;
 }
 
+function isProjectInterviewRecordComplete(
+  i: ProjectInterviewWithProjectCandidate,
+): boolean {
+  return (
+    i.interview_status === "completed" || Boolean(i.completed_at?.trim())
+  );
+}
+
+function isProjectCandidateFollowupDone(
+  pc: ProjectCandidateRow | null | undefined,
+): boolean {
+  const fs = pc?.followup_status;
+  return fs === "already_completed" || fs === "not_eligible";
+}
+
+function projectCandidateIdsMarkedAlreadyCompleted(
+  candidates: ProjectCandidateRow[],
+  followupLogs: FollowupLogStatusRow[],
+): Set<string> {
+  const ids = new Set<string>();
+  for (const c of candidates) {
+    if (c.followup_status === "already_completed") ids.add(c.id);
+  }
+  for (const log of followupLogs) {
+    if (
+      log.status === "already_completed" &&
+      log.project_candidate_id?.trim()
+    ) {
+      ids.add(log.project_candidate_id.trim());
+    }
+  }
+  return ids;
+}
+
+/** Active row kept only when it is a real post-reschedule draft, not a stale duplicate. */
+function isStaleActiveProjectInterview(
+  i: ProjectInterviewWithProjectCandidate,
+  completedCandidateIds: Set<string>,
+  alreadyCompletedCandidateIds: Set<string>,
+): boolean {
+  if (isProjectInterviewRecordComplete(i)) return false;
+  if (alreadyCompletedCandidateIds.has(i.project_candidate_id)) return true;
+  if (!completedCandidateIds.has(i.project_candidate_id)) return false;
+  return !isPostRescheduleDraftRow(i);
+}
+
+function projectInterviewIsDoneForTabs(
+  i: ProjectInterviewWithProjectCandidate,
+  alreadyCompletedCandidateIds: Set<string>,
+): boolean {
+  if (isProjectInterviewRecordComplete(i)) return true;
+  if (alreadyCompletedCandidateIds.has(i.project_candidate_id)) return true;
+  if (isProjectCandidateFollowupDone(i.project_candidates)) return true;
+  return false;
+}
+
+async function repairInconsistentProjectInterviews(
+  supabase: SupabaseClient,
+  rows: ProjectInterviewWithProjectCandidate[],
+  candidates: ProjectCandidateRow[],
+  followupLogs: FollowupLogStatusRow[],
+): Promise<number> {
+  const alreadyCompletedIds = projectCandidateIdsMarkedAlreadyCompleted(
+    candidates,
+    followupLogs,
+  );
+  const completedAtByCandidate = new Map<string, string>();
+  for (const i of rows) {
+    if (!isProjectInterviewRecordComplete(i)) continue;
+    const at = i.completed_at?.trim() || new Date().toISOString();
+    const prev = completedAtByCandidate.get(i.project_candidate_id);
+    if (!prev || at > prev) {
+      completedAtByCandidate.set(i.project_candidate_id, at);
+    }
+  }
+
+  const idsToRepair = new Set<string>(alreadyCompletedIds);
+  const completedCandidateIds = new Set(completedAtByCandidate.keys());
+  for (const i of rows) {
+    if (
+      isStaleActiveProjectInterview(
+        i,
+        completedCandidateIds,
+        alreadyCompletedIds,
+      )
+    ) {
+      idsToRepair.add(i.project_candidate_id);
+    }
+  }
+
+  if (idsToRepair.size === 0) return 0;
+
+  const completedAtIso = new Date().toISOString();
+  let repaired = 0;
+  for (const candidateId of idsToRepair) {
+    const completedAt =
+      completedAtByCandidate.get(candidateId) ?? completedAtIso;
+    const { data: staleRows, error: selErr } = await supabase
+      .from("project_interviews")
+      .select("id, interview_status, completed_at")
+      .eq("project_candidate_id", candidateId)
+      .neq("interview_status", "cancelled");
+    if (selErr) {
+      console.error(
+        "[ProjectInterviewsPanel] repair select:",
+        selErr.message,
+        candidateId,
+      );
+      continue;
+    }
+    const toUpdate = (staleRows ?? []).filter(
+      (r) =>
+        (r.interview_status as string) !== "completed" ||
+        !(r.completed_at as string | null)?.trim(),
+    );
+    if (!toUpdate.length) continue;
+    const { error: upErr } = await supabase
+      .from("project_interviews")
+      .update({
+        interview_status: "completed",
+        completed_at: completedAt,
+      })
+      .in(
+        "id",
+        toUpdate.map((r) => r.id as string),
+      );
+    if (upErr) {
+      console.error(
+        "[ProjectInterviewsPanel] repair update:",
+        upErr.message,
+        candidateId,
+      );
+      continue;
+    }
+    repaired += toUpdate.length;
+  }
+  return repaired;
+}
+
 function projectInterviewDuplicateKey(
   i: ProjectInterviewWithProjectCandidate,
 ): string {
@@ -272,8 +412,19 @@ function projectInterviewQualityScore(
 function dedupeProjectInterviewRows(
   rows: ProjectInterviewWithProjectCandidate[],
 ): ProjectInterviewWithProjectCandidate[] {
+  const completedCandidateIds = new Set(
+    rows
+      .filter(isProjectInterviewRecordComplete)
+      .map((i) => i.project_candidate_id),
+  );
+  const withoutStaleDuplicates = rows.filter((i) => {
+    if (isProjectInterviewRecordComplete(i)) return true;
+    if (!completedCandidateIds.has(i.project_candidate_id)) return true;
+    return isPostRescheduleDraftRow(i);
+  });
+
   const byKey = new Map<string, ProjectInterviewWithProjectCandidate>();
-  for (const row of rows) {
+  for (const row of withoutStaleDuplicates) {
     const key = projectInterviewDuplicateKey(row);
     const prev = byKey.get(key);
     if (!prev) {
@@ -541,7 +692,36 @@ export function ProjectInterviewsPanel({
           });
         })
         .filter((i) => i.project_candidates != null);
-      setInterviews(dedupeProjectInterviewRows(merged));
+
+      const followupRows = (fl ?? []) as FollowupLogStatusRow[];
+      const repaired = await repairInconsistentProjectInterviews(
+        supabase,
+        merged,
+        candidateList,
+        followupRows,
+      );
+      if (repaired > 0) {
+        const { data: refreshed, error: refreshErr } = await supabase
+          .from("project_interviews")
+          .select(PROJECT_INTERVIEW_COLUMNS)
+          .order("created_at", { ascending: true });
+        if (!refreshErr && refreshed) {
+          const remerged = (refreshed as Record<string, unknown>[])
+            .map((row) => {
+              const pid = row.project_candidate_id as string;
+              return normalizeProjectInterviewRow({
+                ...row,
+                project_candidates: candidateById.get(pid) ?? null,
+              });
+            })
+            .filter((i) => i.project_candidates != null);
+          setInterviews(dedupeProjectInterviewRows(remerged));
+        } else {
+          setInterviews(dedupeProjectInterviewRows(merged));
+        }
+      } else {
+        setInterviews(dedupeProjectInterviewRows(merged));
+      }
     }
     if (eFollowup) {
       console.log(
@@ -766,6 +946,22 @@ export function ProjectInterviewsPanel({
     return () => document.removeEventListener("click", onDocClick);
   }, [completedPopoverId]);
 
+  const alreadyCompletedCandidateIds = useMemo(
+    () =>
+      projectCandidateIdsMarkedAlreadyCompleted(candidates, followupLogs),
+    [candidates, followupLogs],
+  );
+
+  const completedProjectCandidateIds = useMemo(
+    () =>
+      new Set(
+        interviews
+          .filter(isProjectInterviewRecordComplete)
+          .map((i) => i.project_candidate_id),
+      ),
+    [interviews],
+  );
+
   const byStatus = useMemo(() => {
     const m = {
       scheduled: [] as ProjectInterviewWithProjectCandidate[],
@@ -773,8 +969,19 @@ export function ProjectInterviewsPanel({
       notEligible: [] as ProjectInterviewWithProjectCandidate[],
     };
     for (const i of interviews) {
-      const done =
-        i.interview_status === "completed" || Boolean(i.completed_at?.trim());
+      if (
+        isStaleActiveProjectInterview(
+          i,
+          completedProjectCandidateIds,
+          alreadyCompletedCandidateIds,
+        )
+      ) {
+        continue;
+      }
+      const done = projectInterviewIsDoneForTabs(
+        i,
+        alreadyCompletedCandidateIds,
+      );
       if (done) {
         if (i.post_interview_eligible === false) {
           m.notEligible.push(i);
@@ -788,7 +995,11 @@ export function ProjectInterviewsPanel({
       m.scheduled.push(i);
     }
     return m;
-  }, [interviews]);
+  }, [
+    interviews,
+    alreadyCompletedCandidateIds,
+    completedProjectCandidateIds,
+  ]);
 
   /** Any interview row linked to this candidate (draft, scheduled, etc.). */
   const candidateIdsWithInterview = useMemo(
@@ -815,16 +1026,13 @@ export function ProjectInterviewsPanel({
   /** Candidates already completed at least one project interview — never show in Pending. */
   const completedCandidateIds = useMemo(
     () =>
-      new Set(
-        interviews
-          .filter(
-            (i) =>
-              i.interview_status === "completed" ||
-              Boolean(i.completed_at?.trim()),
-          )
+      new Set([
+        ...interviews
+          .filter(isProjectInterviewRecordComplete)
           .map((i) => i.project_candidate_id),
-      ),
-    [interviews],
+        ...alreadyCompletedCandidateIds,
+      ]),
+    [interviews, alreadyCompletedCandidateIds],
   );
 
   const followupLogsByProjectCandidateId = useMemo(() => {
@@ -1625,6 +1833,8 @@ export function ProjectInterviewsPanel({
                       if (!pc) return null;
                       const isDraftRow = i.interview_status === "draft";
                       const isScheduledRow = i.interview_status === "scheduled";
+                      const followupAlreadyDone =
+                        pc.followup_status === "already_completed";
                       const hasIv = hasAssignedProjectInterviewer(i);
                       const hasZoom = Boolean(i.zoom_link?.trim());
                       const awaitingIv = isDraftRow && !hasIv;
@@ -1634,7 +1844,8 @@ export function ProjectInterviewsPanel({
                       const zoomAdded = hasZoom;
                       const zoomLink = i.zoom_link?.trim() ?? "";
                       const canEditZoom = canEditScheduledTab && !awaitingIv;
-                      const canTakeInterviewActions = hasIv && hasZoom;
+                      const canTakeInterviewActions =
+                        followupAlreadyDone || (hasIv && hasZoom);
                       const blockedActionTitle = !canEditScheduledTab
                         ? "View only"
                         : !hasIv
@@ -1675,7 +1886,11 @@ export function ProjectInterviewsPanel({
                           </td>
                           <td className={tdZoomStatus}>
                             <div className="flex flex-col items-start gap-2">
-                              {awaitingIv ? (
+                              {followupAlreadyDone ? (
+                                <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-800">
+                                  Already completed
+                                </span>
+                              ) : awaitingIv ? (
                                 <span className="inline-flex rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-600">
                                   Awaiting Interviewer
                                 </span>
