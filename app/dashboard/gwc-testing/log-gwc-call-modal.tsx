@@ -6,10 +6,13 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { logActivity } from "@/lib/activity-logger";
 import type { GwcCallOutcome } from "@/lib/gwc-testing";
+import {
+  gwcEntryDisplayName,
+  gwcEntryEntityId,
+  type GwcTestingRow,
+} from "@/lib/gwc-testing";
 import { modalOverlayClass, modalPanelClass } from "@/lib/modal-responsive";
 import { getUserSafe, displayNameFromUser } from "@/lib/supabase-auth";
-
-import { gwcEntryDisplayName, gwcEntryEntityId, type GwcTestingRow } from "@/lib/gwc-testing";
 
 const OUTCOMES: { value: GwcCallOutcome; label: string }[] = [
   { value: "no_answer", label: "No answer" },
@@ -20,6 +23,11 @@ const OUTCOMES: { value: GwcCallOutcome; label: string }[] = [
   { value: "wrong_number", label: "Wrong number" },
   { value: "other", label: "Other" },
 ];
+
+const fieldLabelClass =
+  "text-xs font-medium uppercase tracking-widest text-[#aeaeb2]";
+const fieldInputClass =
+  "mt-1 w-full rounded-xl border border-[#e5e5e5] px-3 py-2.5 text-sm text-[#1d1d1f] focus:border-[#3b82f6] focus:outline-none focus:ring-0";
 
 type Props = {
   open: boolean;
@@ -91,45 +99,77 @@ export function LogGwcCallModal({
 
   return (
     <div className={modalOverlayClass}>
-      <div className={modalPanelClass}>
-        <h2 className="text-lg font-semibold text-[#1d1d1f]">Log call</h2>
-        <p className="mt-1 text-sm text-[#6e6e73]">{display}</p>
-        <form className="mt-4 space-y-4" onSubmit={(e) => void handleSubmit(e)}>
+      <button
+        type="button"
+        className="absolute inset-0"
+        aria-label="Close"
+        onClick={onClose}
+      />
+      <div
+        className={`${modalPanelClass} !overflow-hidden flex max-h-[min(90vh,100dvh-2rem)] flex-col p-0`}
+        role="dialog"
+        aria-labelledby="gwc-log-call-title"
+      >
+        <div className="flex shrink-0 items-start justify-between border-b border-[#f0f0f0] px-6 py-4">
           <div>
-            <label className="text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
-              Outcome
-            </label>
-            <select
-              className="mt-1 w-full rounded-xl border border-[#e5e5e5] px-3 py-2.5 text-sm"
-              value={outcome}
-              onChange={(e) => setOutcome(e.target.value as GwcCallOutcome)}
+            <h2
+              id="gwc-log-call-title"
+              className="text-lg font-semibold text-[#1d1d1f]"
             >
-              {OUTCOMES.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
+              Log call
+            </h2>
+            <p className="mt-1 text-sm text-[#6e6e73]">{display}</p>
           </div>
-          <div>
-            <label className="text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
-              Notes
-            </label>
-            <textarea
-              className="mt-1 w-full rounded-xl border border-[#e5e5e5] px-3 py-2.5 text-sm"
-              rows={3}
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="Optional notes"
-            />
+          <button
+            type="button"
+            className="rounded-xl p-2 text-[#aeaeb2] transition-colors hover:bg-[#f5f5f7] hover:text-[#1d1d1f]"
+            aria-label="Close dialog"
+            onClick={onClose}
+          >
+            ✕
+          </button>
+        </div>
+
+        <form
+          className="flex min-h-0 flex-1 flex-col"
+          onSubmit={(e) => void handleSubmit(e)}
+        >
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-4">
+            {error ? (
+              <p className="rounded-xl border border-[#fecaca] bg-[#fef2f2] px-3 py-2 text-sm text-[#dc2626]">
+                {error}
+              </p>
+            ) : null}
+            <div>
+              <label className={fieldLabelClass}>Outcome</label>
+              <select
+                className={fieldInputClass}
+                value={outcome}
+                onChange={(e) => setOutcome(e.target.value as GwcCallOutcome)}
+              >
+                {OUTCOMES.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className={fieldLabelClass}>Notes</label>
+              <textarea
+                className={fieldInputClass}
+                rows={3}
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="Optional notes"
+              />
+            </div>
           </div>
-          {error ? (
-            <p className="text-sm text-[#dc2626]">{error}</p>
-          ) : null}
-          <div className="flex justify-end gap-2">
+
+          <div className="flex shrink-0 justify-end gap-2 border-t border-[#f0f0f0] bg-white px-6 py-4">
             <button
               type="button"
-              className="rounded-xl px-4 py-2 text-sm text-[#6e6e73] hover:bg-[#f5f5f5]"
+              className="rounded-xl px-4 py-2.5 text-sm font-medium text-[#6e6e73] transition-colors hover:bg-[#f5f5f5]"
               onClick={onClose}
             >
               Cancel
@@ -137,7 +177,7 @@ export function LogGwcCallModal({
             <button
               type="submit"
               disabled={submitting}
-              className="rounded-xl bg-[#1d1d1f] px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+              className="rounded-xl bg-[#1d1d1f] px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[#2d2d2f] disabled:opacity-50"
             >
               {submitting ? "Saving…" : "Save"}
             </button>
