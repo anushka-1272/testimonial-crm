@@ -837,7 +837,12 @@ export function InterviewsBoard() {
     const completedCandidateIds = new Set(completedByCandidate.keys());
 
     const queue = (elig ?? [])
-      .filter((c) => !busy.has(c.id) && !completedCandidateIds.has(c.id))
+      .filter(
+        (c) =>
+          !busy.has(c.id) &&
+          !completedCandidateIds.has(c.id) &&
+          (c as { interview_type?: string | null }).interview_type !== "gwc",
+      )
       .map((row) => {
         const r = row as Record<string, unknown>;
         const onTrack = Boolean(r.linkedin_track);

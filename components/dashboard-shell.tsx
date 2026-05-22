@@ -6,6 +6,7 @@ import {
   BookMarked,
   Calendar,
   Film,
+  FlaskConical,
   FolderKanban,
   History,
   LayoutDashboard,
@@ -57,6 +58,12 @@ const NAV = [
     label: "Project Interviews",
     icon: FolderKanban,
     isActive: (p: string) => p.startsWith("/dashboard/project-interviews"),
+  },
+  {
+    href: "/dashboard/gwc-testing",
+    label: "GWC Testing",
+    icon: FlaskConical,
+    isActive: (p: string) => p.startsWith("/dashboard/gwc-testing"),
   },
   {
     href: "/dashboard/dispatch",
@@ -157,6 +164,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
     if (path.startsWith("/dashboard/analytics")) return "analytics";
     if (path.startsWith("/dashboard/eligibility")) return "eligibility";
     if (path.startsWith("/dashboard/project-interviews")) return "interviews";
+    if (path.startsWith("/dashboard/gwc-testing")) return "gwc_testing";
     if (path.startsWith("/dashboard/interviews")) return "interviews";
     if (path.startsWith("/dashboard/dispatch")) return "dispatch";
     if (path.startsWith("/dashboard/activity")) return "activity";
