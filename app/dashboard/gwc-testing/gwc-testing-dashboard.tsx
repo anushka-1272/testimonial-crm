@@ -39,7 +39,7 @@ const cardChrome =
   "rounded-2xl bg-white shadow-[0_4px_16px_rgba(0,0,0,0.08)] border border-[#f0f0f0]";
 
 const nameLinkBtn =
-  "max-w-full min-w-0 truncate text-left font-medium text-[#3b82f6] hover:underline focus:outline-none focus:ring-2 focus:ring-[#3b82f6]/25 rounded-sm";
+  "max-w-full min-w-0 cursor-pointer truncate text-left font-medium text-[#1d1d1f] transition-colors hover:text-[#3b82f6] hover:underline focus:outline-none focus:ring-2 focus:ring-[#3b82f6]/25 rounded-sm";
 
 const PROJECT_CANDIDATE_DETAIL_SELECT =
   "id, created_at, email, full_name, whatsapp_number, project_title, problem_statement, target_user, ai_usage, demo_link, status, poc_assigned, poc_assigned_at";
@@ -106,6 +106,27 @@ function GwcSourceTypeBadge({ source }: { source: GwcSourceType }) {
       {gwcSourceTypeLabel(source)}
     </span>
   );
+}
+
+function partialProjectCandidateFromRow(
+  row: GwcTestingRow,
+): ProjectCandidateRow | null {
+  const pc = row.project_candidates;
+  if (!pc || !row.project_candidate_id) return null;
+  return {
+    id: pc.id,
+    email: pc.email,
+    full_name: pc.full_name,
+    whatsapp_number: pc.whatsapp_number,
+    project_title: pc.project_title,
+    problem_statement: null,
+    target_user: null,
+    ai_usage: null,
+    demo_link: null,
+    status: "gwc",
+    poc_assigned: null,
+    poc_assigned_at: null,
+  };
 }
 
 function rowInTab(row: GwcTestingRow, tab: GwcTestingTab): boolean {
@@ -415,8 +436,15 @@ export function GwcTestingDashboard() {
     return mergeRosterWithCurrent(pocRoster, current);
   }
 
-  async function openProjectCandidateDetail(projectCandidateId: string) {
+  async function openProjectCandidateDetail(
+    projectCandidateId: string,
+    preview?: ProjectCandidateRow | null,
+  ) {
     if (!supabase) return;
+    if (preview) {
+      setDetailCandidateId(null);
+      setDetailProjectCandidate(preview);
+    }
     const { data, error: fetchErr } = await supabase
       .from("project_candidates")
       .select(PROJECT_CANDIDATE_DETAIL_SELECT)
@@ -428,19 +456,30 @@ export function GwcTestingDashboard() {
     }
     if (!data) {
       setError("Project candidate not found.");
+      setDetailProjectCandidate(null);
       return;
     }
     setDetailProjectCandidate(data as ProjectCandidateRow);
   }
 
   function openCandidateDetail(row: GwcTestingRow) {
+    if (!supabase) {
+      setError("Unable to load candidate details. Please refresh the page.");
+      return;
+    }
     if (row.source_type === "project" && row.project_candidate_id) {
-      void openProjectCandidateDetail(row.project_candidate_id);
+      void openProjectCandidateDetail(
+        row.project_candidate_id,
+        partialProjectCandidateFromRow(row),
+      );
       return;
     }
     if (row.candidate_id) {
+      setDetailProjectCandidate(null);
       setDetailCandidateId(row.candidate_id);
+      return;
     }
+    setError("Candidate record is missing for this entry.");
   }
 
   return (
@@ -570,6 +609,7 @@ export function GwcTestingDashboard() {
                           <button
                             type="button"
                             className={nameLinkBtn}
+                            title="View candidate details"
                             onClick={() => openCandidateDetail(row)}
                           >
                             {display}
