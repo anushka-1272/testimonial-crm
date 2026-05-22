@@ -31,7 +31,7 @@ async function loadProjectPipelineStats(
   const [{ data: pcRows }, { data: piRows }] = await Promise.all([
     supabase
       .from("project_candidates")
-      .select("id, status")
+      .select("id, status, interview_type")
       .eq("is_deleted", false)
       .order("created_at", { ascending: true }),
     supabase
@@ -59,6 +59,10 @@ async function loadProjectPipelineStats(
     const id = c.id as string;
     if (activePipelineCandidateIds.has(id)) continue;
     const statusNorm = ((c.status as string | null) ?? "pending").trim() || "pending";
+    const interviewType = ((c.interview_type as string | null) ?? "")
+      .trim()
+      .toLowerCase();
+    if (statusNorm === "gwc" || interviewType === "gwc") continue;
     const hasInterview = candidateIdsWithInterview.has(id);
     const qualifiesPending = statusNorm === "pending" || !hasInterview;
     if (qualifiesPending) pending++;

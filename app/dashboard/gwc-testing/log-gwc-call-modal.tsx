@@ -9,7 +9,7 @@ import type { GwcCallOutcome } from "@/lib/gwc-testing";
 import { modalOverlayClass, modalPanelClass } from "@/lib/modal-responsive";
 import { getUserSafe, displayNameFromUser } from "@/lib/supabase-auth";
 
-import type { GwcTestingRow } from "@/lib/gwc-testing";
+import { gwcEntryDisplayName, gwcEntryEntityId, type GwcTestingRow } from "@/lib/gwc-testing";
 
 const OUTCOMES: { value: GwcCallOutcome; label: string }[] = [
   { value: "no_answer", label: "No answer" },
@@ -51,19 +51,18 @@ export function LogGwcCallModal({
 
   if (!open || !row) return null;
 
-  const display =
-    row.candidates?.full_name?.trim() ||
-    row.candidates?.email?.trim() ||
-    "Candidate";
+  const display = gwcEntryDisplayName(row);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (!row) return;
+    const entry = row;
     setSubmitting(true);
     setError(null);
     const actor = await getUserSafe(supabase);
     const loggedBy = actor ? displayNameFromUser(actor) : "Unknown";
     const { error: insErr } = await supabase.from("gwc_call_log").insert({
-      gwc_testing_id: row!.id,
+      gwc_testing_id: entry.id,
       outcome,
       notes: notes.trim() || null,
       logged_by: loggedBy,
@@ -79,10 +78,10 @@ export function LogGwcCallModal({
         user: actor,
         action_type: "interviews",
         entity_type: "candidate",
-        entity_id: row!.candidate_id,
+        entity_id: gwcEntryEntityId(entry),
         candidate_name: display,
         description: `Logged GWC call for ${display} (${outcome})`,
-        metadata: { gwc_testing_id: row!.id, outcome },
+        metadata: { gwc_testing_id: entry.id, outcome },
       });
     }
     setSubmitting(false);

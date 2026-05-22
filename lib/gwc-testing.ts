@@ -97,9 +97,13 @@ export type GwcContentVerificationRow = {
   verified_by: string | null;
 };
 
+export type GwcSourceType = "testimonial" | "project";
+
 export type GwcTestingRow = {
   id: string;
-  candidate_id: string;
+  candidate_id: string | null;
+  project_candidate_id: string | null;
+  source_type: GwcSourceType;
   poc: string | null;
   interested_in: GwcInterestedIn[];
   workflow_stage: GwcWorkflowStage;
@@ -111,5 +115,44 @@ export type GwcTestingRow = {
     email: string;
     whatsapp_number: string | null;
   } | null;
+  project_candidates: {
+    id: string;
+    full_name: string | null;
+    email: string;
+    whatsapp_number: string | null;
+    project_title: string | null;
+  } | null;
   verifications: GwcContentVerificationRow[];
 };
+
+export function gwcEntryDisplayName(row: GwcTestingRow): string {
+  if (row.source_type === "project") {
+    const pc = row.project_candidates;
+    return (
+      pc?.full_name?.trim() ||
+      pc?.email?.trim() ||
+      pc?.project_title?.trim() ||
+      "Project candidate"
+    );
+  }
+  const c = row.candidates;
+  return c?.full_name?.trim() || c?.email?.trim() || "Candidate";
+}
+
+export function gwcEntryEntityId(row: GwcTestingRow): string {
+  return row.candidate_id ?? row.project_candidate_id ?? row.id;
+}
+
+export function isProjectGwcRow(row: GwcTestingRow): boolean {
+  return row.source_type === "project";
+}
+
+export function gwcSourceTypeLabel(source: GwcSourceType): string {
+  return source === "project" ? "Project" : "Testimonial";
+}
+
+export function gwcSourceTypeBadgeClass(source: GwcSourceType): string {
+  return source === "project"
+    ? "inline-flex shrink-0 rounded-full bg-[#eff6ff] px-2.5 py-1 text-xs font-medium text-[#2563eb]"
+    : "inline-flex shrink-0 rounded-full bg-[#f0fdf4] px-2.5 py-1 text-xs font-medium text-[#16a34a]";
+}

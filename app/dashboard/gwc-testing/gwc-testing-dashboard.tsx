@@ -13,8 +13,14 @@ import {
   isContentChannel,
   tabMatchesChannel,
   workflowStageFromInterestedIn,
+  gwcEntryDisplayName,
+  gwcEntryEntityId,
+  gwcSourceTypeBadgeClass,
+  gwcSourceTypeLabel,
+  isProjectGwcRow,
   type GwcContentChannel,
   type GwcInterestedIn,
+  type GwcSourceType,
   type GwcTestingRow,
   type GwcTestingTab,
 } from "@/lib/gwc-testing";
@@ -31,16 +37,24 @@ const cardChrome =
 const GWC_SELECT = `
   id,
   candidate_id,
+  project_candidate_id,
   poc,
   interested_in,
   workflow_stage,
   created_at,
   updated_at,
-  candidates!inner (
+  candidates (
     id,
     full_name,
     email,
     whatsapp_number
+  ),
+  project_candidates (
+    id,
+    full_name,
+    email,
+    whatsapp_number,
+    project_title
   )
 `;
 
@@ -50,17 +64,34 @@ function normalizeRow(
 ): GwcTestingRow {
   const c = raw.candidates;
   const candidate = Array.isArray(c) ? c[0] ?? null : c;
+  const pc = raw.project_candidates;
+  const projectCandidate = Array.isArray(pc) ? pc[0] ?? null : pc;
+  const projectCandidateId =
+    (raw.project_candidate_id as string | null) ?? null;
+  const source_type = projectCandidateId ? "project" : "testimonial";
   return {
     id: raw.id as string,
-    candidate_id: raw.candidate_id as string,
+    candidate_id: (raw.candidate_id as string | null) ?? null,
+    project_candidate_id: projectCandidateId,
+    source_type,
     poc: (raw.poc as string | null) ?? null,
     interested_in: (raw.interested_in as GwcInterestedIn[]) ?? [],
     workflow_stage: raw.workflow_stage as GwcTestingRow["workflow_stage"],
     created_at: raw.created_at as string,
     updated_at: raw.updated_at as string,
     candidates: candidate as GwcTestingRow["candidates"],
+    project_candidates:
+      projectCandidate as GwcTestingRow["project_candidates"],
     verifications,
   };
+}
+
+function GwcSourceTypeBadge({ source }: { source: GwcSourceType }) {
+  return (
+    <span className={gwcSourceTypeBadgeClass(source)}>
+      {gwcSourceTypeLabel(source)}
+    </span>
+  );
 }
 
 function rowInTab(row: GwcTestingRow, tab: GwcTestingTab): boolean {
@@ -91,6 +122,7 @@ export function GwcTestingDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<GwcTestingTab>("queue");
+  const [trackFilter, setTrackFilter] = useState<"all" | GwcSourceType>("all");
   const [busyId, setBusyId] = useState<string | null>(null);
   const [pocRoster, setPocRoster] = useState<string[]>([]);
 
@@ -185,9 +217,15 @@ export function GwcTestingDashboard() {
     };
   }, [supabase, load]);
 
+  const matchesTrackFilter = useCallback(
+    (r: GwcTestingRow) =>
+      trackFilter === "all" || r.source_type === trackFilter,
+    [trackFilter],
+  );
+
   const filteredRows = useMemo(
-    () => rows.filter((r) => rowInTab(r, tab)),
-    [rows, tab],
+    () => rows.filter((r) => matchesTrackFilter(r) && rowInTab(r, tab)),
+    [rows, tab, matchesTrackFilter],
   );
 
   const tabCounts = useMemo(() => {
@@ -201,12 +239,22 @@ export function GwcTestingDashboard() {
       dispatch: 0,
     };
     for (const r of rows) {
+      if (!matchesTrackFilter(r)) continue;
       for (const t of GWC_TESTING_TABS) {
         if (rowInTab(r, t.id)) counts[t.id]++;
       }
     }
     return counts;
-  }, [rows]);
+  }, [rows, matchesTrackFilter]);
+
+  const trackCounts = useMemo(
+    () => ({
+      all: rows.length,
+      testimonial: rows.filter((r) => r.source_type === "testimonial").length,
+      project: rows.filter((r) => r.source_type === "project").length,
+    }),
+    [rows],
+  );
 
   async function updatePoc(row: GwcTestingRow, poc: string) {
     if (!canEditCurrentPage || !supabase) return;
@@ -260,35 +308,49 @@ export function GwcTestingDashboard() {
     await syncContentVerificationRows(row.id, next);
 
     if (next.includes("video_interview")) {
-      const { data: existingInterview } = await supabase
-        .from("interviews")
-        .select("id")
-        .eq("candidate_id", row.candidate_id)
-        .eq("interview_type", "testimonial")
-        .in("interview_status", ["draft", "scheduled", "rescheduled"])
-        .maybeSingle();
-      if (!existingInterview) {
-        await supabase.from("interviews").insert({
-          candidate_id: row.candidate_id,
-          interview_status: "scheduled",
-          interview_type: "testimonial",
-          poc: row.poc,
-        });
+      if (isProjectGwcRow(row) && row.project_candidate_id) {
+        const { data: existingProjectInterview } = await supabase
+          .from("project_interviews")
+          .select("id")
+          .eq("project_candidate_id", row.project_candidate_id)
+          .in("interview_status", ["draft", "scheduled", "rescheduled"])
+          .maybeSingle();
+        if (!existingProjectInterview) {
+          await supabase.from("project_interviews").insert({
+            project_candidate_id: row.project_candidate_id,
+            interview_status: "scheduled",
+            interview_type: "project",
+            poc: row.poc,
+          });
+        }
+      } else if (row.candidate_id) {
+        const { data: existingInterview } = await supabase
+          .from("interviews")
+          .select("id")
+          .eq("candidate_id", row.candidate_id)
+          .eq("interview_type", "testimonial")
+          .in("interview_status", ["draft", "scheduled", "rescheduled"])
+          .maybeSingle();
+        if (!existingInterview) {
+          await supabase.from("interviews").insert({
+            candidate_id: row.candidate_id,
+            interview_status: "scheduled",
+            interview_type: "testimonial",
+            poc: row.poc,
+          });
+        }
       }
     }
 
     const actor = await getUserSafe(supabase);
     if (actor) {
-      const display =
-        row.candidates?.full_name?.trim() ||
-        row.candidates?.email ||
-        "Candidate";
+      const display = gwcEntryDisplayName(row);
       await logActivity({
         supabase,
         user: actor,
         action_type: "interviews",
         entity_type: "candidate",
-        entity_id: row.candidate_id,
+        entity_id: gwcEntryEntityId(row),
         candidate_name: display,
         description: `Updated Interested In for ${display}`,
         metadata: { interested_in: next, workflow_stage: stage },
@@ -333,6 +395,35 @@ export function GwcTestingDashboard() {
           </p>
         ) : null}
 
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <span className="text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
+            Track
+          </span>
+          {(
+            [
+              { id: "all" as const, label: "All" },
+              { id: "testimonial" as const, label: "Testimonial" },
+              { id: "project" as const, label: "Project" },
+            ] as const
+          ).map((f) => (
+            <button
+              key={f.id}
+              type="button"
+              onClick={() => setTrackFilter(f.id)}
+              className={`rounded-full px-3 py-1.5 text-sm font-medium transition-colors ${
+                trackFilter === f.id
+                  ? "bg-[#1d1d1f] text-white"
+                  : "bg-white text-[#6e6e73] shadow-sm hover:text-[#1d1d1f]"
+              }`}
+            >
+              {f.label}
+              <span className="ml-1 opacity-70">
+                ({trackCounts[f.id]})
+              </span>
+            </button>
+          ))}
+        </div>
+
         <div className="mb-4 flex flex-wrap gap-2">
           {GWC_TESTING_TABS.map((t) => (
             <button
@@ -367,6 +458,7 @@ export function GwcTestingDashboard() {
                 <thead>
                   <tr className="border-b border-[#f0f0f0] text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
                     <th className="px-4 py-3">Candidate</th>
+                    <th className="px-4 py-3">Track</th>
                     {tab === "queue" ? (
                       <>
                         <th className="px-4 py-3">POC</th>
@@ -391,10 +483,11 @@ export function GwcTestingDashboard() {
                 </thead>
                 <tbody>
                   {filteredRows.map((row) => {
-                    const display =
-                      row.candidates?.full_name?.trim() ||
-                      row.candidates?.email ||
-                      "—";
+                    const display = gwcEntryDisplayName(row);
+                    const email =
+                      row.source_type === "project"
+                        ? row.project_candidates?.email
+                        : row.candidates?.email;
                     const channel = tabMatchesChannel(tab);
 
                     return (
@@ -405,8 +498,17 @@ export function GwcTestingDashboard() {
                         <td className="px-4 py-3">
                           <p className="font-medium text-[#1d1d1f]">{display}</p>
                           <p className="text-xs text-[#6e6e73]">
-                            {row.candidates?.email}
+                            {email ?? "—"}
+                            {row.source_type === "project" &&
+                            row.project_candidates?.project_title ? (
+                              <span className="block text-[#aeaeb2]">
+                                {row.project_candidates.project_title}
+                              </span>
+                            ) : null}
                           </p>
+                        </td>
+                        <td className="px-4 py-3 align-top">
+                          <GwcSourceTypeBadge source={row.source_type} />
                         </td>
 
                         {tab === "queue" ? (

@@ -7,6 +7,9 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { logActivity } from "@/lib/activity-logger";
 import {
   channelLabel,
+  gwcEntryDisplayName,
+  gwcEntryEntityId,
+  isProjectGwcRow,
   type GwcContentChannel,
 } from "@/lib/gwc-testing";
 import { modalOverlayClass, modalPanelClass } from "@/lib/modal-responsive";
@@ -49,23 +52,36 @@ export function AddContentLinkModal({
 
   if (!open || !row || !channel) return null;
 
-  const display =
-    row.candidates?.full_name?.trim() ||
-    row.candidates?.email?.trim() ||
-    "Candidate";
+  const display = gwcEntryDisplayName(row);
 
-  async function moveToDispatchDeduped(candidateId: string): Promise<string | null> {
-    const { data: existingDispatch } = await supabase
-      .from("dispatch")
-      .select("id")
-      .eq("candidate_id", candidateId)
-      .maybeSingle();
-    if (!existingDispatch) {
-      const { error: dErr } = await supabase.from("dispatch").insert({
-        candidate_id: candidateId,
-        dispatch_status: "pending",
-      });
-      if (dErr) return dErr.message;
+  async function moveToDispatchDeduped(): Promise<string | null> {
+    if (!row) return "Missing GWC entry.";
+    if (isProjectGwcRow(row) && row.project_candidate_id) {
+      const { data: existingDispatch } = await supabase
+        .from("project_dispatch")
+        .select("id")
+        .eq("project_candidate_id", row.project_candidate_id)
+        .maybeSingle();
+      if (!existingDispatch) {
+        const { error: dErr } = await supabase.from("project_dispatch").insert({
+          project_candidate_id: row.project_candidate_id,
+          dispatch_status: "pending",
+        });
+        if (dErr) return dErr.message;
+      }
+    } else if (row.candidate_id) {
+      const { data: existingDispatch } = await supabase
+        .from("dispatch")
+        .select("id")
+        .eq("candidate_id", row.candidate_id)
+        .maybeSingle();
+      if (!existingDispatch) {
+        const { error: dErr } = await supabase.from("dispatch").insert({
+          candidate_id: row.candidate_id,
+          dispatch_status: "pending",
+        });
+        if (dErr) return dErr.message;
+      }
     }
     const { error: stageErr } = await supabase
       .from("gwc_testing")
@@ -76,6 +92,8 @@ export function AddContentLinkModal({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (!row || !channel) return;
+    const entry = row;
     const trimmed = link.trim();
     if (!trimmed) {
       setError("Please enter a link.");
@@ -88,7 +106,7 @@ export function AddContentLinkModal({
     const now = new Date().toISOString();
 
     const payload = {
-      gwc_testing_id: row!.id,
+      gwc_testing_id: entry.id,
       channel,
       content_link: trimmed,
       verified: verifyOnSave,
@@ -108,7 +126,7 @@ export function AddContentLinkModal({
     }
 
     if (verifyOnSave) {
-      const dispatchErr = await moveToDispatchDeduped(row!.candidate_id);
+      const dispatchErr = await moveToDispatchDeduped();
       if (dispatchErr) {
         setError(dispatchErr);
         setSubmitting(false);
@@ -122,7 +140,7 @@ export function AddContentLinkModal({
         user: actor,
         action_type: "dispatch",
         entity_type: "candidate",
-        entity_id: row!.candidate_id,
+        entity_id: gwcEntryEntityId(entry),
         candidate_name: display,
         description: verifyOnSave
           ? `Verified ${channelLabel(channel!)} content for ${display} and moved to dispatch`

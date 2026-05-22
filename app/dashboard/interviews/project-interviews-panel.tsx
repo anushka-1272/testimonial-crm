@@ -116,6 +116,12 @@ function formatAssignedOnIst(iso: string | null | undefined) {
   }
 }
 
+function isProjectGwcCandidate(pc: ProjectCandidateRow): boolean {
+  const status = (pc.status ?? "").trim().toLowerCase();
+  const track = (pc.interview_type ?? "").trim().toLowerCase();
+  return status === "gwc" || track === "gwc";
+}
+
 function projectDisplayName(pc: ProjectCandidateRow): string {
   const fn = pc.full_name?.trim();
   if (fn) return fn;
@@ -600,6 +606,7 @@ export function ProjectInterviewsPanel({
   } | null>(null);
   const [sheetSyncBusy, setSheetSyncBusy] = useState(false);
   const [deleteBusyId, setDeleteBusyId] = useState<string | null>(null);
+  const [gwcBusyId, setGwcBusyId] = useState<string | null>(null);
   const [revertBusyId, setRevertBusyId] = useState<string | null>(null);
   const [addZoomFor, setAddZoomFor] =
     useState<ProjectInterviewWithProjectCandidate | null>(null);
@@ -1064,6 +1071,7 @@ export function ProjectInterviewsPanel({
     const q = filters.pending.search;
     const pocF = filters.pending.poc;
     const rows = candidates.filter((c) => {
+      if (isProjectGwcCandidate(c)) return false;
       if (activePipelineCandidateIds.has(c.id)) return false;
       if (completedCandidateIds.has(c.id)) return false;
       const statusNorm = (c.status ?? "pending").trim() || "pending";
@@ -1281,6 +1289,51 @@ export function ProjectInterviewsPanel({
     setPocEditingId((prev) => (prev === pc.id ? null : prev));
     await loadProjectData();
     onPipelineChanged();
+  };
+
+  const markProjectGwc = async (pc: ProjectCandidateRow) => {
+    if (!canEditScheduledTab) return;
+    setGwcBusyId(pc.id);
+    const { error: uErr } = await supabase
+      .from("project_candidates")
+      .update({
+        status: "gwc",
+        interview_type: "gwc",
+      })
+      .eq("id", pc.id)
+      .eq("is_deleted", false);
+    if (uErr) {
+      setGwcBusyId(null);
+      onError(uErr.message);
+      return;
+    }
+    const { error: gwcErr } = await supabase.from("gwc_testing").upsert(
+      { project_candidate_id: pc.id },
+      { onConflict: "project_candidate_id" },
+    );
+    setGwcBusyId(null);
+    if (gwcErr) {
+      onError(gwcErr.message);
+      return;
+    }
+    onError(null);
+    const actor = await getUserSafe(supabase);
+    if (actor) {
+      const display = projectDisplayName(pc);
+      await logActivity({
+        supabase,
+        user: actor,
+        action_type: "interviews",
+        entity_type: "project_candidate",
+        entity_id: pc.id,
+        candidate_name: display === "—" ? pc.email : display,
+        description: `Marked ${display === "—" ? pc.email : display} for GWC Testing`,
+      });
+    }
+    setDetail((prev) => (prev?.id === pc.id ? null : prev));
+    await loadProjectData();
+    onPipelineChanged();
+    onToast?.("Moved to GWC Testing");
   };
 
   const handlePocChange = async (pc: ProjectCandidateRow, value: string) => {
@@ -1666,8 +1719,24 @@ export function ProjectInterviewsPanel({
                                 type="button"
                                 disabled={
                                   !canEditScheduledTab ||
+                                  gwcBusyId === c.id ||
                                   deleteBusyId === c.id ||
                                   pocSavingId === c.id
+                                }
+                                title="Mark for GWC Testing workflow"
+                                aria-label="Mark for GWC Testing"
+                                className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[#e9d5ff] bg-[#faf5ff] text-xs font-bold text-[#7c3aed] transition-colors hover:bg-[#f3e8ff] disabled:cursor-not-allowed disabled:opacity-50"
+                                onClick={() => void markProjectGwc(c)}
+                              >
+                                G
+                              </button>
+                              <button
+                                type="button"
+                                disabled={
+                                  !canEditScheduledTab ||
+                                  deleteBusyId === c.id ||
+                                  pocSavingId === c.id ||
+                                  gwcBusyId === c.id
                                 }
                                 title={
                                   !canEditScheduledTab
@@ -1690,7 +1759,8 @@ export function ProjectInterviewsPanel({
                                 disabled={
                                   !hasPoc ||
                                   deleteBusyId === c.id ||
-                                  pocSavingId === c.id
+                                  pocSavingId === c.id ||
+                                  gwcBusyId === c.id
                                 }
                                 title={
                                   hasPoc ? undefined : "Assign a POC first"
