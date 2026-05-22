@@ -623,11 +623,7 @@ export function PostProductionDashboard() {
         .from("post_production")
         .select(legacySelect)
         .order("created_at", { ascending: false });
-      data =
-        legacy.data?.map((row) => ({
-          ...row,
-          editor_comments: null,
-        })) ?? null;
+      data = legacy.data as typeof data;
       e = legacy.error;
     }
     if (e) {
