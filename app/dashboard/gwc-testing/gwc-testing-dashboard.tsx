@@ -3,7 +3,10 @@
 import { Loader2, Phone } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import type { ProjectCandidateRow } from "@/app/dashboard/interviews/types";
 import { useAccessControl } from "@/components/access-control-context";
+import { CandidateDetailModal } from "@/components/candidate-detail-modal";
+import { ProjectCandidateDetailModal } from "@/components/project-candidate-detail-modal";
 import { logActivity } from "@/lib/activity-logger";
 import { backfillGwcTestingRows } from "@/lib/gwc-testing-actions";
 import {
@@ -34,6 +37,12 @@ import { LogGwcCallModal } from "./log-gwc-call-modal";
 
 const cardChrome =
   "rounded-2xl bg-white shadow-[0_4px_16px_rgba(0,0,0,0.08)] border border-[#f0f0f0]";
+
+const nameLinkBtn =
+  "max-w-full min-w-0 truncate text-left font-medium text-[#3b82f6] hover:underline focus:outline-none focus:ring-2 focus:ring-[#3b82f6]/25 rounded-sm";
+
+const PROJECT_CANDIDATE_DETAIL_SELECT =
+  "id, created_at, email, full_name, whatsapp_number, project_title, problem_statement, target_user, ai_usage, demo_link, status, poc_assigned, poc_assigned_at";
 
 const GWC_SELECT_BASE = `
   id,
@@ -131,6 +140,11 @@ export function GwcTestingDashboard() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [pocRoster, setPocRoster] = useState<string[]>([]);
 
+  const [detailCandidateId, setDetailCandidateId] = useState<string | null>(
+    null,
+  );
+  const [detailProjectCandidate, setDetailProjectCandidate] =
+    useState<ProjectCandidateRow | null>(null);
   const [logCallRow, setLogCallRow] = useState<GwcTestingRow | null>(null);
   const [linkModal, setLinkModal] = useState<{
     row: GwcTestingRow;
@@ -401,6 +415,34 @@ export function GwcTestingDashboard() {
     return mergeRosterWithCurrent(pocRoster, current);
   }
 
+  async function openProjectCandidateDetail(projectCandidateId: string) {
+    if (!supabase) return;
+    const { data, error: fetchErr } = await supabase
+      .from("project_candidates")
+      .select(PROJECT_CANDIDATE_DETAIL_SELECT)
+      .eq("id", projectCandidateId)
+      .maybeSingle();
+    if (fetchErr) {
+      setError(fetchErr.message);
+      return;
+    }
+    if (!data) {
+      setError("Project candidate not found.");
+      return;
+    }
+    setDetailProjectCandidate(data as ProjectCandidateRow);
+  }
+
+  function openCandidateDetail(row: GwcTestingRow) {
+    if (row.source_type === "project" && row.project_candidate_id) {
+      void openProjectCandidateDetail(row.project_candidate_id);
+      return;
+    }
+    if (row.candidate_id) {
+      setDetailCandidateId(row.candidate_id);
+    }
+  }
+
   return (
     <main className="min-h-screen bg-[#f5f5f7] px-4 py-6 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-[1400px]">
@@ -525,7 +567,13 @@ export function GwcTestingDashboard() {
                         className="border-b border-[#f5f5f5] last:border-0"
                       >
                         <td className="px-4 py-3">
-                          <p className="font-medium text-[#1d1d1f]">{display}</p>
+                          <button
+                            type="button"
+                            className={nameLinkBtn}
+                            onClick={() => openCandidateDetail(row)}
+                          >
+                            {display}
+                          </button>
                           <p className="text-xs text-[#6e6e73]">
                             {email ?? "—"}
                             {row.source_type === "project" &&
@@ -713,6 +761,17 @@ export function GwcTestingDashboard() {
 
       {supabase ? (
         <>
+          <CandidateDetailModal
+            open={!!detailCandidateId}
+            candidateId={detailCandidateId}
+            supabase={supabase}
+            onClose={() => setDetailCandidateId(null)}
+          />
+          <ProjectCandidateDetailModal
+            open={!!detailProjectCandidate}
+            candidate={detailProjectCandidate}
+            onClose={() => setDetailProjectCandidate(null)}
+          />
           <LogGwcCallModal
             open={Boolean(logCallRow)}
             row={logCallRow}
