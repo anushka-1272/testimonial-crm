@@ -22,8 +22,10 @@ import {
   gwcSourceTypeBadgeClass,
   gwcSourceTypeLabel,
   isProjectGwcRow,
+  parseInterestedInPointers,
   type GwcContentChannel,
   type GwcInterestedIn,
+  type GwcInterestedInPointers,
   type GwcSourceType,
   type GwcTestingRow,
   type GwcTestingTab,
@@ -49,6 +51,7 @@ const GWC_SELECT_BASE = `
   candidate_id,
   poc,
   interested_in,
+  interested_in_pointers,
   workflow_stage,
   created_at,
   updated_at,
@@ -90,6 +93,9 @@ function normalizeRow(
     source_type,
     poc: (raw.poc as string | null) ?? null,
     interested_in: (raw.interested_in as GwcInterestedIn[]) ?? [],
+    interested_in_pointers: parseInterestedInPointers(
+      raw.interested_in_pointers,
+    ),
     workflow_stage: raw.workflow_stage as GwcTestingRow["workflow_stage"],
     created_at: raw.created_at as string,
     updated_at: raw.updated_at as string,
@@ -126,6 +132,7 @@ function partialProjectCandidateFromRow(
     status: "gwc",
     poc_assigned: null,
     poc_assigned_at: null,
+    interview_type: "gwc",
   };
 }
 
@@ -166,6 +173,10 @@ export function GwcTestingDashboard() {
   );
   const [detailProjectCandidate, setDetailProjectCandidate] =
     useState<ProjectCandidateRow | null>(null);
+  const [pointerDrafts, setPointerDrafts] = useState<Record<string, string>>(
+    {},
+  );
+  const [pointerSavingKey, setPointerSavingKey] = useState<string | null>(null);
   const [logCallRow, setLogCallRow] = useState<GwcTestingRow | null>(null);
   const [linkModal, setLinkModal] = useState<{
     row: GwcTestingRow;
@@ -204,7 +215,8 @@ export function GwcTestingDashboard() {
 
     if (
       primary.error?.message?.includes("project_candidate_id") ||
-      primary.error?.message?.includes("project_candidates")
+      primary.error?.message?.includes("project_candidates") ||
+      primary.error?.message?.includes("interested_in_pointers")
     ) {
       const legacy = await supabase
         .from("gwc_testing")
@@ -350,17 +362,79 @@ export function GwcTestingDashboard() {
     }
   }
 
+  function pointerDraftKey(rowId: string, interest: GwcInterestedIn) {
+    return `${rowId}:${interest}`;
+  }
+
+  function pointerValue(
+    row: GwcTestingRow,
+    interest: GwcInterestedIn,
+  ): string {
+    const key = pointerDraftKey(row.id, interest);
+    if (key in pointerDrafts) return pointerDrafts[key];
+    return row.interested_in_pointers[interest] ?? "";
+  }
+
+  async function saveInterestedInPointers(
+    row: GwcTestingRow,
+    interest: GwcInterestedIn,
+    text: string,
+  ) {
+    if (!canEditCurrentPage || !supabase) return;
+    const trimmed = text.trim();
+    const nextPointers: GwcInterestedInPointers = {
+      ...row.interested_in_pointers,
+    };
+    if (trimmed) nextPointers[interest] = trimmed;
+    else delete nextPointers[interest];
+
+    const saveKey = pointerDraftKey(row.id, interest);
+    setPointerSavingKey(saveKey);
+    const { error: uErr } = await supabase
+      .from("gwc_testing")
+      .update({ interested_in_pointers: nextPointers })
+      .eq("id", row.id);
+    setPointerSavingKey(null);
+    if (uErr) {
+      setError(uErr.message);
+      return;
+    }
+    setPointerDrafts((prev) => {
+      const copy = { ...prev };
+      delete copy[saveKey];
+      return copy;
+    });
+    setRows((prev) =>
+      prev.map((r) =>
+        r.id === row.id ? { ...r, interested_in_pointers: nextPointers } : r,
+      ),
+    );
+  }
+
   async function updateInterestedIn(
     row: GwcTestingRow,
     next: GwcInterestedIn[],
   ) {
     if (!canEditCurrentPage || !supabase) return;
     setBusyId(row.id);
-    const stage = workflowStageFromInterestedIn(next);
+    const stage = workflowStageFromInterestedIn(next, row.workflow_stage);
+    const removed = row.interested_in.filter((v) => !next.includes(v));
+    const nextPointers: GwcInterestedInPointers = {
+      ...row.interested_in_pointers,
+    };
+    for (const interest of removed) {
+      delete nextPointers[interest];
+      setPointerDrafts((prev) => {
+        const copy = { ...prev };
+        delete copy[pointerDraftKey(row.id, interest)];
+        return copy;
+      });
+    }
     const { error: uErr } = await supabase
       .from("gwc_testing")
       .update({
         interested_in: next,
+        interested_in_pointers: nextPointers,
         workflow_stage: stage,
       })
       .eq("id", row.id);
@@ -564,7 +638,7 @@ export function GwcTestingDashboard() {
             </p>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[900px] text-left text-sm">
+              <table className="w-full min-w-[1100px] text-left text-sm">
                 <thead>
                   <tr className="border-b border-[#f0f0f0] text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
                     <th className="px-4 py-3">Candidate</th>
@@ -649,30 +723,79 @@ export function GwcTestingDashboard() {
                                 ))}
                               </select>
                             </td>
-                            <td className="px-4 py-3">
-                              <div className="flex flex-wrap gap-1.5">
+                            <td className="min-w-[320px] px-4 py-3 align-top">
+                              <div className="flex flex-col gap-2.5">
                                 {GWC_INTERESTED_IN_OPTIONS.map((opt) => {
                                   const selected = row.interested_in.includes(
                                     opt.value,
                                   );
+                                  const draftKey = pointerDraftKey(
+                                    row.id,
+                                    opt.value,
+                                  );
+                                  const savingPointer =
+                                    pointerSavingKey === draftKey;
                                   return (
-                                    <button
+                                    <div
                                       key={opt.value}
-                                      type="button"
-                                      disabled={
-                                        !canEditCurrentPage || busyId === row.id
-                                      }
-                                      onClick={() =>
-                                        toggleInterested(row, opt.value)
-                                      }
-                                      className={`rounded-full px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-50 ${
-                                        selected
-                                          ? "bg-[#1d1d1f] text-white"
-                                          : "bg-[#f5f5f5] text-[#6e6e73] hover:bg-[#e8e8ed]"
-                                      }`}
+                                      className="flex flex-col gap-1.5"
                                     >
-                                      {opt.label}
-                                    </button>
+                                      <button
+                                        type="button"
+                                        disabled={
+                                          !canEditCurrentPage ||
+                                          busyId === row.id
+                                        }
+                                        onClick={() =>
+                                          toggleInterested(row, opt.value)
+                                        }
+                                        className={`w-fit rounded-full px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-50 ${
+                                          selected
+                                            ? "bg-[#1d1d1f] text-white"
+                                            : "bg-[#f5f5f5] text-[#6e6e73] hover:bg-[#e8e8ed]"
+                                        }`}
+                                      >
+                                        {opt.label}
+                                      </button>
+                                      {selected ? (
+                                        <div className="pl-0.5">
+                                          <label
+                                            htmlFor={draftKey}
+                                            className="sr-only"
+                                          >
+                                            POC pointers for {opt.label}
+                                          </label>
+                                          <textarea
+                                            id={draftKey}
+                                            rows={2}
+                                            disabled={
+                                              !canEditCurrentPage ||
+                                              busyId === row.id ||
+                                              savingPointer
+                                            }
+                                            placeholder={`POC pointers for ${opt.label}…`}
+                                            className="w-full min-w-[240px] resize-y rounded-lg border border-[#e5e5e5] bg-white px-2.5 py-2 text-xs text-[#1d1d1f] placeholder:text-[#aeaeb2] focus:border-[#3b82f6] focus:outline-none disabled:opacity-50"
+                                            value={pointerValue(
+                                              row,
+                                              opt.value,
+                                            )}
+                                            onChange={(e) =>
+                                              setPointerDrafts((prev) => ({
+                                                ...prev,
+                                                [draftKey]: e.target.value,
+                                              }))
+                                            }
+                                            onBlur={(e) =>
+                                              void saveInterestedInPointers(
+                                                row,
+                                                opt.value,
+                                                e.target.value,
+                                              )
+                                            }
+                                          />
+                                        </div>
+                                      ) : null}
+                                    </div>
                                   );
                                 })}
                               </div>

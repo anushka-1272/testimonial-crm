@@ -52,11 +52,32 @@ export function isContentChannel(
   return (GWC_CONTENT_CHANNELS as string[]).includes(value);
 }
 
-/** Video Interview selection routes the entry to the Scheduled stage. */
+export type GwcInterestedInPointers = Partial<Record<GwcInterestedIn, string>>;
+
+const VALID_INTEREST_KEYS = new Set(
+  GWC_INTERESTED_IN_OPTIONS.map((o) => o.value),
+);
+
+/** Parse `interested_in_pointers` jsonb from Supabase. */
+export function parseInterestedInPointers(raw: unknown): GwcInterestedInPointers {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const out: GwcInterestedInPointers = {};
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (!VALID_INTEREST_KEYS.has(key as GwcInterestedIn)) continue;
+    if (typeof value === "string" && value.trim()) {
+      out[key as GwcInterestedIn] = value;
+    }
+  }
+  return out;
+}
+
+/** Keep queue rows active so multiple Interested In options can be selected together. */
 export function workflowStageFromInterestedIn(
   interestedIn: GwcInterestedIn[],
+  currentStage: GwcWorkflowStage = "active",
 ): GwcWorkflowStage {
-  if (interestedIn.includes("video_interview")) return "scheduled";
+  if (currentStage === "dispatch") return "dispatch";
+  void interestedIn;
   return "active";
 }
 
@@ -106,6 +127,7 @@ export type GwcTestingRow = {
   source_type: GwcSourceType;
   poc: string | null;
   interested_in: GwcInterestedIn[];
+  interested_in_pointers: GwcInterestedInPointers;
   workflow_stage: GwcWorkflowStage;
   created_at: string;
   updated_at: string;
