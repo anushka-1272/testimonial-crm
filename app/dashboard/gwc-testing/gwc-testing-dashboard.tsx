@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useAccessControl } from "@/components/access-control-context";
 import { logActivity } from "@/lib/activity-logger";
+import { backfillGwcTestingRows } from "@/lib/gwc-testing-actions";
 import {
   GWC_INTERESTED_IN_OPTIONS,
   GWC_TESTING_TABS,
@@ -34,10 +35,9 @@ import { LogGwcCallModal } from "./log-gwc-call-modal";
 const cardChrome =
   "rounded-2xl bg-white shadow-[0_4px_16px_rgba(0,0,0,0.08)] border border-[#f0f0f0]";
 
-const GWC_SELECT = `
+const GWC_SELECT_BASE = `
   id,
   candidate_id,
-  project_candidate_id,
   poc,
   interested_in,
   workflow_stage,
@@ -48,7 +48,12 @@ const GWC_SELECT = `
     full_name,
     email,
     whatsapp_number
-  ),
+  )
+`;
+
+const GWC_SELECT_WITH_PROJECT = `
+  ${GWC_SELECT_BASE},
+  project_candidate_id,
   project_candidates (
     id,
     full_name,
@@ -149,15 +154,39 @@ export function GwcTestingDashboard() {
     setLoading(true);
     setError(null);
 
-    const { data: gwcRows, error: gwcErr } = await supabase
-      .from("gwc_testing")
-      .select(GWC_SELECT)
-      .order("updated_at", { ascending: false });
-
-    if (gwcErr) {
-      setError(gwcErr.message);
+    const backfill = await backfillGwcTestingRows(supabase);
+    if (backfill.error) {
+      setError(backfill.error);
       setLoading(false);
       return;
+    }
+
+    let gwcRows: Record<string, unknown>[] | null = null;
+    const primary = await supabase
+      .from("gwc_testing")
+      .select(GWC_SELECT_WITH_PROJECT)
+      .order("updated_at", { ascending: false });
+
+    if (
+      primary.error?.message?.includes("project_candidate_id") ||
+      primary.error?.message?.includes("project_candidates")
+    ) {
+      const legacy = await supabase
+        .from("gwc_testing")
+        .select(GWC_SELECT_BASE)
+        .order("updated_at", { ascending: false });
+      gwcRows = (legacy.data as Record<string, unknown>[] | null) ?? null;
+      if (legacy.error) {
+        setError(legacy.error.message);
+        setLoading(false);
+        return;
+      }
+    } else if (primary.error) {
+      setError(primary.error.message);
+      setLoading(false);
+      return;
+    } else {
+      gwcRows = (primary.data as Record<string, unknown>[] | null) ?? null;
     }
 
     const ids = (gwcRows ?? []).map((r) => r.id as string);

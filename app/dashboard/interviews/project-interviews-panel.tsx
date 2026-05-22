@@ -11,6 +11,7 @@ import { useAccessControl } from "@/components/access-control-context";
 import { ProjectCandidateDetailModal } from "@/components/project-candidate-detail-modal";
 import { ZoomDetailsModal } from "@/components/ZoomDetailsModal";
 import { logActivity } from "@/lib/activity-logger";
+import { ensureGwcTestingForProjectCandidate } from "@/lib/gwc-testing-actions";
 import { requestRevertInterview } from "@/lib/revert-interview-client";
 import { displayNameFromUser, getUserSafe } from "@/lib/supabase-auth";
 import {
@@ -1307,13 +1308,13 @@ export function ProjectInterviewsPanel({
       onError(uErr.message);
       return;
     }
-    const { error: gwcErr } = await supabase.from("gwc_testing").upsert(
-      { project_candidate_id: pc.id },
-      { onConflict: "project_candidate_id" },
+    const { error: gwcErr } = await ensureGwcTestingForProjectCandidate(
+      supabase,
+      pc.id,
     );
     setGwcBusyId(null);
     if (gwcErr) {
-      onError(gwcErr.message);
+      onError(gwcErr);
       return;
     }
     onError(null);

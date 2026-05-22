@@ -16,6 +16,7 @@ import {
   type DashboardPeriod,
 } from "@/lib/dashboard-ist-dates";
 import { logActivity } from "@/lib/activity-logger";
+import { ensureGwcTestingForCandidate } from "@/lib/gwc-testing-actions";
 import { displayNameFromUser, getUserSafe } from "@/lib/supabase-auth";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 
@@ -433,13 +434,10 @@ export function EligibilityDashboard() {
       setError(uErr.message);
       return;
     }
-    const { error: gwcErr } = await supabase.from("gwc_testing").upsert(
-      { candidate_id: r.id },
-      { onConflict: "candidate_id", ignoreDuplicates: false },
-    );
+    const { error: gwcErr } = await ensureGwcTestingForCandidate(supabase, r.id);
     setBusyId(null);
     if (gwcErr) {
-      setError(gwcErr.message);
+      setError(gwcErr);
       return;
     }
     const actor = await getUserSafe(supabase);
