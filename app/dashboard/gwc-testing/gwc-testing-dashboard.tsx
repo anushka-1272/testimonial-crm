@@ -1,6 +1,6 @@
 "use client";
 
-import { Loader2, Phone } from "lucide-react";
+import { Loader2, Pencil, Phone, Search } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import type { ProjectCandidateRow } from "@/app/dashboard/interviews/types";
@@ -22,7 +22,12 @@ import {
   gwcSourceTypeBadgeClass,
   gwcSourceTypeLabel,
   isProjectGwcRow,
+  gwcCallOutcomeLabel,
+  gwcRowMatchesPocFilter,
+  gwcRowMatchesSearch,
+  GWC_POC_FILTER_UNASSIGNED,
   parseInterestedInPointers,
+  type GwcCallOutcome,
   type GwcContentChannel,
   type GwcInterestedIn,
   type GwcInterestedInPointers,
@@ -35,7 +40,33 @@ import { getUserSafe, displayNameFromUser } from "@/lib/supabase-auth";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 
 import { AddContentLinkModal } from "./add-content-link-modal";
+import { EditInterestedInModal } from "./edit-interested-in-modal";
 import { LogGwcCallModal } from "./log-gwc-call-modal";
+
+function formatGwcDateTime(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleString(undefined, {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function sanitizeInterestedInPointers(
+  pointers: GwcInterestedInPointers,
+): GwcInterestedInPointers {
+  const out: GwcInterestedInPointers = {};
+  for (const [key, value] of Object.entries(pointers)) {
+    if (typeof value === "string" && value.trim()) {
+      out[key as GwcInterestedIn] = value.trim();
+    }
+  }
+  return out;
+}
 
 const cardChrome =
   "rounded-2xl bg-white shadow-[0_4px_16px_rgba(0,0,0,0.08)] border border-[#f0f0f0]";
@@ -50,6 +81,7 @@ const GWC_SELECT_BASE = `
   id,
   candidate_id,
   poc,
+  poc_assigned_at,
   interested_in,
   interested_in_pointers,
   workflow_stage,
@@ -78,6 +110,7 @@ const GWC_SELECT_WITH_PROJECT = `
 function normalizeRow(
   raw: Record<string, unknown>,
   verifications: GwcTestingRow["verifications"],
+  lastCall: { at: string; outcome: GwcCallOutcome } | null,
 ): GwcTestingRow {
   const c = raw.candidates;
   const candidate = Array.isArray(c) ? c[0] ?? null : c;
@@ -92,6 +125,7 @@ function normalizeRow(
     project_candidate_id: projectCandidateId,
     source_type,
     poc: (raw.poc as string | null) ?? null,
+    poc_assigned_at: (raw.poc_assigned_at as string | null) ?? null,
     interested_in: (raw.interested_in as GwcInterestedIn[]) ?? [],
     interested_in_pointers: parseInterestedInPointers(
       raw.interested_in_pointers,
@@ -103,6 +137,8 @@ function normalizeRow(
     project_candidates:
       projectCandidate as GwcTestingRow["project_candidates"],
     verifications,
+    last_call_at: lastCall?.at ?? null,
+    last_call_outcome: lastCall?.outcome ?? null,
   };
 }
 
@@ -165,6 +201,8 @@ export function GwcTestingDashboard() {
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<GwcTestingTab>("queue");
   const [trackFilter, setTrackFilter] = useState<"all" | GwcSourceType>("all");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [pocFilter, setPocFilter] = useState("all");
   const [busyId, setBusyId] = useState<string | null>(null);
   const [pocRoster, setPocRoster] = useState<string[]>([]);
 
@@ -173,10 +211,9 @@ export function GwcTestingDashboard() {
   );
   const [detailProjectCandidate, setDetailProjectCandidate] =
     useState<ProjectCandidateRow | null>(null);
-  const [pointerDrafts, setPointerDrafts] = useState<Record<string, string>>(
-    {},
-  );
-  const [pointerSavingKey, setPointerSavingKey] = useState<string | null>(null);
+  const [interestedInEditRow, setInterestedInEditRow] =
+    useState<GwcTestingRow | null>(null);
+  const [interestedInSaving, setInterestedInSaving] = useState(false);
   const [logCallRow, setLogCallRow] = useState<GwcTestingRow | null>(null);
   const [linkModal, setLinkModal] = useState<{
     row: GwcTestingRow;
@@ -216,7 +253,8 @@ export function GwcTestingDashboard() {
     if (
       primary.error?.message?.includes("project_candidate_id") ||
       primary.error?.message?.includes("project_candidates") ||
-      primary.error?.message?.includes("interested_in_pointers")
+      primary.error?.message?.includes("interested_in_pointers") ||
+      primary.error?.message?.includes("poc_assigned_at")
     ) {
       const legacy = await supabase
         .from("gwc_testing")
@@ -260,9 +298,39 @@ export function GwcTestingDashboard() {
       byGwc.set(v.gwc_testing_id, list);
     }
 
+    const lastCallByGwc = new Map<
+      string,
+      { at: string; outcome: GwcCallOutcome }
+    >();
+    if (ids.length > 0) {
+      const { data: callRows, error: callErr } = await supabase
+        .from("gwc_call_log")
+        .select("gwc_testing_id, created_at, outcome")
+        .in("gwc_testing_id", ids)
+        .order("created_at", { ascending: false });
+      if (callErr) {
+        setError(callErr.message);
+        setLoading(false);
+        return;
+      }
+      for (const log of callRows ?? []) {
+        const gid = log.gwc_testing_id as string;
+        if (!lastCallByGwc.has(gid)) {
+          lastCallByGwc.set(gid, {
+            at: log.created_at as string,
+            outcome: log.outcome as GwcCallOutcome,
+          });
+        }
+      }
+    }
+
     setRows(
       (gwcRows ?? []).map((r) =>
-        normalizeRow(r as Record<string, unknown>, byGwc.get(r.id as string) ?? []),
+        normalizeRow(
+          r as Record<string, unknown>,
+          byGwc.get(r.id as string) ?? [],
+          lastCallByGwc.get(r.id as string) ?? null,
+        ),
       ),
     );
     setLoading(false);
@@ -287,6 +355,11 @@ export function GwcTestingDashboard() {
         { event: "*", schema: "public", table: "gwc_content_verification" },
         () => void load(),
       )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "gwc_call_log" },
+        () => void load(),
+      )
       .subscribe();
     return () => {
       void supabase.removeChannel(channel);
@@ -299,10 +372,29 @@ export function GwcTestingDashboard() {
     [trackFilter],
   );
 
+  const pocFilterNames = useMemo(() => {
+    const names = new Set<string>(pocRoster);
+    for (const r of rows) {
+      const p = r.poc?.trim();
+      if (p) names.add(p);
+    }
+    return [...names].sort((a, b) => a.localeCompare(b));
+  }, [rows, pocRoster]);
+
   const filteredRows = useMemo(
-    () => rows.filter((r) => matchesTrackFilter(r) && rowInTab(r, tab)),
-    [rows, tab, matchesTrackFilter],
+    () =>
+      rows.filter(
+        (r) =>
+          matchesTrackFilter(r) &&
+          rowInTab(r, tab) &&
+          gwcRowMatchesSearch(r, searchQuery) &&
+          gwcRowMatchesPocFilter(r, pocFilter),
+      ),
+    [rows, tab, matchesTrackFilter, searchQuery, pocFilter],
   );
+
+  const hasActiveFilters =
+    searchQuery.trim().length > 0 || pocFilter !== "all";
 
   const tabCounts = useMemo(() => {
     const counts: Record<GwcTestingTab, number> = {
@@ -335,10 +427,21 @@ export function GwcTestingDashboard() {
   async function updatePoc(row: GwcTestingRow, poc: string) {
     if (!canEditCurrentPage || !supabase) return;
     setBusyId(row.id);
-    const { error: uErr } = await supabase
+    const assigned = poc.trim();
+    const payload = {
+      poc: assigned || null,
+      poc_assigned_at: assigned ? new Date().toISOString() : null,
+    };
+    let { error: uErr } = await supabase
       .from("gwc_testing")
-      .update({ poc: poc || null })
+      .update(payload)
       .eq("id", row.id);
+    if (uErr?.message?.includes("poc_assigned_at")) {
+      ({ error: uErr } = await supabase
+        .from("gwc_testing")
+        .update({ poc: payload.poc })
+        .eq("id", row.id));
+    }
     setBusyId(null);
     if (uErr) setError(uErr.message);
     else void load();
@@ -362,73 +465,20 @@ export function GwcTestingDashboard() {
     }
   }
 
-  function pointerDraftKey(rowId: string, interest: GwcInterestedIn) {
-    return `${rowId}:${interest}`;
-  }
-
-  function pointerValue(
-    row: GwcTestingRow,
-    interest: GwcInterestedIn,
-  ): string {
-    const key = pointerDraftKey(row.id, interest);
-    if (key in pointerDrafts) return pointerDrafts[key];
-    return row.interested_in_pointers[interest] ?? "";
-  }
-
-  async function saveInterestedInPointers(
-    row: GwcTestingRow,
-    interest: GwcInterestedIn,
-    text: string,
-  ) {
-    if (!canEditCurrentPage || !supabase) return;
-    const trimmed = text.trim();
-    const nextPointers: GwcInterestedInPointers = {
-      ...row.interested_in_pointers,
-    };
-    if (trimmed) nextPointers[interest] = trimmed;
-    else delete nextPointers[interest];
-
-    const saveKey = pointerDraftKey(row.id, interest);
-    setPointerSavingKey(saveKey);
-    const { error: uErr } = await supabase
-      .from("gwc_testing")
-      .update({ interested_in_pointers: nextPointers })
-      .eq("id", row.id);
-    setPointerSavingKey(null);
-    if (uErr) {
-      setError(uErr.message);
-      return;
-    }
-    setPointerDrafts((prev) => {
-      const copy = { ...prev };
-      delete copy[saveKey];
-      return copy;
-    });
-    setRows((prev) =>
-      prev.map((r) =>
-        r.id === row.id ? { ...r, interested_in_pointers: nextPointers } : r,
-      ),
-    );
-  }
-
   async function updateInterestedIn(
     row: GwcTestingRow,
     next: GwcInterestedIn[],
-  ) {
-    if (!canEditCurrentPage || !supabase) return;
+    pointersInput?: GwcInterestedInPointers,
+  ): Promise<boolean> {
+    if (!canEditCurrentPage || !supabase) return false;
     setBusyId(row.id);
     const stage = workflowStageFromInterestedIn(next, row.workflow_stage);
-    const removed = row.interested_in.filter((v) => !next.includes(v));
-    const nextPointers: GwcInterestedInPointers = {
-      ...row.interested_in_pointers,
-    };
-    for (const interest of removed) {
-      delete nextPointers[interest];
-      setPointerDrafts((prev) => {
-        const copy = { ...prev };
-        delete copy[pointerDraftKey(row.id, interest)];
-        return copy;
-      });
+    const rawPointers = sanitizeInterestedInPointers(
+      pointersInput ?? row.interested_in_pointers,
+    );
+    const nextPointers: GwcInterestedInPointers = {};
+    for (const interest of next) {
+      if (rawPointers[interest]) nextPointers[interest] = rawPointers[interest];
     }
     const { error: uErr } = await supabase
       .from("gwc_testing")
@@ -441,7 +491,7 @@ export function GwcTestingDashboard() {
     if (uErr) {
       setError(uErr.message);
       setBusyId(null);
-      return;
+      return false;
     }
     await syncContentVerificationRows(row.id, next);
 
@@ -497,13 +547,22 @@ export function GwcTestingDashboard() {
 
     setBusyId(null);
     void load();
+    return true;
   }
 
-  function toggleInterested(row: GwcTestingRow, value: GwcInterestedIn) {
-    const set = new Set(row.interested_in);
-    if (set.has(value)) set.delete(value);
-    else set.add(value);
-    void updateInterestedIn(row, [...set]);
+  async function saveInterestedInFromModal(
+    interestedIn: GwcInterestedIn[],
+    pointers: GwcInterestedInPointers,
+  ) {
+    if (!interestedInEditRow) return;
+    setInterestedInSaving(true);
+    const ok = await updateInterestedIn(
+      interestedInEditRow,
+      interestedIn,
+      sanitizeInterestedInPointers(pointers),
+    );
+    setInterestedInSaving(false);
+    if (ok) setInterestedInEditRow(null);
   }
 
   function pocOptions(current: string | null) {
@@ -627,6 +686,67 @@ export function GwcTestingDashboard() {
         </div>
 
         <div className={cardChrome}>
+          {tab === "queue" ? (
+            <div className="flex flex-wrap items-end gap-3 border-b border-[#f0f0f0] px-4 py-3">
+              <div className="min-w-[200px] flex-1">
+                <label
+                  htmlFor="gwc-search"
+                  className="text-xs font-medium uppercase tracking-widest text-[#aeaeb2]"
+                >
+                  Search candidates
+                </label>
+                <div className="relative mt-1">
+                  <Search
+                    className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#aeaeb2]"
+                    aria-hidden
+                  />
+                  <input
+                    id="gwc-search"
+                    type="search"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Name, email, project, phone…"
+                    className="w-full rounded-xl border border-[#e5e5e5] bg-white py-2.5 pl-9 pr-3 text-sm text-[#1d1d1f] placeholder:text-[#aeaeb2] focus:border-[#3b82f6] focus:outline-none"
+                  />
+                </div>
+              </div>
+              <div className="min-w-[160px]">
+                <label
+                  htmlFor="gwc-poc-filter"
+                  className="text-xs font-medium uppercase tracking-widest text-[#aeaeb2]"
+                >
+                  POC filter
+                </label>
+                <select
+                  id="gwc-poc-filter"
+                  value={pocFilter}
+                  onChange={(e) => setPocFilter(e.target.value)}
+                  className="mt-1 w-full rounded-xl border border-[#e5e5e5] bg-white px-3 py-2.5 text-sm text-[#1d1d1f] focus:border-[#3b82f6] focus:outline-none"
+                >
+                  <option value="all">All POCs</option>
+                  <option value={GWC_POC_FILTER_UNASSIGNED}>Unassigned</option>
+                  {pocFilterNames.map((name) => (
+                    <option key={name} value={name}>
+                      {name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {hasActiveFilters ? (
+                <button
+                  type="button"
+                  className="rounded-xl px-3 py-2.5 text-sm font-medium text-[#6e6e73] hover:bg-[#f5f5f5]"
+                  onClick={() => {
+                    setSearchQuery("");
+                    setPocFilter("all");
+                  }}
+                >
+                  Clear filters
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+
           {loading ? (
             <div className="flex items-center justify-center gap-2 px-4 py-16 text-[#6e6e73]">
               <Loader2 className="h-5 w-5 animate-spin" />
@@ -634,11 +754,13 @@ export function GwcTestingDashboard() {
             </div>
           ) : filteredRows.length === 0 ? (
             <p className="px-4 py-16 text-center text-sm text-[#6e6e73]">
-              No entries in this section.
+              {hasActiveFilters
+                ? "No candidates match your search or POC filter."
+                : "No entries in this section."}
             </p>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[1100px] text-left text-sm">
+              <table className="w-full min-w-[980px] text-left text-sm">
                 <thead>
                   <tr className="border-b border-[#f0f0f0] text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
                     <th className="px-4 py-3">Candidate</th>
@@ -646,6 +768,8 @@ export function GwcTestingDashboard() {
                     {tab === "queue" ? (
                       <>
                         <th className="px-4 py-3">POC</th>
+                        <th className="px-4 py-3">POC assigned</th>
+                        <th className="px-4 py-3">Last call</th>
                         <th className="px-4 py-3">Interested in</th>
                         <th className="px-4 py-3">Actions</th>
                       </>
@@ -723,82 +847,57 @@ export function GwcTestingDashboard() {
                                 ))}
                               </select>
                             </td>
-                            <td className="min-w-[320px] px-4 py-3 align-top">
-                              <div className="flex flex-col gap-2.5">
-                                {GWC_INTERESTED_IN_OPTIONS.map((opt) => {
-                                  const selected = row.interested_in.includes(
-                                    opt.value,
-                                  );
-                                  const draftKey = pointerDraftKey(
-                                    row.id,
-                                    opt.value,
-                                  );
-                                  const savingPointer =
-                                    pointerSavingKey === draftKey;
-                                  return (
-                                    <div
-                                      key={opt.value}
-                                      className="flex flex-col gap-1.5"
+                            <td className="whitespace-nowrap px-4 py-3 align-top text-xs text-[#6e6e73]">
+                              {formatGwcDateTime(row.poc_assigned_at)}
+                            </td>
+                            <td className="px-4 py-3 align-top text-xs text-[#6e6e73]">
+                              {row.last_call_at ? (
+                                <>
+                                  <span className="block text-[#1d1d1f]">
+                                    {formatGwcDateTime(row.last_call_at)}
+                                  </span>
+                                  {row.last_call_outcome ? (
+                                    <span className="mt-0.5 block text-[#aeaeb2]">
+                                      {gwcCallOutcomeLabel(row.last_call_outcome)}
+                                    </span>
+                                  ) : null}
+                                </>
+                              ) : (
+                                "—"
+                              )}
+                            </td>
+                            <td className="max-w-[220px] px-4 py-3 align-top">
+                              {row.interested_in.length > 0 ? (
+                                <div className="flex flex-wrap gap-1">
+                                  {row.interested_in.map((v) => (
+                                    <span
+                                      key={v}
+                                      className="rounded-full bg-[#f0f0f0] px-2 py-0.5 text-xs font-medium text-[#1d1d1f]"
+                                      title={
+                                        row.interested_in_pointers[v] ??
+                                        undefined
+                                      }
                                     >
-                                      <button
-                                        type="button"
-                                        disabled={
-                                          !canEditCurrentPage ||
-                                          busyId === row.id
-                                        }
-                                        onClick={() =>
-                                          toggleInterested(row, opt.value)
-                                        }
-                                        className={`w-fit rounded-full px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-50 ${
-                                          selected
-                                            ? "bg-[#1d1d1f] text-white"
-                                            : "bg-[#f5f5f5] text-[#6e6e73] hover:bg-[#e8e8ed]"
-                                        }`}
-                                      >
-                                        {opt.label}
-                                      </button>
-                                      {selected ? (
-                                        <div className="pl-0.5">
-                                          <label
-                                            htmlFor={draftKey}
-                                            className="sr-only"
-                                          >
-                                            POC pointers for {opt.label}
-                                          </label>
-                                          <textarea
-                                            id={draftKey}
-                                            rows={2}
-                                            disabled={
-                                              !canEditCurrentPage ||
-                                              busyId === row.id ||
-                                              savingPointer
-                                            }
-                                            placeholder={`POC pointers for ${opt.label}…`}
-                                            className="w-full min-w-[240px] resize-y rounded-lg border border-[#e5e5e5] bg-white px-2.5 py-2 text-xs text-[#1d1d1f] placeholder:text-[#aeaeb2] focus:border-[#3b82f6] focus:outline-none disabled:opacity-50"
-                                            value={pointerValue(
-                                              row,
-                                              opt.value,
-                                            )}
-                                            onChange={(e) =>
-                                              setPointerDrafts((prev) => ({
-                                                ...prev,
-                                                [draftKey]: e.target.value,
-                                              }))
-                                            }
-                                            onBlur={(e) =>
-                                              void saveInterestedInPointers(
-                                                row,
-                                                opt.value,
-                                                e.target.value,
-                                              )
-                                            }
-                                          />
-                                        </div>
-                                      ) : null}
-                                    </div>
-                                  );
-                                })}
-                              </div>
+                                      {interestedInLabel(v)}
+                                    </span>
+                                  ))}
+                                </div>
+                              ) : (
+                                <span className="text-xs text-[#aeaeb2]">
+                                  None selected
+                                </span>
+                              )}
+                              <button
+                                type="button"
+                                disabled={
+                                  !canEditCurrentPage || busyId === row.id
+                                }
+                                className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-[#3b82f6] hover:underline disabled:opacity-50"
+                                onClick={() => setInterestedInEditRow(row)}
+                              >
+                                <Pencil className="h-3 w-3" aria-hidden />
+                                Edit interests
+                              </button>
                             </td>
                             <td className="px-4 py-3">
                               <button
@@ -934,6 +1033,14 @@ export function GwcTestingDashboard() {
             open={!!detailProjectCandidate}
             candidate={detailProjectCandidate}
             onClose={() => setDetailProjectCandidate(null)}
+          />
+          <EditInterestedInModal
+            open={Boolean(interestedInEditRow)}
+            row={interestedInEditRow}
+            canEdit={canEditCurrentPage}
+            saving={interestedInSaving}
+            onClose={() => setInterestedInEditRow(null)}
+            onSave={saveInterestedInFromModal}
           />
           <LogGwcCallModal
             open={Boolean(logCallRow)}

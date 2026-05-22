@@ -18,6 +18,22 @@ export type GwcCallOutcome =
   | "scheduled"
   | "other";
 
+export const GWC_POC_FILTER_UNASSIGNED = "__gwc_poc_unassigned__";
+
+const GWC_CALL_OUTCOME_LABELS: Record<GwcCallOutcome, string> = {
+  no_answer: "No answer",
+  callback: "Callback",
+  interested: "Interested",
+  scheduled: "Scheduled",
+  not_interested: "Not interested",
+  wrong_number: "Wrong number",
+  other: "Other",
+};
+
+export function gwcCallOutcomeLabel(outcome: GwcCallOutcome): string {
+  return GWC_CALL_OUTCOME_LABELS[outcome] ?? outcome;
+}
+
 export const GWC_INTERESTED_IN_OPTIONS: {
   value: GwcInterestedIn;
   label: string;
@@ -126,6 +142,7 @@ export type GwcTestingRow = {
   project_candidate_id: string | null;
   source_type: GwcSourceType;
   poc: string | null;
+  poc_assigned_at: string | null;
   interested_in: GwcInterestedIn[];
   interested_in_pointers: GwcInterestedInPointers;
   workflow_stage: GwcWorkflowStage;
@@ -145,7 +162,42 @@ export type GwcTestingRow = {
     project_title: string | null;
   } | null;
   verifications: GwcContentVerificationRow[];
+  last_call_at: string | null;
+  last_call_outcome: GwcCallOutcome | null;
 };
+
+/** Lowercase haystack for queue search (name, email, project title, phone). */
+export function gwcRowSearchHaystack(row: GwcTestingRow): string {
+  const parts: string[] = [gwcEntryDisplayName(row)];
+  if (row.source_type === "project") {
+    const pc = row.project_candidates;
+    if (pc?.email) parts.push(pc.email);
+    if (pc?.project_title) parts.push(pc.project_title);
+    if (pc?.whatsapp_number) parts.push(pc.whatsapp_number);
+  } else {
+    const c = row.candidates;
+    if (c?.email) parts.push(c.email);
+    if (c?.whatsapp_number) parts.push(c.whatsapp_number);
+  }
+  if (row.poc) parts.push(row.poc);
+  return parts.join(" ").toLowerCase();
+}
+
+export function gwcRowMatchesSearch(row: GwcTestingRow, query: string): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  return gwcRowSearchHaystack(row).includes(q);
+}
+
+export function gwcRowMatchesPocFilter(
+  row: GwcTestingRow,
+  filter: string,
+): boolean {
+  if (filter === "all") return true;
+  const poc = row.poc?.trim() ?? "";
+  if (filter === GWC_POC_FILTER_UNASSIGNED) return !poc;
+  return poc === filter;
+}
 
 export function gwcEntryDisplayName(row: GwcTestingRow): string {
   if (row.source_type === "project") {
