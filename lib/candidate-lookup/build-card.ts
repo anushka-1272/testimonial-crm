@@ -1,4 +1,8 @@
-import { format, isToday, isTomorrow, parseISO } from "date-fns";
+import {
+  formatDateOnlyIst,
+  formatDateTimeSlotIst,
+  formatScheduledHeadlineIst,
+} from "@/lib/format-ist-datetime";
 
 import type { CandidateLookupCardData } from "./types";
 
@@ -34,34 +38,15 @@ export type CandidateLookupSnapshot = {
 };
 
 function formatSlot(iso: string | null | undefined): string | null {
-  if (!iso) return null;
-  try {
-    return format(parseISO(iso), "MMM d, yyyy · h:mm a");
-  } catch {
-    return null;
-  }
+  return formatDateTimeSlotIst(iso);
 }
 
 function formatDateOnly(iso: string | null | undefined): string | null {
-  if (!iso) return null;
-  try {
-    return format(parseISO(iso), "MMM d, yyyy");
-  } catch {
-    return null;
-  }
+  return formatDateOnlyIst(iso);
 }
 
 function formatScheduledHeadline(iso: string | null | undefined): string | null {
-  if (!iso?.trim()) return null;
-  try {
-    const d = parseISO(iso.trim());
-    const time = format(d, "h:mm a");
-    if (isToday(d)) return `today at ${time}`;
-    if (isTomorrow(d)) return `tomorrow at ${time}`;
-    return `${format(d, "MMM d")} at ${time}`;
-  } catch {
-    return null;
-  }
+  return formatScheduledHeadlineIst(iso);
 }
 
 const badge = {
