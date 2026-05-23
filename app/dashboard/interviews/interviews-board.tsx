@@ -1198,7 +1198,7 @@ export function InterviewsBoard() {
         (a, b) => {
           const dateA = new Date(a.scheduled_date || 0).getTime();
           const dateB = new Date(b.scheduled_date || 0).getTime();
-          const cmp = dateA - dateB;
+          const cmp = dateB - dateA;
           return cmp !== 0 ? cmp : a.id.localeCompare(b.id);
         },
       ),

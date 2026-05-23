@@ -163,7 +163,7 @@ function compareProjectCandidateCreatedAsc(
   return c !== 0 ? c : a.id.localeCompare(b.id);
 }
 
-function compareProjectInterviewScheduledAsc(
+function compareProjectInterviewScheduledDesc(
   a: ProjectInterviewWithProjectCandidate,
   b: ProjectInterviewWithProjectCandidate,
 ): number {
@@ -172,7 +172,7 @@ function compareProjectInterviewScheduledAsc(
   if (!sa && !sb) return a.id.localeCompare(b.id);
   if (!sa) return 1;
   if (!sb) return -1;
-  const c = sa.localeCompare(sb);
+  const c = sb.localeCompare(sa);
   return c !== 0 ? c : a.id.localeCompare(b.id);
 }
 
@@ -1113,7 +1113,7 @@ export function ProjectInterviewsPanel({
           filters.scheduled.interviewer,
           i.interviewer,
         );
-      })].sort(compareProjectInterviewScheduledAsc),
+      })].sort(compareProjectInterviewScheduledDesc),
     [
       byStatus.scheduled,
       filters.scheduled.search,

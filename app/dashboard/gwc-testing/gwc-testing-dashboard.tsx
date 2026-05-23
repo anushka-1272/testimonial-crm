@@ -686,8 +686,7 @@ export function GwcTestingDashboard() {
         </div>
 
         <div className={cardChrome}>
-          {tab === "queue" ? (
-            <div className="flex flex-wrap items-end gap-3 border-b border-[#f0f0f0] px-4 py-3">
+          <div className="flex flex-wrap items-end gap-3 border-b border-[#f0f0f0] px-4 py-3">
               <div className="min-w-[200px] flex-1">
                 <label
                   htmlFor="gwc-search"
@@ -744,8 +743,7 @@ export function GwcTestingDashboard() {
                   Clear filters
                 </button>
               ) : null}
-            </div>
-          ) : null}
+          </div>
 
           {loading ? (
             <div className="flex items-center justify-center gap-2 px-4 py-16 text-[#6e6e73]">
