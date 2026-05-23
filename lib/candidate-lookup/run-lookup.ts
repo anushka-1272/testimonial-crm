@@ -20,7 +20,8 @@ const DISPATCH_SELECT_MIN =
   "dispatch_status, tracking_id, expected_delivery_date, reward_item, special_comments";
 
 type DbEligibility = "pending_review" | "eligible" | "not_eligible";
-type DbInterviewType = "testimonial" | "project";
+type DbInterviewType = "testimonial" | "project" | "written_feedback";
+type DbCandidateInterviewType = "testimonial" | "project" | "gwc";
 type DbDispatchStatus = "pending" | "dispatched" | "delivered";
 
 type CandidateRow = {
@@ -29,7 +30,7 @@ type CandidateRow = {
   email: string;
   whatsapp_number: string | null;
   eligibility_status: DbEligibility;
-  interview_type: DbInterviewType | null;
+  interview_type: DbCandidateInterviewType | null;
   poc_assigned: string | null;
   congratulation_call_pending: boolean | null;
   followup_status: string | null;

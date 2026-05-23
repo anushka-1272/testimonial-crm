@@ -9,7 +9,7 @@ export type CandidateLookupSnapshot = {
   followupStatus: string | null;
   followupCount: number | null;
   callbackDatetime: string | null;
-  candidateInterviewType: "testimonial" | "project" | null;
+  candidateInterviewType: "testimonial" | "project" | "gwc" | null;
   interview: {
     effective:
       | "draft"
@@ -20,7 +20,7 @@ export type CandidateLookupSnapshot = {
     scheduledDate: string | null;
     interviewer: string | null;
     rescheduleReason: string | null;
-    interviewType: "testimonial" | "project";
+    interviewType: "testimonial" | "project" | "written_feedback";
     rewardItem: string | null;
   } | null;
   /** Post–testimonial reward shipping (excludes LinkedIn-only rows). */

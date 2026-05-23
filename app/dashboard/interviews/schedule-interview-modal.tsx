@@ -23,13 +23,20 @@ import {
 import { modalOverlayClass, modalPanelClass } from "@/lib/modal-responsive";
 import { voidSlackNotify } from "@/lib/slack-client";
 import { fetchTeamRosterNames } from "@/lib/team-roster";
+import {
+  isTestimonialInterviewType,
+  TESTIMONIAL_INTERVIEW_TYPE_OPTIONS,
+  testimonialInterviewTypeLabel,
+  testimonialInterviewTypeRequiresInterviewer,
+  type TestimonialInterviewType,
+} from "@/lib/testimonial-interview-type";
 
 export type ScheduleCandidate = {
   id: string;
   full_name: string | null;
   email: string;
   whatsapp_number?: string | null;
-  interview_type?: "testimonial" | "project" | null;
+  interview_type?: TestimonialInterviewType | null;
   poc_assigned?: string | null;
 };
 
@@ -79,7 +86,7 @@ export function ScheduleInterviewModal({
     InterviewerSelectOption[]
   >([]);
   const [interviewer, setInterviewer] = useState("");
-  const [interviewType, setInterviewType] = useState<"testimonial" | "project">(
+  const [interviewType, setInterviewType] = useState<TestimonialInterviewType>(
     "testimonial",
   );
   const [langPreset, setLangPreset] = useState<LangCardKey>("english");
@@ -102,7 +109,7 @@ export function ScheduleInterviewModal({
     if (!candidate) return;
     setPoc(candidate.poc_assigned?.trim() ?? "");
     const t = candidate.interview_type;
-    if (t === "testimonial" || t === "project") {
+    if (isTestimonialInterviewType(t)) {
       setInterviewType(t);
     } else {
       setInterviewType("testimonial");
@@ -146,7 +153,11 @@ export function ScheduleInterviewModal({
       setError("Date and time are required.");
       return;
     }
-    if (!isProject && interviewType === "project" && !interviewer.trim()) {
+    if (
+      !isProject &&
+      testimonialInterviewTypeRequiresInterviewer(interviewType) &&
+      !interviewer.trim()
+    ) {
       setError("Interviewer is required.");
       return;
     }
@@ -183,10 +194,13 @@ export function ScheduleInterviewModal({
         : {
             candidate_id: candidate!.id,
             scheduled_date: localIso,
-            interviewer:
-              interviewType === "testimonial" ? null : interviewer,
+            interviewer: testimonialInterviewTypeRequiresInterviewer(interviewType)
+              ? interviewer
+              : null,
             interviewer_assigned_at:
-              interviewType === "testimonial" ? null : assignedNow,
+              testimonialInterviewTypeRequiresInterviewer(interviewType)
+                ? assignedNow
+                : null,
             zoom_link: null,
             language: languageDisplay,
             interview_language: langSubmit.value,
@@ -215,8 +229,7 @@ export function ScheduleInterviewModal({
           projectCandidate!.email ||
           "Candidate"
         : candidate!.full_name?.trim() || candidate!.email || "Candidate";
-      const typeWord =
-        interviewType === "testimonial" ? "Testimonial" : "Project";
+      const typeWord = testimonialInterviewTypeLabel(interviewType);
       const authUser = await getUserSafe(supabase);
       const actorName =
         authUser?.user_metadata &&
@@ -373,7 +386,7 @@ export function ScheduleInterviewModal({
             </label>
           </div>
 
-          {!isProject && interviewType === "project" ? (
+          {!isProject && testimonialInterviewTypeRequiresInterviewer(interviewType) ? (
             <label className="block text-sm">
               <span className={lab}>Interviewer</span>
               <select
@@ -400,12 +413,18 @@ export function ScheduleInterviewModal({
               <select
                 className={inp}
                 value={interviewType}
-                onChange={(e) =>
-                  setInterviewType(e.target.value as "testimonial" | "project")
-                }
+                onChange={(e) => {
+                  const next = e.target.value;
+                  if (isTestimonialInterviewType(next)) {
+                    setInterviewType(next);
+                  }
+                }}
               >
-                <option value="testimonial">Testimonial</option>
-                <option value="project">Project</option>
+                {TESTIMONIAL_INTERVIEW_TYPE_OPTIONS.map(({ value, label }) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
               </select>
             </label>
           ) : null}

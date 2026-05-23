@@ -26,6 +26,13 @@ function InterviewTypeBadge({ type }: { type: CandidateLookupCardData["interview
       </span>
     );
   }
+  if (type === "written_feedback") {
+    return (
+      <span className="inline-flex rounded-full bg-[#faf5ff] px-2.5 py-1 text-xs font-medium text-[#7c3aed]">
+        Written feedback
+      </span>
+    );
+  }
   return <span className="text-xs font-medium text-[#6e6e73]">Not set</span>;
 }
 

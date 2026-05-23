@@ -1,3 +1,5 @@
+import type { TestimonialInterviewType } from "@/lib/testimonial-interview-type";
+
 export type InterviewColumnStatus =
   | "draft"
   | "scheduled"
@@ -29,7 +31,7 @@ export type InterviewWithCandidate = {
   category: string | null;
   funnel: string | null;
   comments: string | null;
-  interview_type: "testimonial" | "project";
+  interview_type: TestimonialInterviewType;
   candidates: {
     id: string;
     created_at?: string;

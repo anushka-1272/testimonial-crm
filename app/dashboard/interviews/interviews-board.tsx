@@ -41,6 +41,11 @@ import {
   fetchTeamRosterNames,
   mergeRosterWithCurrent,
 } from "@/lib/team-roster";
+import {
+  TESTIMONIAL_INTERVIEW_TYPE_OPTIONS,
+  type TestimonialInterviewType,
+  type TestimonialInterviewTypeFilter,
+} from "@/lib/testimonial-interview-type";
 
 import { PostInterviewDrawer } from "./post-interview-drawer";
 import { RescheduleInterviewModal } from "./reschedule-interview-modal";
@@ -71,7 +76,7 @@ const cardChrome =
 
 type BoardTab = "eligible" | "scheduled" | "completed" | "notEligible";
 
-type InterviewTypeFilter = "all" | "testimonial" | "project";
+type InterviewTypeFilter = TestimonialInterviewTypeFilter;
 
 type ZoomStatusFilter =
   | "all"
@@ -393,7 +398,9 @@ function postProductionEligibilityGateBadge(i: InterviewWithCandidate) {
   return <span className="text-[#6e6e73]">—</span>;
 }
 
-function interviewTypeBadge(t: "testimonial" | "project" | null | undefined) {
+function interviewTypeBadge(
+  t: TestimonialInterviewType | null | undefined,
+) {
   if (t === "testimonial") {
     return (
       <span className="inline-flex rounded-full bg-[#f0fdf4] px-3 py-1 text-xs font-medium text-[#16a34a]">
@@ -405,6 +412,13 @@ function interviewTypeBadge(t: "testimonial" | "project" | null | undefined) {
     return (
       <span className="inline-flex rounded-full bg-[#eff6ff] px-3 py-1 text-xs font-medium text-[#2563eb]">
         Project
+      </span>
+    );
+  }
+  if (t === "written_feedback") {
+    return (
+      <span className="inline-flex rounded-full bg-[#faf5ff] px-3 py-1 text-xs font-medium text-[#7c3aed]">
+        Written feedback
       </span>
     );
   }
@@ -1997,8 +2011,13 @@ export function InterviewsBoard() {
                         }
                       >
                         <option value="all">All</option>
-                        <option value="testimonial">Testimonial</option>
-                        <option value="project">Project</option>
+                        {TESTIMONIAL_INTERVIEW_TYPE_OPTIONS.map(
+                          ({ value, label }) => (
+                            <option key={value} value={value}>
+                              {label}
+                            </option>
+                          ),
+                        )}
                       </select>
                     </label>
                     <label className="flex w-full flex-col gap-1 sm:w-48">
@@ -2557,8 +2576,13 @@ export function InterviewsBoard() {
                         }
                       >
                         <option value="all">All</option>
-                        <option value="testimonial">Testimonial</option>
-                        <option value="project">Project</option>
+                        {TESTIMONIAL_INTERVIEW_TYPE_OPTIONS.map(
+                          ({ value, label }) => (
+                            <option key={value} value={value}>
+                              {label}
+                            </option>
+                          ),
+                        )}
                       </select>
                     </label>
                     <label className="flex w-full flex-col gap-1 sm:w-48">
@@ -2915,8 +2939,13 @@ export function InterviewsBoard() {
                         }
                       >
                         <option value="all">All</option>
-                        <option value="testimonial">Testimonial</option>
-                        <option value="project">Project</option>
+                        {TESTIMONIAL_INTERVIEW_TYPE_OPTIONS.map(
+                          ({ value, label }) => (
+                            <option key={value} value={value}>
+                              {label}
+                            </option>
+                          ),
+                        )}
                       </select>
                     </label>
                     <label className="flex w-full flex-col gap-1 sm:w-48">
@@ -3377,8 +3406,13 @@ export function InterviewsBoard() {
                         }
                       >
                         <option value="all">All</option>
-                        <option value="testimonial">Testimonial</option>
-                        <option value="project">Project</option>
+                        {TESTIMONIAL_INTERVIEW_TYPE_OPTIONS.map(
+                          ({ value, label }) => (
+                            <option key={value} value={value}>
+                              {label}
+                            </option>
+                          ),
+                        )}
                       </select>
                     </label>
                     <label className="flex w-full flex-col gap-1 sm:w-48">

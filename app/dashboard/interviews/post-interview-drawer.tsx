@@ -69,9 +69,11 @@ function serializeCategories(selected: string[]): string | null {
   return selected.join("\n");
 }
 
+import type { TestimonialInterviewType } from "@/lib/testimonial-interview-type";
+
 function hydrateRewardFromInterview(
   rewardItem: string | null | undefined,
-  interviewType: "testimonial" | "project",
+  interviewType: TestimonialInterviewType,
 ): { choice: RewardChoice; otherText: string } {
   const r = rewardItem?.trim();
   if (r === REWARD_NO_DISPATCH) return { choice: "no_dispatch", otherText: "" };
