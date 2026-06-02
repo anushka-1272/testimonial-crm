@@ -440,22 +440,22 @@ export default function DashboardPage() {
   );
 
   const interviewerGrid = useMemo(() => {
-    return interviewerOpts.map((opt, idx) => ({
-      value: opt.value,
-      name: opt.label,
-      count: interviewer[opt.value] ?? 0,
-      theme:
-        INTERVIEWER_THEME[opt.value] ??
-        INTERVIEWER_THEME_FALLBACK[idx % INTERVIEWER_THEME_FALLBACK.length],
-    }));
+    return interviewerOpts
+      .map((opt, idx) => ({
+        value: opt.value,
+        name: opt.label,
+        count: interviewer[opt.value] ?? 0,
+        theme:
+          INTERVIEWER_THEME[opt.value] ??
+          INTERVIEWER_THEME_FALLBACK[idx % INTERVIEWER_THEME_FALLBACK.length],
+      }))
+      .filter((row) => row.count > 0)
+      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
   }, [interviewer, interviewerOpts]);
 
   const interviewerTeamTotal = useMemo(() => {
-    return interviewerOpts.reduce(
-      (s, opt) => s + (interviewer[opt.value] ?? 0),
-      0,
-    );
-  }, [interviewer, interviewerOpts]);
+    return interviewerGrid.reduce((s, row) => s + row.count, 0);
+  }, [interviewerGrid]);
 
   const dashboardStatItems = useMemo(
     () => [
@@ -611,6 +611,11 @@ export default function DashboardPage() {
                   </p>
                 </div>
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  {!loading && interviewerGrid.length === 0 ? (
+                    <p className="text-sm text-gray-400 md:col-span-2">
+                      No completed testimonial interviews in this period.
+                    </p>
+                  ) : null}
                   {interviewerGrid.map((row) => {
                     const barPct =
                       loading || interviewerTeamTotal <= 0
@@ -638,10 +643,6 @@ export default function DashboardPage() {
                               <p className="mt-1 text-3xl font-bold tabular-nums text-[#1d1d1f]">
                                 —
                               </p>
-                            ) : row.count === 0 ? (
-                              <p className="mt-2 text-sm text-gray-400">
-                                No interviews yet
-                              </p>
                             ) : (
                               <>
                                 <p className="mt-1 text-3xl font-bold tabular-nums tracking-tight text-[#1d1d1f]">
@@ -654,7 +655,7 @@ export default function DashboardPage() {
                             )}
                           </div>
                         </div>
-                        {(loading || row.count > 0) && (
+                        {!loading && (
                           <div className="mt-4 h-2 w-full overflow-hidden rounded-full bg-gray-100">
                             <div
                               className="h-full rounded-full transition-all duration-300"
