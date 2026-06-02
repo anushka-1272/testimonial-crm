@@ -125,19 +125,6 @@ function avatarHue(s: string): string {
   return `hsl(${h % 360} 65% 42%)`;
 }
 
-function inPeriodIso(
-  iso: string | null | undefined,
-  rangeStart: string | null,
-  rangeEnd: string | null,
-): boolean {
-  if (!rangeStart && !rangeEnd) return true;
-  if (!iso?.trim()) return false;
-  const t = iso.trim();
-  if (rangeStart && t < rangeStart) return false;
-  if (rangeEnd && t >= rangeEnd) return false;
-  return true;
-}
-
 /** Testimonial funnel: exclude GWC-track candidates. */
 const TESTIMONIAL_CANDIDATE_TYPE_OR =
   "interview_type.is.null,interview_type.eq.testimonial,interview_type.eq.project";
@@ -313,21 +300,18 @@ export default function DashboardPage() {
     if (rangeEnd) fEligibleQ = fEligibleQ.lt("created_at", rangeEnd);
     const { count: fEligible } = await fEligibleQ;
 
-    const { data: scheduledRows } = await supabase
+    let fActiveScheduledQ = supabase
       .from("interviews")
-      .select("candidate_id, scheduled_date, created_at, candidates!inner(id)")
+      .select("id, candidates!inner(id)", { count: "exact", head: true })
       .eq("candidates.is_deleted", false)
-      .neq("interview_status", "cancelled");
-    const scheduledCandidateIds = new Set<string>();
-    for (const row of scheduledRows ?? []) {
-      const eventIso =
-        (row.scheduled_date as string | null) ??
-        (row.created_at as string | null);
-      if (!inPeriodIso(eventIso, rangeStart, rangeEnd)) continue;
-      const cid = row.candidate_id as string;
-      if (cid) scheduledCandidateIds.add(cid);
-    }
-    const fScheduled = scheduledCandidateIds.size;
+      .neq("interview_status", "cancelled")
+      .neq("interview_status", "completed")
+      .is("completed_at", null);
+    if (rangeStart)
+      fActiveScheduledQ = fActiveScheduledQ.gte("scheduled_date", rangeStart);
+    if (rangeEnd)
+      fActiveScheduledQ = fActiveScheduledQ.lt("scheduled_date", rangeEnd);
+    const { count: fActiveScheduled } = await fActiveScheduledQ;
 
     let fCompletedQ = supabase
       .from("interviews")
@@ -346,6 +330,9 @@ export default function DashboardPage() {
     if (rangeStart) fDispatchedQ = fDispatchedQ.gte("created_at", rangeStart);
     if (rangeEnd) fDispatchedQ = fDispatchedQ.lt("created_at", rangeEnd);
     const { count: fDispatched } = await fDispatchedQ;
+
+    const fScheduled =
+      (fActiveScheduled || 0) + (fCompleted || 0) + (fDispatched || 0);
 
     setFunnel({
       entries: entries || 0,
