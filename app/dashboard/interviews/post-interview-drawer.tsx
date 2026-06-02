@@ -10,6 +10,7 @@ import { getUserSafe } from "@/lib/supabase-auth";
 import { SLACK_RIANKA_EMAIL } from "@/lib/slack-contacts";
 import { voidSlackNotify } from "@/lib/slack-client";
 import { sendWatiNotification } from "@/lib/wati-client";
+import type { TestimonialInterviewType } from "@/lib/testimonial-interview-type";
 
 import {
   type InterviewWithCandidate,
@@ -68,8 +69,6 @@ function serializeCategories(selected: string[]): string | null {
   if (!selected.length) return null;
   return selected.join("\n");
 }
-
-import type { TestimonialInterviewType } from "@/lib/testimonial-interview-type";
 
 function hydrateRewardFromInterview(
   rewardItem: string | null | undefined,
@@ -156,6 +155,28 @@ function missingColumnError(
   );
 }
 
+type DispatchRowPick = {
+  id: string;
+  shipping_address: string | null;
+  reward_item?: string | null;
+  created_at?: string | null;
+};
+
+function pickProjectDispatchRow(rows: DispatchRowPick[]): DispatchRowPick | null {
+  if (!rows.length) return null;
+  const withAddress = rows.find((r) => r.shipping_address?.trim());
+  return withAddress ?? rows[0]!;
+}
+
+function isInterviewAlreadyCompleted(
+  interview:
+    | InterviewWithCandidate
+    | ProjectInterviewWithProjectCandidate,
+): boolean {
+  if (interview.completed_at?.trim()) return true;
+  return interview.interview_status === "completed";
+}
+
 type Props = {
   open: boolean;
   interview:
@@ -228,6 +249,10 @@ export function PostInterviewDrawer({
   const [funnel, setFunnel] = useState("");
   const [comments, setComments] = useState("");
   const [shippingAddress, setShippingAddress] = useState("");
+  const [existingDispatchId, setExistingDispatchId] = useState<string | null>(
+    null,
+  );
+  const [dispatchHydrated, setDispatchHydrated] = useState(false);
   const [rewardChoice, setRewardChoice] = useState<RewardChoice>("airpods");
   const [rewardOtherText, setRewardOtherText] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -253,7 +278,6 @@ export function PostInterviewDrawer({
     const f = interview.funnel?.trim() ?? "";
     setFunnel((FUNNELS as readonly string[]).includes(f) ? f : "");
     setComments(interview.comments ?? "");
-    setShippingAddress("");
     const hydrated = hydrateRewardFromInterview(
       interview.reward_item,
       interview.interview_type,
@@ -266,6 +290,68 @@ export function PostInterviewDrawer({
     setCategoryMenuOpen(false);
     setCategorySearch("");
   }, [open, interview?.id]);
+
+  useEffect(() => {
+    if (!open || !interview) {
+      setExistingDispatchId(null);
+      setShippingAddress("");
+      setDispatchHydrated(false);
+      return;
+    }
+
+    let cancelled = false;
+    void (async () => {
+      setDispatchHydrated(false);
+      setExistingDispatchId(null);
+      setShippingAddress("");
+
+      try {
+        if (isProjectInterviewRow(interview)) {
+          const { data, error } = await supabase
+            .from("project_dispatch")
+            .select("id, shipping_address, reward_item, created_at")
+            .eq("project_candidate_id", interview.project_candidate_id)
+            .order("created_at", { ascending: false })
+            .limit(10);
+
+          if (error) throw error;
+          const row = pickProjectDispatchRow(
+            (data ?? []) as DispatchRowPick[],
+          );
+          if (!cancelled && row) {
+            setExistingDispatchId(row.id);
+            if (row.shipping_address?.trim()) {
+              setShippingAddress(row.shipping_address.trim());
+            }
+          }
+        } else {
+          const { data, error } = await supabase
+            .from("dispatch")
+            .select("id, shipping_address, reward_item")
+            .eq("candidate_id", interview.candidate_id)
+            .maybeSingle();
+
+          if (error) throw error;
+          if (!cancelled && data) {
+            setExistingDispatchId(data.id);
+            if (data.shipping_address?.trim()) {
+              setShippingAddress(data.shipping_address.trim());
+            }
+          }
+        }
+      } catch {
+        if (!cancelled) {
+          setError("Could not load existing shipping address.");
+        }
+      } finally {
+        if (!cancelled) setDispatchHydrated(true);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open, interview, supabase]);
 
   useEffect(() => {
     if (!categoryMenuOpen) return;
@@ -283,6 +369,7 @@ export function PostInterviewDrawer({
   if (!open || !interview) return null;
 
   const isProject = isProjectInterviewRow(interview);
+  const isEditMode = isInterviewAlreadyCompleted(interview);
   const { name, email } = headerNameAndEmail(interview);
   const rewardCards = rewardCardsForInterview(interview);
 
@@ -293,7 +380,9 @@ export function PostInterviewDrawer({
     (isProject || selectedCategories.length > 0);
 
   const submitDisabled =
-    submitting || (eligible === true && !eligibleYesRequirementsMet);
+    submitting ||
+    !dispatchHydrated ||
+    (eligible === true && !eligibleYesRequirementsMet);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -340,7 +429,10 @@ export function PostInterviewDrawer({
 
     setSubmitting(true);
     try {
-      const completedAtIso = new Date().toISOString();
+      const completedAtIso =
+        isEditMode && interview.completed_at?.trim()
+          ? interview.completed_at.trim()
+          : new Date().toISOString();
       const table = isProject ? "project_interviews" : "interviews";
       const { error: upErr } = await supabase
         .from(table)
@@ -386,47 +478,49 @@ export function PostInterviewDrawer({
         });
       }
 
-      const completedLabel = format(
-        parseISO(completedAtIso),
-        "MMMM d, yyyy h:mm a",
-      );
-      const riankaMsg =
-        `🎬 Interview completed for *${candDisplay}*!\n` +
-        `Please check for raw recordings and add to Post Production in the CRM.\n` +
-        `*Interviewer:* ${interview.interviewer ?? "—"}\n` +
-        `*Completed:* ${completedLabel}`;
-      voidSlackNotify(supabase, SLACK_RIANKA_EMAIL, riankaMsg);
+      if (!isEditMode) {
+        const completedLabel = format(
+          parseISO(completedAtIso),
+          "MMMM d, yyyy h:mm a",
+        );
+        const riankaMsg =
+          `🎬 Interview completed for *${candDisplay}*!\n` +
+          `Please check for raw recordings and add to Post Production in the CRM.\n` +
+          `*Interviewer:* ${interview.interviewer ?? "—"}\n` +
+          `*Completed:* ${completedLabel}`;
+        voidSlackNotify(supabase, SLACK_RIANKA_EMAIL, riankaMsg);
 
-      const { phone: waPhone, name: waName } = watiCandidatePhoneAndName(interview);
-      void (async () => {
-        if (!waPhone) return;
-        try {
-          const ok = await sendWatiNotification(
-            supabase,
-            waPhone,
-            "interview_completed",
-            [{ name: "1", value: waName }],
-          );
-          if (!ok) onToast?.("WhatsApp notification failed to send");
-        } catch (err) {
-          console.error("WATI interview_completed:", err);
-          onToast?.("WhatsApp notification failed to send");
-        }
-        if (eligible === false) {
+        const { phone: waPhone, name: waName } = watiCandidatePhoneAndName(interview);
+        void (async () => {
+          if (!waPhone) return;
           try {
-            const ok2 = await sendWatiNotification(
+            const ok = await sendWatiNotification(
               supabase,
               waPhone,
-              "succcess_story_rejected",
+              "interview_completed",
               [{ name: "1", value: waName }],
             );
-            if (!ok2) onToast?.("WhatsApp notification failed to send");
+            if (!ok) onToast?.("WhatsApp notification failed to send");
           } catch (err) {
-            console.error("WATI succcess_story_rejected:", err);
+            console.error("WATI interview_completed:", err);
             onToast?.("WhatsApp notification failed to send");
           }
-        }
-      })();
+          if (eligible === false) {
+            try {
+              const ok2 = await sendWatiNotification(
+                supabase,
+                waPhone,
+                "succcess_story_rejected",
+                [{ name: "1", value: waName }],
+              );
+              if (!ok2) onToast?.("WhatsApp notification failed to send");
+            } catch (err) {
+              console.error("WATI succcess_story_rejected:", err);
+              onToast?.("WhatsApp notification failed to send");
+            }
+          }
+        })();
+      }
 
       if (
         eligible === true &&
@@ -434,36 +528,61 @@ export function PostInterviewDrawer({
         shippingAddress.trim() &&
         rewardItemForDb
       ) {
+        const dispatchFields = {
+          shipping_address: shippingAddress.trim(),
+          reward_item: rewardItemForDb,
+        };
+
         if (isProject) {
-          const baseDispatch = {
-            project_candidate_id: interview.project_candidate_id,
-            shipping_address: shippingAddress.trim(),
-            reward_item: rewardItemForDb,
-          };
-          let { error: dErr } = await supabase.from("project_dispatch").insert({
-            ...baseDispatch,
-            dispatch_status: "pending",
-          });
-          if (
-            dErr &&
-            missingColumnError(dErr.message, "project_dispatch", "dispatch_status")
-          ) {
-            // Backward compatibility for environments where project_dispatch still uses `status`.
-            const retryWithStatus = await supabase.from("project_dispatch").insert({
+          if (existingDispatchId) {
+            const { error: dErr } = await supabase
+              .from("project_dispatch")
+              .update(dispatchFields)
+              .eq("id", existingDispatchId);
+            if (dErr) {
+              setError(dErr.message);
+              setSubmitting(false);
+              return;
+            }
+          } else {
+            const baseDispatch = {
+              project_candidate_id: interview.project_candidate_id,
+              ...dispatchFields,
+            };
+            let { error: dErr } = await supabase.from("project_dispatch").insert({
               ...baseDispatch,
-              status: "pending",
+              dispatch_status: "pending",
             });
-            dErr = retryWithStatus.error;
             if (
               dErr &&
-              missingColumnError(dErr.message, "project_dispatch", "status")
+              missingColumnError(dErr.message, "project_dispatch", "dispatch_status")
             ) {
-              const retryWithoutStatus = await supabase
-                .from("project_dispatch")
-                .insert(baseDispatch);
-              dErr = retryWithoutStatus.error;
+              const retryWithStatus = await supabase.from("project_dispatch").insert({
+                ...baseDispatch,
+                status: "pending",
+              });
+              dErr = retryWithStatus.error;
+              if (
+                dErr &&
+                missingColumnError(dErr.message, "project_dispatch", "status")
+              ) {
+                const retryWithoutStatus = await supabase
+                  .from("project_dispatch")
+                  .insert(baseDispatch);
+                dErr = retryWithoutStatus.error;
+              }
+            }
+            if (dErr) {
+              setError(dErr.message);
+              setSubmitting(false);
+              return;
             }
           }
+        } else if (existingDispatchId) {
+          const { error: dErr } = await supabase
+            .from("dispatch")
+            .update(dispatchFields)
+            .eq("id", existingDispatchId);
           if (dErr) {
             setError(dErr.message);
             setSubmitting(false);
@@ -472,9 +591,8 @@ export function PostInterviewDrawer({
         } else {
           const { error: dErr } = await supabase.from("dispatch").insert({
             candidate_id: interview.candidate_id,
-            shipping_address: shippingAddress.trim(),
+            ...dispatchFields,
             dispatch_status: "pending",
-            reward_item: rewardItemForDb,
           });
           if (dErr) {
             setError(dErr.message);
@@ -484,7 +602,7 @@ export function PostInterviewDrawer({
         }
       }
 
-      if (email) {
+      if (!isEditMode && email) {
         await fetch("/api/send-email", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -538,7 +656,7 @@ export function PostInterviewDrawer({
         <div className="flex items-start justify-between border-b border-[#f5f5f5] px-5 py-4">
           <div>
             <h2 className="text-lg font-semibold text-[#1d1d1f]">
-              Complete interview
+              {isEditMode ? "Edit post-interview details" : "Complete interview"}
             </h2>
             <p className="text-sm text-[#6e6e73]">
               {name ?? "Candidate"} · Post-interview details
