@@ -37,7 +37,12 @@ import {
 } from "@/lib/team-roster";
 
 type YoutubeStatus = "private" | "unlisted" | "live";
+type YoutubeStatusFilter = YoutubeStatus | "all" | "no_link";
 type ReviewState = "done" | "not_done";
+
+function hasYoutubeLink(link: string | null | undefined): boolean {
+  return Boolean(link?.trim());
+}
 type SourceType = "testimonial" | "project";
 
 const DOMAIN_FILTER_OPTIONS = [
@@ -524,7 +529,7 @@ export function PostProductionDashboard() {
   const [savingId, setSavingId] = useState<string | null>(null);
 
   const [search, setSearch] = useState("");
-  const [ytFilter, setYtFilter] = useState<YoutubeStatus | "all">("all");
+  const [ytFilter, setYtFilter] = useState<YoutubeStatusFilter>("all");
   const [preFilter, setPreFilter] = useState<ReviewState | "all">("all");
   const [postFilter, setPostFilter] = useState<ReviewState | "all">("all");
   const [sourceFilter, setSourceFilter] = useState<SourceType | "all">("all");
@@ -794,7 +799,11 @@ export function PostProductionDashboard() {
         if (!matchesInterviewLanguageFilter(lang, interviewLanguageFilter))
           return false;
       }
-      if (ytFilter !== "all" && r.youtube_status !== ytFilter) return false;
+      if (ytFilter === "no_link") {
+        if (hasYoutubeLink(r.youtube_link)) return false;
+      } else if (ytFilter !== "all" && r.youtube_status !== ytFilter) {
+        return false;
+      }
       if (preFilter !== "all" && r.pre_edit_review !== preFilter) return false;
       if (postFilter !== "all" && r.post_edit_review !== postFilter)
         return false;
@@ -1887,10 +1896,11 @@ export function PostProductionDashboard() {
                     className="rounded-xl border border-[#e5e5e5] px-3 py-2 text-sm"
                     value={ytFilter}
                     onChange={(e) =>
-                      setYtFilter(e.target.value as YoutubeStatus | "all")
+                      setYtFilter(e.target.value as YoutubeStatusFilter)
                     }
                   >
                     <option value="all">All</option>
+                    <option value="no_link">No YouTube link</option>
                     <option value="private">Private</option>
                     <option value="unlisted">Unlisted</option>
                     <option value="live">Live</option>
