@@ -125,6 +125,23 @@ function avatarHue(s: string): string {
   return `hsl(${h % 360} 65% 42%)`;
 }
 
+function inPeriodIso(
+  iso: string | null | undefined,
+  rangeStart: string | null,
+  rangeEnd: string | null,
+): boolean {
+  if (!rangeStart && !rangeEnd) return true;
+  if (!iso?.trim()) return false;
+  const t = iso.trim();
+  if (rangeStart && t < rangeStart) return false;
+  if (rangeEnd && t >= rangeEnd) return false;
+  return true;
+}
+
+/** Testimonial funnel: exclude GWC-track candidates. */
+const TESTIMONIAL_CANDIDATE_TYPE_OR =
+  "interview_type.is.null,interview_type.eq.testimonial,interview_type.eq.project";
+
 const cardChrome =
   "shadow-[0_4px_16px_rgba(0,0,0,0.08)] border border-[#f0f0f0]";
 
@@ -286,24 +303,32 @@ export default function DashboardPage() {
     }
     setInterviewer(ivStats);
 
-    const { count: fEntries } = await supabase
-      .from("candidates")
-      .select("*", { count: "exact", head: true })
-      .eq("is_deleted", false);
     let fEligibleQ = supabase
-      .from("interviews")
-      .select("id, candidates!inner(id)", { count: "exact", head: true })
-      .or("interview_status.eq.completed,completed_at.not.is.null")
-      .not("completed_at", "is", null)
-      .eq("post_interview_eligible", true)
-      .eq("candidates.is_deleted", false);
-    if (rangeStart) fEligibleQ = fEligibleQ.gte("completed_at", rangeStart);
-    if (rangeEnd) fEligibleQ = fEligibleQ.lt("completed_at", rangeEnd);
+      .from("candidates")
+      .select("id", { count: "exact", head: true })
+      .eq("is_deleted", false)
+      .eq("eligibility_status", "eligible")
+      .or(TESTIMONIAL_CANDIDATE_TYPE_OR);
+    if (rangeStart) fEligibleQ = fEligibleQ.gte("created_at", rangeStart);
+    if (rangeEnd) fEligibleQ = fEligibleQ.lt("created_at", rangeEnd);
     const { count: fEligible } = await fEligibleQ;
-    const { count: fScheduled } = await supabase
+
+    const { data: scheduledRows } = await supabase
       .from("interviews")
-      .select("id, candidates!inner(id)", { count: "exact", head: true })
-      .eq("candidates.is_deleted", false);
+      .select("candidate_id, scheduled_date, created_at, candidates!inner(id)")
+      .eq("candidates.is_deleted", false)
+      .neq("interview_status", "cancelled");
+    const scheduledCandidateIds = new Set<string>();
+    for (const row of scheduledRows ?? []) {
+      const eventIso =
+        (row.scheduled_date as string | null) ??
+        (row.created_at as string | null);
+      if (!inPeriodIso(eventIso, rangeStart, rangeEnd)) continue;
+      const cid = row.candidate_id as string;
+      if (cid) scheduledCandidateIds.add(cid);
+    }
+    const fScheduled = scheduledCandidateIds.size;
+
     let fCompletedQ = supabase
       .from("interviews")
       .select("id, candidates!inner(id)", { count: "exact", head: true })
@@ -313,14 +338,19 @@ export default function DashboardPage() {
     if (rangeStart) fCompletedQ = fCompletedQ.gte("completed_at", rangeStart);
     if (rangeEnd) fCompletedQ = fCompletedQ.lt("completed_at", rangeEnd);
     const { count: fCompleted } = await fCompletedQ;
-    const { count: fDispatched } = await supabase
+
+    let fDispatchedQ = supabase
       .from("dispatch")
       .select("id, candidates!inner(id)", { count: "exact", head: true })
       .eq("candidates.is_deleted", false);
+    if (rangeStart) fDispatchedQ = fDispatchedQ.gte("created_at", rangeStart);
+    if (rangeEnd) fDispatchedQ = fDispatchedQ.lt("created_at", rangeEnd);
+    const { count: fDispatched } = await fDispatchedQ;
+
     setFunnel({
-      entries: fEntries || 0,
+      entries: entries || 0,
       eligible: fEligible || 0,
-      scheduled: fScheduled || 0,
+      scheduled: fScheduled,
       completed: fCompleted || 0,
       dispatched: fDispatched || 0,
     });
@@ -775,10 +805,13 @@ export default function DashboardPage() {
                         {loading
                           ? "—"
                           : funnelSteps[i].value > 0
-                            ? `${Math.round(
-                                (funnelSteps[i + 1].value /
-                                  funnelSteps[i].value) *
-                                  100,
+                            ? `${Math.min(
+                                100,
+                                Math.round(
+                                  (funnelSteps[i + 1].value /
+                                    funnelSteps[i].value) *
+                                    100,
+                                ),
                               )}%`
                             : "—"}
                       </p>
