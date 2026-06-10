@@ -1396,6 +1396,7 @@ export function ProjectInterviewsPanel({
         error?: string;
         total_rows?: number;
         upserted?: number;
+        phones_updated?: number;
         errors?: string[];
       };
       if (!res.ok) {
@@ -1404,7 +1405,10 @@ export function ProjectInterviewsPanel({
       }
       const up = j.upserted ?? 0;
       const total = j.total_rows ?? 0;
-      alert(`✅ Synced project sheet — ${up} upserted (${total} rows)`);
+      const phones = j.phones_updated ?? 0;
+      alert(
+        `✅ Synced project sheet — ${up} upserted (${total} rows)${phones > 0 ? `, ${phones} phone numbers updated` : ""}`,
+      );
       if (j.errors?.length) {
         onError(j.errors.slice(0, 5).join(" · "));
       }

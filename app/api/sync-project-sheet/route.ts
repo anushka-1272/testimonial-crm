@@ -4,10 +4,12 @@ import {
   cellToString,
   extractGvizJson,
   type GvizCell,
+  type GvizCol,
   type GvizResponse,
   type GvizRow,
   verifyRequestUser,
 } from "@/lib/google-sheet-gviz";
+import { phoneFromGvizCell } from "@/lib/phone-normalize";
 import { createSupabaseAdmin } from "@/lib/supabase";
 
 export const runtime = "nodejs";
@@ -18,10 +20,10 @@ const DEFAULT_PROJECT_SHEET_ID =
 const DEFAULT_PROJECT_SHEET_TAB = "Sheet1";
 
 /**
- * Fixed column indices (A = 0). Sheet row 1 is the header row returned by gviz
- * as `rows[0]`; data rows start at sheet row 2 → `rows[1]` onward.
+ * Default column indices (A = 0) when header labels are missing.
+ * Sheet row 1 is the header row returned by gviz as `rows[0]`; data rows start at row 2.
  */
-const COL = {
+const DEFAULT_COL = {
   email: 0,
   full_name: 1,
   whatsapp_number: 2,
@@ -31,6 +33,73 @@ const COL = {
   demo_link: 6,
 } as const;
 
+type ProjectSheetField = keyof typeof DEFAULT_COL;
+
+const HEADER_PATTERNS: Record<ProjectSheetField, RegExp[]> = {
+  email: [/^email/i],
+  full_name: [/^name$/i, /full name/i],
+  whatsapp_number: [
+    /^number$/i,
+    /phone/i,
+    /whatsapp/i,
+    /mobile/i,
+    /contact.*number/i,
+  ],
+  project_title: [/project title/i],
+  problem_statement: [/problem/i, /what real-world problem/i],
+  target_user: [/who is this problem for/i, /target user/i, /profession.*domain/i],
+  demo_link: [/demo/i, /google drive link/i, /drive link/i],
+};
+
+function buildProjectColumnMap(
+  cols: GvizCol[] | undefined,
+): Record<ProjectSheetField, number> {
+  const map: Record<ProjectSheetField, number> = { ...DEFAULT_COL };
+  if (!cols?.length) return map;
+
+  const used = new Set<number>();
+  for (const field of Object.keys(HEADER_PATTERNS) as ProjectSheetField[]) {
+    for (let i = 0; i < cols.length; i++) {
+      if (used.has(i)) continue;
+      const label = (cols[i]?.label ?? "").trim();
+      if (!label) continue;
+      if (HEADER_PATTERNS[field].some((pattern) => pattern.test(label))) {
+        map[field] = i;
+        used.add(i);
+        break;
+      }
+    }
+  }
+  return map;
+}
+
+function pickCell(cells: GvizCell[] | undefined, index: number): string {
+  if (!cells || index < 0) return "";
+  return cellToString(cells[index] ?? null).trim();
+}
+
+function resolvePhoneFromRow(
+  cells: GvizCell[],
+  colMap: Record<ProjectSheetField, number>,
+): string | null {
+  const primary = phoneFromGvizCell(cells[colMap.whatsapp_number] ?? null);
+  if (primary) return primary;
+
+  const skip = new Set([
+    colMap.email,
+    colMap.project_title,
+    colMap.problem_statement,
+    colMap.target_user,
+    colMap.demo_link,
+  ]);
+  for (let i = 0; i < cells.length; i++) {
+    if (skip.has(i) || i === colMap.whatsapp_number) continue;
+    const phone = phoneFromGvizCell(cells[i] ?? null);
+    if (phone) return phone;
+  }
+  return null;
+}
+
 function buildSheetUrl(): string {
   const id =
     process.env.GOOGLE_PROJECT_SHEET_ID?.trim() || DEFAULT_PROJECT_SHEET_ID;
@@ -39,16 +108,20 @@ function buildSheetUrl(): string {
   return `https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(tab)}`;
 }
 
-function pickCell(cells: GvizCell[] | undefined, index: number): string {
-  if (!cells || index < 0 || index >= cells.length) return "";
-  return cellToString(cells[index] ?? null).trim();
-}
-
 /** Normalize sheet email: trim, lowercase, reject empty / placeholder. */
 function normalizeEmail(raw: string): string | null {
   const s = raw.trim().toLowerCase();
   if (!s) return null;
   return s;
+}
+
+function isHeaderLikeEmail(raw: string): boolean {
+  const s = raw.trim().toLowerCase();
+  return s === "email address" || s === "email" || /^email[\s_-]/.test(s);
+}
+
+function escapeILikeExact(value: string): string {
+  return value.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
 }
 
 function isUniqueViolation(err: { code?: string; message?: string }): boolean {
@@ -59,39 +132,50 @@ function isUniqueViolation(err: { code?: string; message?: string }): boolean {
 
 type SupabaseAdmin = ReturnType<typeof createSupabaseAdmin>;
 
-/** All normalized emails already in project_candidates (paginated). */
-async function loadExistingEmails(supabase: SupabaseAdmin): Promise<{
-  emails: Set<string>;
+type ExistingProjectCandidate = {
+  id: string;
+  whatsapp_number: string | null;
+};
+
+/** Normalized email → existing row (paginated). */
+async function loadExistingCandidates(supabase: SupabaseAdmin): Promise<{
+  byEmail: Map<string, ExistingProjectCandidate>;
   error: string | null;
 }> {
-  const emails = new Set<string>();
+  const byEmail = new Map<string, ExistingProjectCandidate>();
   let rangeStart = 0;
   const pageSize = 1000;
   for (;;) {
     const { data: batch, error } = await supabase
       .from("project_candidates")
-      .select("email")
+      .select("id, email, whatsapp_number")
       .eq("is_deleted", false)
       .order("id", { ascending: true })
       .range(rangeStart, rangeStart + pageSize - 1);
     if (error) {
-      return { emails, error: error.message };
+      return { byEmail, error: error.message };
     }
     const chunk = batch ?? [];
     for (const r of chunk) {
       const e = normalizeEmail(String(r.email ?? ""));
-      if (e) emails.add(e);
+      if (!e) continue;
+      byEmail.set(e, {
+        id: String(r.id),
+        whatsapp_number:
+          (r.whatsapp_number as string | null | undefined)?.trim() || null,
+      });
     }
     if (chunk.length < pageSize) break;
     rangeStart += pageSize;
   }
-  return { emails, error: null };
+  return { byEmail, error: null };
 }
 
 export async function POST(request: Request) {
   const errors: string[] = [];
   let totalRows = 0;
   let upserted = 0;
+  let phonesUpdated = 0;
 
   try {
     const user = await verifyRequestUser(request);
@@ -145,24 +229,42 @@ export async function POST(request: Request) {
     }
 
     const rows = parsed.table?.rows ?? [];
-    if (rows.length < 2) {
+    if (rows.length < 1) {
       return NextResponse.json({
         total_rows: 0,
         upserted: 0,
+        phones_updated: 0,
         errors: [],
-        message:
-          rows.length === 0
-            ? "Sheet has no rows"
-            : "Sheet has only a header row; add data from row 2 onward",
+        message: "Sheet has no data rows",
       });
     }
 
-    const dataRows = rows.slice(1);
+    const colMap = buildProjectColumnMap(parsed.table?.cols);
+    const dataRows = rows.filter((row) => {
+      const emailRaw = pickCell(row.c ?? [], colMap.email);
+      if (!emailRaw) return false;
+      return !isHeaderLikeEmail(emailRaw);
+    });
     totalRows = dataRows.length;
+    if (totalRows < 1) {
+      return NextResponse.json({
+        total_rows: 0,
+        upserted: 0,
+        phones_updated: 0,
+        errors: [],
+        message: "Sheet has no valid data rows (check email column)",
+      });
+    }
+
     const supabase = createSupabaseAdmin();
 
-    const { emails: existingEmails, error: existingLoadErr } =
-      await loadExistingEmails(supabase);
+    console.log(
+      `[sync-project-sheet] Column map:`,
+      JSON.stringify(colMap),
+    );
+
+    const { byEmail: existingByEmail, error: existingLoadErr } =
+      await loadExistingCandidates(supabase);
     if (existingLoadErr) {
       return NextResponse.json(
         {
@@ -176,7 +278,7 @@ export async function POST(request: Request) {
     }
 
     console.log(
-      `[sync-project-sheet] Dedup: ${existingEmails.size} distinct emails already in project_candidates`,
+      `[sync-project-sheet] Dedup: ${existingByEmail.size} distinct emails already in project_candidates`,
     );
 
     for (let idxRow = 0; idxRow < dataRows.length; idxRow++) {
@@ -184,7 +286,7 @@ export async function POST(request: Request) {
       const sheetRowNum = idxRow + 2;
       const c = row.c ?? [];
 
-      const emailFromSheet = pickCell(c, COL.email);
+      const emailFromSheet = pickCell(c, colMap.email);
       const email = normalizeEmail(emailFromSheet);
       if (!email) {
         console.log("Skipping row (empty or invalid email):", {
@@ -194,34 +296,42 @@ export async function POST(request: Request) {
         continue;
       }
 
-      const fullName = pickCell(c, COL.full_name) || null;
+      const fullName = pickCell(c, colMap.full_name) || null;
+      const sheetPhone = resolvePhoneFromRow(c, colMap);
       const rowPayload = {
         email,
         full_name: fullName,
-        whatsapp_number: pickCell(c, COL.whatsapp_number) || null,
-        project_title: pickCell(c, COL.project_title) || null,
-        problem_statement: pickCell(c, COL.problem_statement) || null,
-        target_user: pickCell(c, COL.target_user) || null,
-        demo_link: pickCell(c, COL.demo_link) || null,
+        whatsapp_number: sheetPhone,
+        project_title: pickCell(c, colMap.project_title) || null,
+        problem_statement: pickCell(c, colMap.problem_statement) || null,
+        target_user: pickCell(c, colMap.target_user) || null,
+        demo_link: pickCell(c, colMap.demo_link) || null,
         synced_at: new Date().toISOString(),
       };
 
-      const updateFields = {
+      const updateFields: Record<string, unknown> = {
         full_name: rowPayload.full_name,
-        whatsapp_number: rowPayload.whatsapp_number,
         project_title: rowPayload.project_title,
         problem_statement: rowPayload.problem_statement,
         target_user: rowPayload.target_user,
         demo_link: rowPayload.demo_link,
         synced_at: rowPayload.synced_at,
       };
+      if (sheetPhone) {
+        updateFields.whatsapp_number = sheetPhone;
+      }
 
-      if (existingEmails.has(email)) {
-        console.log("Updating existing row:", { email, full_name: fullName });
+      const existing = existingByEmail.get(email);
+      if (existing) {
+        console.log("Updating existing row:", {
+          email,
+          full_name: fullName,
+          phone: sheetPhone ?? "(unchanged)",
+        });
         const { error: updateErr } = await supabase
           .from("project_candidates")
           .update(updateFields)
-          .eq("email", email)
+          .eq("id", existing.id)
           .eq("is_deleted", false);
 
         if (updateErr) {
@@ -229,28 +339,49 @@ export async function POST(request: Request) {
           errors.push(`Row ${sheetRowNum} (update): ${updateErr.message}`);
           continue;
         }
+        if (
+          sheetPhone &&
+          sheetPhone !== (existing.whatsapp_number ?? null)
+        ) {
+          phonesUpdated++;
+          existing.whatsapp_number = sheetPhone;
+        }
         upserted++;
         continue;
       }
 
-      console.log("Inserting new row:", { email, full_name: fullName });
-      const { error: insertErr } = await supabase
+      console.log("Inserting new row:", {
+        email,
+        full_name: fullName,
+        phone: sheetPhone ?? "(none)",
+      });
+      const { data: inserted, error: insertErr } = await supabase
         .from("project_candidates")
-        .insert(rowPayload);
+        .insert(rowPayload)
+        .select("id")
+        .maybeSingle();
 
-      if (!insertErr) {
-        existingEmails.add(email);
+      if (!insertErr && inserted?.id) {
+        existingByEmail.set(email, {
+          id: String(inserted.id),
+          whatsapp_number: sheetPhone,
+        });
+        if (sheetPhone) phonesUpdated++;
         upserted++;
         continue;
       }
 
-      console.log("Insert error:", insertErr);
+      if (insertErr) console.log("Insert error:", insertErr);
+      else if (!inserted?.id) {
+        errors.push(`Row ${sheetRowNum}: insert succeeded but no id returned`);
+        continue;
+      }
 
-      if (isUniqueViolation(insertErr)) {
+      if (insertErr && isUniqueViolation(insertErr)) {
         const { data: clash } = await supabase
           .from("project_candidates")
-          .select("is_deleted")
-          .eq("email", email)
+          .select("id, is_deleted, whatsapp_number")
+          .ilike("email", escapeILikeExact(email))
           .maybeSingle();
         if (clash?.is_deleted) {
           errors.push(
@@ -258,10 +389,16 @@ export async function POST(request: Request) {
           );
           continue;
         }
+        if (!clash?.id) {
+          errors.push(
+            `Row ${sheetRowNum}: duplicate email but no active row found`,
+          );
+          continue;
+        }
         const { error: updateErr } = await supabase
           .from("project_candidates")
           .update(updateFields)
-          .eq("email", email)
+          .eq("id", clash.id)
           .eq("is_deleted", false);
         if (updateErr) {
           console.log("Update after duplicate insert error:", updateErr);
@@ -270,18 +407,28 @@ export async function POST(request: Request) {
           );
           continue;
         }
-        existingEmails.add(email);
+        const prevPhone =
+          (clash.whatsapp_number as string | null | undefined)?.trim() || null;
+        existingByEmail.set(email, {
+          id: String(clash.id),
+          whatsapp_number: sheetPhone ?? prevPhone,
+        });
+        if (sheetPhone && sheetPhone !== prevPhone) phonesUpdated++;
         upserted++;
         continue;
       }
 
-      errors.push(`Row ${sheetRowNum} (insert): ${insertErr.message}`);
+      if (insertErr && !isUniqueViolation(insertErr)) {
+        errors.push(`Row ${sheetRowNum} (insert): ${insertErr.message}`);
+        continue;
+      }
     }
 
     // UI lists project_candidates by created_at DESC so the newest rows appear first after sync.
     return NextResponse.json({
       total_rows: totalRows,
       upserted,
+      phones_updated: phonesUpdated,
       errors,
       sheet_id: process.env.GOOGLE_PROJECT_SHEET_ID?.trim() || DEFAULT_PROJECT_SHEET_ID,
       tab:
@@ -295,6 +442,7 @@ export async function POST(request: Request) {
         error: msg,
         total_rows: totalRows,
         upserted,
+        phones_updated: phonesUpdated,
         errors,
       },
       { status: 500 },

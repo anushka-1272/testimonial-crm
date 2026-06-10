@@ -3,10 +3,11 @@ import { createClient } from "@supabase/supabase-js";
 import { getUserSafe } from "@/lib/supabase-auth";
 
 export type GvizCell = { v?: unknown; f?: string | null } | null | undefined;
+export type GvizCol = { id?: string; label?: string; type?: string };
 export type GvizRow = { c?: GvizCell[] };
 
 export type GvizTable = {
-  cols?: unknown[];
+  cols?: GvizCol[];
   rows?: GvizRow[];
 };
 
@@ -68,6 +69,10 @@ export function cellToString(cell: GvizCell): string {
   if (v == null || v === "") return "";
   if (typeof v === "boolean") return v ? "Yes" : "No";
   if (typeof v === "number" && Number.isFinite(v)) {
+    if (Number.isInteger(v) || Math.abs(v - Math.round(v)) < 1e-6) {
+      const asInt = Math.round(v);
+      return Number.isSafeInteger(asInt) ? String(asInt) : v.toFixed(0);
+    }
     return String(v);
   }
   if (typeof v === "string") {
