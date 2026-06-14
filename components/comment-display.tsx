@@ -22,7 +22,7 @@ export function StoredCommentText({
 
   if (!text) {
     return (
-      <span className={`text-[#aeaeb2] ${className}`.trim()}>{emptyLabel}</span>
+      <span className={`text-muted/80 ${className}`.trim()}>{emptyLabel}</span>
     );
   }
 
@@ -33,7 +33,7 @@ export function StoredCommentText({
 
   return (
     <div className={`min-w-0 ${className}`.trim()}>
-      <p className="whitespace-pre-wrap break-words text-[#1d1d1f]">{shown}</p>
+      <p className="whitespace-pre-wrap break-words text-foreground">{shown}</p>
       {needsCollapse ? (
         <button
           type="button"
@@ -57,11 +57,11 @@ export function CommentTableCell({
 }) {
   const text = value?.trim() ?? "";
   if (!text) {
-    return <span className="text-[#aeaeb2]">—</span>;
+    return <span className="text-muted/80">—</span>;
   }
   return (
     <div
-      className={`max-h-28 min-w-[8rem] max-w-[20rem] overflow-y-auto whitespace-pre-wrap break-words text-xs leading-snug text-[#1d1d1f] ${className}`.trim()}
+      className={`max-h-28 min-w-[8rem] max-w-[20rem] overflow-y-auto whitespace-pre-wrap break-words text-xs leading-snug text-foreground ${className}`.trim()}
       title={text}
     >
       {text}

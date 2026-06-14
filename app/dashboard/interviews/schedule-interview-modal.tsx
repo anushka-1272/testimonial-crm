@@ -322,8 +322,8 @@ export function ScheduleInterviewModal({
   };
 
   const inp =
-    "mt-1 w-full rounded-xl border border-[#e5e5e5] px-3 py-2.5 text-sm text-[#1d1d1f] focus:border-[#3b82f6] focus:outline-none focus:ring-0";
-  const lab = "text-xs font-medium uppercase tracking-widest text-[#aeaeb2]";
+    "mt-1 w-full rounded-xl border border-border px-3 py-2.5 text-sm text-foreground focus:border-[#3b82f6] focus:outline-none focus:ring-0";
+  const lab = "text-xs font-medium uppercase tracking-widest text-muted/80";
 
   return (
     <div className={modalOverlayClass}>
@@ -338,10 +338,10 @@ export function ScheduleInterviewModal({
       >
         <div className="mb-4 flex items-start justify-between">
           <div>
-            <h2 className="text-lg font-semibold text-[#1d1d1f]">
+            <h2 className="text-lg font-semibold text-foreground">
               Schedule interview
             </h2>
-            <p className="text-sm text-[#6e6e73]">
+            <p className="text-sm text-muted">
               {isProject
                 ? `${projectCandidate!.project_title?.trim() || "Project"} · ${projectCandidate!.email}`
                 : `${candidate!.full_name ?? "Candidate"} · ${candidate!.email}`}
@@ -349,7 +349,7 @@ export function ScheduleInterviewModal({
           </div>
           <button
             type="button"
-            className="rounded-xl p-2 text-[#aeaeb2] transition-all hover:bg-[#f5f5f7] hover:text-[#1d1d1f]"
+            className="rounded-xl p-2 text-muted/80 transition-all hover:bg-background hover:text-foreground"
             onClick={onClose}
           >
             ✕
@@ -358,7 +358,7 @@ export function ScheduleInterviewModal({
 
         <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4 text-sm">
           {error && (
-            <p className="rounded-xl border border-[#f0f0f0] bg-[#f5f5f7] px-3 py-2 text-sm text-[#1d1d1f]">
+            <p className="rounded-xl border border-border-subtle bg-background px-3 py-2 text-sm text-foreground">
               {error}
             </p>
           )}
@@ -444,8 +444,8 @@ export function ScheduleInterviewModal({
                     }}
                     className={`flex flex-col items-center justify-center rounded-xl border p-3 text-center transition-colors ${
                       selected
-                        ? "border-black bg-black text-white"
-                        : "border-gray-200 bg-white text-gray-700 hover:border-gray-300"
+                        ? "border-black bg-black text-background"
+                        : "border-border bg-elevated text-foreground/80 hover:border-gray-300"
                     }`}
                   >
                     <span className="text-[11px] font-medium leading-tight">
@@ -469,7 +469,7 @@ export function ScheduleInterviewModal({
 
           <label className="block text-sm">
             <span className={lab}>POC (assigned)</span>
-            <div className="mt-1 rounded-xl border border-[#e5e5e5] bg-[#f5f5f7] px-3 py-2.5 text-sm text-[#6e6e73]">
+            <div className="mt-1 rounded-xl border border-border bg-background px-3 py-2.5 text-sm text-muted">
               {poc || "—"}
             </div>
           </label>
@@ -487,7 +487,7 @@ export function ScheduleInterviewModal({
           <div className="flex justify-end gap-2 pt-2">
             <button
               type="button"
-              className="rounded-xl border border-[#f0f0f0] bg-white px-4 py-2 text-sm font-medium text-[#1d1d1f] transition-all hover:bg-[#fafafa]"
+              className="rounded-xl border border-border-subtle bg-elevated px-4 py-2 text-sm font-medium text-foreground transition-all hover:bg-background/80"
               onClick={onClose}
             >
               Cancel
@@ -495,7 +495,7 @@ export function ScheduleInterviewModal({
             <button
               type="submit"
               disabled={submitting}
-              className="rounded-xl bg-[#1d1d1f] px-4 py-2 text-sm font-medium text-white transition-all hover:bg-[#2d2d2f] disabled:opacity-50"
+              className="rounded-xl bg-foreground px-4 py-2 text-sm font-medium text-background transition-all hover:opacity-90 disabled:opacity-50"
             >
               {submitting ? "Saving…" : "Save as Draft"}
             </button>

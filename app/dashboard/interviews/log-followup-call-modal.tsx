@@ -231,8 +231,8 @@ export function LogFollowupCallModal({
   const emailLine = row.email?.trim() || "";
 
   const inp =
-    "mt-1 w-full rounded-xl border border-[#e5e5e5] px-3 py-2.5 text-sm text-[#1d1d1f] focus:border-[#3b82f6] focus:outline-none focus:ring-0";
-  const lab = "text-xs font-medium uppercase tracking-widest text-[#aeaeb2]";
+    "mt-1 w-full rounded-xl border border-border px-3 py-2.5 text-sm text-foreground focus:border-[#3b82f6] focus:outline-none focus:ring-0";
+  const lab = "text-xs font-medium uppercase tracking-widest text-muted/80";
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -484,22 +484,22 @@ export function LogFollowupCallModal({
       >
         <div className="mb-4 flex items-start justify-between">
           <div>
-            <h2 className="text-lg font-semibold text-[#1d1d1f]">
+            <h2 className="text-lg font-semibold text-foreground">
               Log Follow-up Call
             </h2>
-            <p className="text-sm text-[#6e6e73]">
+            <p className="text-sm text-muted">
               {displayName} · {phone}
             </p>
             {emailLine ? (
-              <p className="mt-0.5 text-xs text-[#6e6e73]">{emailLine}</p>
+              <p className="mt-0.5 text-xs text-muted">{emailLine}</p>
             ) : null}
-            <p className="mt-1 text-sm font-medium text-[#1d1d1f]">
+            <p className="mt-1 text-sm font-medium text-foreground">
               Attempt {nextAttempt} of 3
             </p>
           </div>
           <button
             type="button"
-            className="rounded-xl p-2 text-[#aeaeb2] transition-all hover:bg-[#f5f5f7] hover:text-[#1d1d1f]"
+            className="rounded-xl p-2 text-muted/80 transition-all hover:bg-background hover:text-foreground"
             onClick={onClose}
           >
             ✕
@@ -508,7 +508,7 @@ export function LogFollowupCallModal({
 
         <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4 text-sm">
           {error ? (
-            <p className="rounded-xl border border-[#f0f0f0] bg-[#f5f5f7] px-3 py-2 text-sm text-[#1d1d1f]">
+            <p className="rounded-xl border border-border-subtle bg-background px-3 py-2 text-sm text-foreground">
               {error}
             </p>
           ) : null}
@@ -525,7 +525,7 @@ export function LogFollowupCallModal({
               {OUTCOMES.map((o) => (
                 <label
                   key={o.value}
-                  className="flex cursor-pointer gap-3 rounded-xl border border-[#e5e5e5] p-3 has-[:checked]:border-[#1d1d1f] has-[:checked]:bg-[#fafafa]"
+                  className="flex cursor-pointer gap-3 rounded-xl border border-border p-3 has-[:checked]:border-foreground has-[:checked]:bg-background/80"
                 >
                   <input
                     type="radio"
@@ -536,7 +536,7 @@ export function LogFollowupCallModal({
                     className="mt-1"
                   />
                   <span>
-                    <span className="font-medium text-[#1d1d1f]">
+                    <span className="font-medium text-foreground">
                       {o.value === "no_answer" && "📞 "}
                       {o.value === "callback" && "📅 "}
                       {o.value === "interested" && "✅ "}
@@ -546,7 +546,7 @@ export function LogFollowupCallModal({
                       {o.value === "wrong_number" && "📵 "}
                       {o.label}
                     </span>
-                    <span className="mt-0.5 block text-xs text-[#6e6e73]">
+                    <span className="mt-0.5 block text-xs text-muted">
                       {o.hint}
                     </span>
                   </span>
@@ -595,7 +595,7 @@ export function LogFollowupCallModal({
           <div className="flex justify-end gap-2 pt-2">
             <button
               type="button"
-              className="rounded-xl border border-[#f0f0f0] bg-white px-4 py-2 text-sm font-medium text-[#1d1d1f] transition-all hover:bg-[#fafafa]"
+              className="rounded-xl border border-border-subtle bg-elevated px-4 py-2 text-sm font-medium text-foreground transition-all hover:bg-background/80"
               onClick={onClose}
             >
               Cancel
@@ -603,7 +603,7 @@ export function LogFollowupCallModal({
             <button
               type="submit"
               disabled={submitting}
-              className="rounded-xl bg-[#1d1d1f] px-4 py-2 text-sm font-medium text-white transition-all hover:bg-[#2d2d2f] disabled:opacity-50"
+              className="rounded-xl bg-foreground px-4 py-2 text-sm font-medium text-background transition-all hover:opacity-90 disabled:opacity-50"
             >
               {submitting ? "Saving…" : "Save"}
             </button>

@@ -198,8 +198,8 @@ export function EditInterviewDetailsModal({
   const isScheduledStatus = interview.interview_status === "scheduled";
 
   const inp =
-    "mt-1 w-full rounded-xl border border-[#e5e5e5] px-3 py-2.5 text-sm text-[#1d1d1f] focus:border-[#3b82f6] focus:outline-none focus:ring-0";
-  const lab = "text-xs font-medium uppercase tracking-widest text-[#aeaeb2]";
+    "mt-1 w-full rounded-xl border border-border px-3 py-2.5 text-sm text-foreground focus:border-[#3b82f6] focus:outline-none focus:ring-0";
+  const lab = "text-xs font-medium uppercase tracking-widest text-muted/80";
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -324,14 +324,14 @@ export function EditInterviewDetailsModal({
       >
         <div className="mb-4 flex items-start justify-between">
           <div>
-            <h2 className="text-lg font-semibold text-[#1d1d1f]">
+            <h2 className="text-lg font-semibold text-foreground">
               Edit Interview Details
             </h2>
-            <p className="text-sm text-[#6e6e73]">{candName}</p>
+            <p className="text-sm text-muted">{candName}</p>
           </div>
           <button
             type="button"
-            className="rounded-xl p-2 text-[#aeaeb2] transition-all hover:bg-[#f5f5f7] hover:text-[#1d1d1f]"
+            className="rounded-xl p-2 text-muted/80 transition-all hover:bg-background hover:text-foreground"
             onClick={onClose}
           >
             ✕
@@ -340,7 +340,7 @@ export function EditInterviewDetailsModal({
 
         <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4 text-sm">
           {error ? (
-            <p className="rounded-xl border border-[#f0f0f0] bg-[#f5f5f7] px-3 py-2 text-sm text-[#1d1d1f]">
+            <p className="rounded-xl border border-border-subtle bg-background px-3 py-2 text-sm text-foreground">
               {error}
             </p>
           ) : null}
@@ -428,8 +428,8 @@ export function EditInterviewDetailsModal({
                     }}
                     className={`flex flex-col items-center justify-center rounded-xl border p-3 text-center transition-colors ${
                       selected
-                        ? "border-black bg-black text-white"
-                        : "border-gray-200 bg-white text-gray-700 hover:border-gray-300"
+                        ? "border-black bg-black text-background"
+                        : "border-border bg-elevated text-foreground/80 hover:border-gray-300"
                     }`}
                   >
                     <span className="text-[11px] font-medium leading-tight">
@@ -454,7 +454,7 @@ export function EditInterviewDetailsModal({
           <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end">
             <button
               type="button"
-              className="rounded-xl border border-[#f0f0f0] bg-white px-4 py-2.5 text-sm font-medium text-[#1d1d1f] transition-all hover:bg-[#fafafa]"
+              className="rounded-xl border border-border-subtle bg-elevated px-4 py-2.5 text-sm font-medium text-foreground transition-all hover:bg-background/80"
               onClick={onClose}
             >
               Cancel
@@ -462,7 +462,7 @@ export function EditInterviewDetailsModal({
             <button
               type="submit"
               disabled={submitting}
-              className="rounded-xl bg-[#1d1d1f] px-4 py-2.5 text-sm font-medium text-white transition-all hover:bg-[#2d2d2f] disabled:opacity-50"
+              className="rounded-xl bg-foreground px-4 py-2.5 text-sm font-medium text-background transition-all hover:opacity-90 disabled:opacity-50"
             >
               {submitting ? "Saving…" : "Save Changes"}
             </button>

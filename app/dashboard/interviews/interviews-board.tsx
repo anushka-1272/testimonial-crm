@@ -46,6 +46,15 @@ import {
   type TestimonialInterviewType,
   type TestimonialInterviewTypeFilter,
 } from "@/lib/testimonial-interview-type";
+import {
+  cardChrome,
+  filterInput as filterInp,
+  tabActive,
+  tabInactive,
+  tdBase,
+  thBase,
+  tableWrap,
+} from "@/lib/ui-theme-classes";
 
 import { PostInterviewDrawer } from "./post-interview-drawer";
 import { RescheduleInterviewModal } from "./reschedule-interview-modal";
@@ -71,8 +80,7 @@ const PAGE_SIZE = 20;
 const INTERVIEW_SELECT = `id, candidate_id, scheduled_date, previous_scheduled_date, reschedule_reason, completed_at, interviewer, interviewer_assigned_at, zoom_link, zoom_account, not_eligible_recording_link, language, interview_language, invitation_sent, poc, remarks, reminder_count, interview_status, post_interview_eligible, reward_item, category, funnel, comments, interview_type, candidates ( id, created_at, full_name, email, whatsapp_number, poc_assigned, is_deleted )`;
 const INTERVIEW_SELECT_LEGACY = `id, candidate_id, scheduled_date, previous_scheduled_date, reschedule_reason, completed_at, interviewer, interviewer_assigned_at, zoom_link, zoom_account, language, interview_language, invitation_sent, poc, remarks, reminder_count, interview_status, post_interview_eligible, reward_item, category, funnel, comments, interview_type, candidates ( id, created_at, full_name, email, whatsapp_number, poc_assigned, is_deleted )`;
 
-const cardChrome =
-  "rounded-2xl bg-white shadow-[0_4px_16px_rgba(0,0,0,0.08)] border border-[#f0f0f0]";
+
 
 type BoardTab = "eligible" | "scheduled" | "completed" | "notEligible";
 
@@ -306,7 +314,7 @@ function normalizeLinkedInTrackStatus(
 }
 
 function linkedInPipelineBadge(status: LinkedInTrackStatus | null) {
-  if (!status) return <span className="text-[#6e6e73]">—</span>;
+  if (!status) return <span className="text-muted">—</span>;
   switch (status) {
     case "pending_post":
       return (
@@ -339,7 +347,7 @@ function linkedInPipelineBadge(status: LinkedInTrackStatus | null) {
         </span>
       );
     default:
-      return <span className="text-[#6e6e73]">—</span>;
+      return <span className="text-muted">—</span>;
   }
 }
 
@@ -376,7 +384,7 @@ function postInterviewEligibleBadge(
       </span>
     );
   }
-  return <span className="text-[#6e6e73]">—</span>;
+  return <span className="text-muted">—</span>;
 }
 
 /** Post production intake: strict eligible / not eligible (no “No Dispatch” branch). */
@@ -395,7 +403,7 @@ function postProductionEligibilityGateBadge(i: InterviewWithCandidate) {
       </span>
     );
   }
-  return <span className="text-[#6e6e73]">—</span>;
+  return <span className="text-muted">—</span>;
 }
 
 function interviewTypeBadge(
@@ -422,7 +430,7 @@ function interviewTypeBadge(
       </span>
     );
   }
-  return <span className="text-[#6e6e73]">—</span>;
+  return <span className="text-muted">—</span>;
 }
 
 function interviewLanguageBadge(i: InterviewWithCandidate) {
@@ -451,7 +459,7 @@ function zoomStatusColumn(
   return (
     <div className="flex flex-col items-start gap-2">
       {awaitingIv ? (
-        <span className="inline-flex rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-600">
+        <span className="inline-flex rounded-full bg-border/50 px-2.5 py-1 text-xs font-medium text-muted">
           Awaiting Interviewer
         </span>
       ) : awaitingZoom ? (
@@ -463,10 +471,10 @@ function zoomStatusColumn(
           Zoom Added
         </span>
       ) : (
-        <span className="text-[#6e6e73]">—</span>
+        <span className="text-muted">—</span>
       )}
       {hasZoom && acct ? (
-        <p className="text-xs text-[#6e6e73]">Account: {acct}</p>
+        <p className="text-xs text-muted">Account: {acct}</p>
       ) : null}
       <div className="flex flex-wrap items-center gap-2">
         {link ? (
@@ -475,7 +483,7 @@ function zoomStatusColumn(
             target="_blank"
             rel="noopener noreferrer"
             title={acct ? `Account: ${acct}` : "Join Zoom meeting"}
-            className="inline-flex rounded-lg border border-[#e5e5e5] bg-white px-2.5 py-1 text-xs font-medium text-[#1d1d1f] transition-colors hover:bg-[#f5f5f7]"
+            className="inline-flex rounded-lg border border-border bg-elevated px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:bg-background"
           >
             Join
           </a>
@@ -498,7 +506,7 @@ function zoomStatusColumn(
                 ? "Assign interviewer first"
                 : undefined
           }
-          className="rounded-lg border border-[#1d1d1f] bg-white px-2.5 py-1 text-xs font-medium text-[#1d1d1f] hover:bg-[#fafafa] disabled:cursor-not-allowed disabled:border-[#d1d5db] disabled:text-[#9ca3af]"
+          className="rounded-lg border border-foreground bg-elevated px-2.5 py-1 text-xs font-medium text-foreground hover:bg-background/80 disabled:cursor-not-allowed disabled:opacity-40"
           onClick={() => (canOpenZoomModal ? opts.onOpenZoomModal(i) : undefined)}
         >
           {link ? "Edit" : "Add Zoom Details"}
@@ -1750,12 +1758,7 @@ export function InterviewsBoard() {
     void loadData();
   };
 
-  const tableWrap =
-    "overflow-hidden rounded-2xl border border-[#f0f0f0] bg-white shadow-sm";
-  const thBase =
-    "border-b border-gray-100 bg-[#fafafa] py-3 px-4 text-xs font-semibold tracking-wider text-gray-400";
-  const tdBase =
-    "border-b border-gray-100 py-4 px-4 text-sm align-middle text-[#1d1d1f]";
+  // tableWrap, thBase, tdBase imported from ui-theme-classes
 
   const thName = `${thBase} min-w-[180px] text-left`;
   const thEmail = `${thBase} min-w-[220px] text-left`;
@@ -1769,13 +1772,13 @@ export function InterviewsBoard() {
   const thActions = `${thBase} min-w-[220px] text-right max-lg:min-w-[170px] max-lg:px-2 max-lg:py-2 max-lg:text-[10px]`;
 
   const tdName = `${tdBase} min-w-[180px] text-left`;
-  const tdEmail = `${tdBase} min-w-[220px] text-left text-[#6e6e73]`;
+  const tdEmail = `${tdBase} min-w-[220px] text-left text-muted`;
   const tdInterviewType = `${tdBase} min-w-[150px] text-center`;
   const tdLanguage = `${tdBase} min-w-[120px] text-center`;
   const tdTrack = `${tdBase} min-w-[130px] text-left align-top`;
   const tdLinkedInStatus = `${tdBase} min-w-[140px] text-left align-top`;
   const tdPocAssigned = `${tdBase} min-w-[160px] text-left`;
-  const tdAssignedOn = `${tdBase} min-w-[140px] text-left text-[#6e6e73]`;
+  const tdAssignedOn = `${tdBase} min-w-[140px] text-left text-muted`;
   const tdFollowUp = `${tdBase} min-w-[150px] text-left align-top`;
   const tdActions = `${tdBase} min-w-[220px] text-right max-lg:min-w-[170px] max-lg:px-2 max-lg:py-2 max-lg:text-xs`;
 
@@ -1786,30 +1789,29 @@ export function InterviewsBoard() {
   const thZoomStatus = `${thBase} min-w-[150px] text-left`;
   const tdZoomStatus = `${tdBase} min-w-[150px] text-left align-top`;
   const thPocInterview = `${thBase} min-w-[120px] text-left`;
-  const tdPocInterview = `${tdBase} min-w-[120px] text-left text-[#6e6e73]`;
+  const tdPocInterview = `${tdBase} min-w-[120px] text-left text-muted`;
 
   const thReason = `${thBase} min-w-[180px] text-left`;
-  const tdReason = `${tdBase} min-w-[180px] text-left text-[#6e6e73]`;
+  const tdReason = `${tdBase} min-w-[180px] text-left text-muted`;
 
   const thDateOnly = `${thBase} min-w-[130px] text-left`;
   const tdDateOnly = `${tdBase} min-w-[130px] text-left`;
   const thCompletedOn = `${thBase} min-w-[170px] text-left`;
   const tdCompletedOn = `${tdBase} min-w-[170px] text-left`;
   const thPhone = `${thBase} min-w-[130px] text-left`;
-  const tdPhone = `${tdBase} min-w-[130px] text-left text-[#6e6e73]`;
+  const tdPhone = `${tdBase} min-w-[130px] text-left text-muted`;
   const thPostInterview = `${thBase} min-w-[160px] text-left`;
   const tdPostInterview = `${tdBase} min-w-[160px] text-left`;
   const thPostProdGate = `${thBase} min-w-[120px] text-left`;
   const tdPostProdGate = `${tdBase} min-w-[120px] text-left align-top`;
   const thCategoryCol = `${thBase} min-w-[120px] text-left`;
-  const tdCategoryCol = `${tdBase} min-w-[120px] text-left text-[#6e6e73]`;
+  const tdCategoryCol = `${tdBase} min-w-[120px] text-left text-muted`;
   const thFunnelCol = `${thBase} min-w-[120px] text-left`;
-  const tdFunnelCol = `${tdBase} min-w-[120px] text-left text-[#6e6e73]`;
+  const tdFunnelCol = `${tdBase} min-w-[120px] text-left text-muted`;
   const thCommentsCol = `${thBase} min-w-[160px] text-left`;
-  const tdCommentsCol = `${tdBase} min-w-[160px] text-left text-[#6e6e73]`;
+  const tdCommentsCol = `${tdBase} min-w-[160px] text-left text-muted`;
 
-  const filterInp =
-    "w-full rounded-xl border border-[#e5e5e5] bg-white px-3 py-2 text-sm text-[#1d1d1f] focus:border-[#3b82f6] focus:outline-none focus:ring-0";
+  // filterInp imported from ui-theme-classes
   const nameLinkBtn =
     "max-w-full min-w-0 truncate text-left font-medium text-[#3b82f6] hover:underline focus:outline-none focus:ring-2 focus:ring-[#3b82f6]/25 rounded-sm";
 
@@ -1824,7 +1826,7 @@ export function InterviewsBoard() {
         : filters[tab as SimpleTab].page;
     if (total === 0) return null;
     return (
-      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#f0f0f0] bg-[#fafafa] px-4 py-3 text-xs text-[#6e6e73]">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border-subtle bg-background/60 px-4 py-3 text-xs text-muted">
         <span>
           Showing {page * PAGE_SIZE + 1}–
           {Math.min((page + 1) * PAGE_SIZE, total)} of {total}
@@ -1833,7 +1835,7 @@ export function InterviewsBoard() {
           <button
             type="button"
             disabled={page <= 0}
-            className="rounded-lg border border-[#e5e5e5] bg-white px-3 py-1.5 font-medium text-[#1d1d1f] transition-colors hover:bg-[#f5f5f7] disabled:cursor-not-allowed disabled:opacity-40"
+            className="rounded-lg border border-border bg-elevated px-3 py-1.5 font-medium text-foreground transition-colors hover:bg-background disabled:cursor-not-allowed disabled:opacity-40"
             onClick={() => setPage(tab, page - 1)}
           >
             Previous
@@ -1841,7 +1843,7 @@ export function InterviewsBoard() {
           <button
             type="button"
             disabled={page >= totalPages - 1}
-            className="rounded-lg border border-[#e5e5e5] bg-white px-3 py-1.5 font-medium text-[#1d1d1f] transition-colors hover:bg-[#f5f5f7] disabled:cursor-not-allowed disabled:opacity-40"
+            className="rounded-lg border border-border bg-elevated px-3 py-1.5 font-medium text-foreground transition-colors hover:bg-background disabled:cursor-not-allowed disabled:opacity-40"
             onClick={() => setPage(tab, page + 1)}
           >
             Next
@@ -1852,14 +1854,14 @@ export function InterviewsBoard() {
   };
 
   const emptyState = (
-    <div className="py-16 text-center text-sm text-[#aeaeb2]">
+    <div className="py-16 text-center text-sm text-muted/80">
       No entries here yet
     </div>
   );
 
   if (!supabase) {
     return (
-      <div className="mx-auto max-w-lg px-8 py-16 text-center text-sm text-[#6e6e73]">
+      <div className="mx-auto max-w-lg px-8 py-16 text-center text-sm text-muted">
         {error ?? "Cannot connect to Supabase."}
       </div>
     );
@@ -1869,30 +1871,30 @@ export function InterviewsBoard() {
     <>
       {toastMessage ? (
         <div
-          className="fixed bottom-6 left-1/2 z-[70] max-w-md -translate-x-1/2 rounded-xl border border-[#e5e5e5] bg-[#1d1d1f] px-4 py-3 text-center text-sm font-medium text-white shadow-lg"
+          className="fixed bottom-6 left-1/2 z-[70] max-w-md -translate-x-1/2 rounded-xl border border-border bg-foreground px-4 py-3 text-center text-sm font-medium text-background shadow-lg"
           role="status"
         >
           {toastMessage}
         </div>
       ) : null}
 
-      <header className="sticky top-14 z-30 bg-[#f5f5f7]/90 px-4 py-4 backdrop-blur-md sm:px-6 sm:py-5 lg:top-0 lg:px-8 lg:py-6">
-        <h1 className="text-xl font-semibold tracking-tight text-[#1d1d1f] sm:text-2xl">
+      <header className="sticky top-14 z-30 bg-background/90 px-4 py-4 backdrop-blur-md sm:px-6 sm:py-5 lg:top-0 lg:px-8 lg:py-6">
+        <h1 className="text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
           Testimonial Interviews
         </h1>
-        <p className="mt-1 text-sm text-[#6e6e73]">
+        <p className="mt-1 text-sm text-muted">
           Eligible and scheduled testimonial interviews · real-time updates
         </p>
         {showViewOnlyBadge ? (
-          <span className="mt-2 inline-flex rounded-full bg-[#f3f4f6] px-3 py-1 text-xs font-medium text-[#6b7280]">
+          <span className="mt-2 inline-flex rounded-full bg-border/40 px-3 py-1 text-xs font-medium text-muted">
             View only
           </span>
         ) : null}
       </header>
 
-      <main className="mx-auto max-w-[1600px] px-4 pb-10 pt-2 text-sm text-[#1d1d1f] sm:px-6 lg:px-8 lg:pb-12">
+      <main className="mx-auto max-w-[1600px] px-4 pb-10 pt-2 text-sm text-foreground sm:px-6 lg:px-8 lg:pb-12">
         {error && (
-          <div className="mb-4 rounded-2xl border border-[#f0f0f0] bg-white px-4 py-3 text-sm text-[#1d1d1f] shadow-[0_4px_16px_rgba(0,0,0,0.08)]">
+          <div className="mb-4 rounded-2xl border border-border-subtle bg-elevated px-4 py-3 text-sm text-foreground shadow-card">
             {error}
             <button
               type="button"
@@ -1905,7 +1907,7 @@ export function InterviewsBoard() {
         )}
 
         {loading ? (
-          <p className="text-sm text-[#6e6e73]">Loading…</p>
+          <p className="text-sm text-muted">Loading…</p>
         ) : (
           <>
             <section className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
@@ -1938,10 +1940,10 @@ export function InterviewsBoard() {
                 ] as const
               ).map((card) => (
                 <div key={card.key} className={`p-4 sm:p-6 ${cardChrome}`}>
-                  <p className="mb-2 text-xs font-medium text-[#6e6e73] sm:mb-3">
+                  <p className="mb-2 text-xs font-medium text-muted sm:mb-3">
                     {card.label}
                   </p>
-                  <p className="text-2xl font-bold tabular-nums tracking-tight text-[#1d1d1f] sm:text-4xl">
+                  <p className="text-2xl font-bold tabular-nums tracking-tight text-foreground sm:text-4xl">
                     {card.value}
                   </p>
                   <div className={`mt-4 h-0.5 w-8 rounded-full ${card.accent}`} />
@@ -1949,7 +1951,7 @@ export function InterviewsBoard() {
               ))}
             </section>
 
-            <div className="mb-6 -mx-1 border-b border-[#e5e5e5] pb-1">
+            <div className="mb-6 -mx-1 border-b border-border pb-1">
               <div className="flex gap-2 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] lg:flex-wrap lg:overflow-visible [&::-webkit-scrollbar]:hidden">
                 {(
                   [
@@ -1964,13 +1966,11 @@ export function InterviewsBoard() {
                     type="button"
                     onClick={() => setActiveTab(id)}
                     className={`shrink-0 ${
-                      activeTab === id
-                        ? "rounded-full bg-[#1d1d1f] px-3 py-2 text-sm font-medium text-white sm:px-4"
-                        : "rounded-full px-3 py-2 text-sm font-medium text-[#6e6e73] transition-colors hover:text-[#1d1d1f] sm:px-4"
+                      activeTab === id ? tabActive : tabInactive
                     }`}
                   >
                     {label}{" "}
-                    <span className={activeTab === id ? "text-white/80" : ""}>
+                    <span className={activeTab === id ? "text-background/80" : ""}>
                       ({n})
                     </span>
                   </button>
@@ -1982,7 +1982,7 @@ export function InterviewsBoard() {
               <section className="space-y-4">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
                   <label className="flex min-w-0 flex-1 flex-col gap-1">
-                    <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+                    <span className="text-xs uppercase tracking-widest text-muted/80">
                       Search
                     </span>
                     <input
@@ -1997,7 +1997,7 @@ export function InterviewsBoard() {
                   </label>
                   <div className="flex w-full flex-col gap-3 sm:flex-row lg:w-auto lg:shrink-0">
                     <label className="flex w-full flex-col gap-1 sm:w-48">
-                      <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+                      <span className="text-xs uppercase tracking-widest text-muted/80">
                         Interview type
                       </span>
                       <select
@@ -2021,7 +2021,7 @@ export function InterviewsBoard() {
                       </select>
                     </label>
                     <label className="flex w-full flex-col gap-1 sm:w-48">
-                      <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+                      <span className="text-xs uppercase tracking-widest text-muted/80">
                         POC
                       </span>
                       <select
@@ -2043,7 +2043,7 @@ export function InterviewsBoard() {
                       </select>
                     </label>
                     <label className="flex w-full flex-col gap-1 sm:w-48">
-                      <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+                      <span className="text-xs uppercase tracking-widest text-muted/80">
                         Interviewer
                       </span>
                       <select
@@ -2121,7 +2121,7 @@ export function InterviewsBoard() {
                                     </button>
                                     <button
                                       type="button"
-                                      className="w-fit text-left text-xs font-medium text-[#6e6e73] underline decoration-[#d1d5db] underline-offset-2 hover:text-[#1d1d1f]"
+                                      className="w-fit text-left text-xs font-medium text-muted underline decoration-[#d1d5db] underline-offset-2 hover:text-foreground"
                                       onClick={() =>
                                         setFollowupHistoryFor({
                                           id: c.id,
@@ -2144,7 +2144,7 @@ export function InterviewsBoard() {
                                 </td>
                                 <td className={tdTrack}>
                                   <div className="flex flex-col gap-1.5">
-                                    <span className="text-[#6e6e73]">—</span>
+                                    <span className="text-muted">—</span>
                                     <button
                                       type="button"
                                       disabled={liBusyId === c.id}
@@ -2162,7 +2162,7 @@ export function InterviewsBoard() {
                                     <div className="flex flex-wrap items-center gap-2">
                                       <select
                                         disabled={pocSavingId === c.id}
-                                        className="max-w-[180px] rounded-lg border border-[#e5e5e5] bg-white px-2 py-1.5 text-xs text-[#1d1d1f] focus:border-[#3b82f6] focus:outline-none disabled:opacity-50"
+                                        className="max-w-[180px] rounded-lg border border-border bg-elevated px-2 py-1.5 text-xs text-foreground focus:border-[#3b82f6] focus:outline-none disabled:opacity-50"
                                         value={c.poc_assigned ?? ""}
                                         onChange={(e) =>
                                           void handlePocChange(
@@ -2186,7 +2186,7 @@ export function InterviewsBoard() {
                                       {hasPoc ? (
                                         <button
                                           type="button"
-                                          className="text-xs font-medium text-[#6e6e73] underline decoration-[#d1d5db] underline-offset-2 hover:text-[#1d1d1f]"
+                                          className="text-xs font-medium text-muted underline decoration-[#d1d5db] underline-offset-2 hover:text-foreground"
                                           onClick={() => setPocEditingId(null)}
                                         >
                                           Cancel
@@ -2195,7 +2195,7 @@ export function InterviewsBoard() {
                                     </div>
                                   ) : (
                                     <div className="flex items-center gap-2">
-                                      <span className="inline-flex rounded-full bg-[#f5f5f7] px-2.5 py-1 text-xs font-medium text-[#6e6e73]">
+                                      <span className="inline-flex rounded-full bg-background px-2.5 py-1 text-xs font-medium text-muted">
                                         {c.poc_assigned}
                                       </span>
                                       <button
@@ -2232,7 +2232,7 @@ export function InterviewsBoard() {
                                           ? "View only"
                                           : undefined
                                       }
-                                      className="rounded-lg border border-[#e5e5e5] bg-white px-3 py-1.5 text-xs font-medium text-[#1d1d1f] transition-colors hover:bg-[#fafafa] disabled:cursor-not-allowed disabled:opacity-50"
+                                      className="rounded-lg border border-border bg-elevated px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-background/80 disabled:cursor-not-allowed disabled:opacity-50"
                                       onClick={() =>
                                         canEditEligibleTab
                                           ? setLogFollowupFor(c)
@@ -2246,7 +2246,7 @@ export function InterviewsBoard() {
                                         type="button"
                                         disabled={scheduleDisabled}
                                         title={scheduleTitle}
-                                        className="rounded-lg bg-[#1d1d1f] px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-[#2d2d2f] disabled:cursor-not-allowed disabled:bg-[#d1d5db] disabled:text-[#6b7280]"
+                                        className="rounded-lg bg-foreground px-3 py-1.5 text-xs font-medium text-background transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
                                         onClick={() => {
                                           setScheduleProjectFor(null);
                                           setScheduleFor({
@@ -2284,12 +2284,12 @@ export function InterviewsBoard() {
                     <button
                       type="button"
                       onClick={() => setNotInterestedOpen((o) => !o)}
-                      className="flex w-full items-center justify-between rounded-xl border border-[#f0f0f0] bg-[#fafafa] px-4 py-3 text-left text-sm font-semibold text-[#1d1d1f] transition-colors hover:bg-[#f5f5f7]"
+                      className="flex w-full items-center justify-between rounded-xl border border-border-subtle bg-background/80 px-4 py-3 text-left text-sm font-semibold text-foreground transition-colors hover:bg-background"
                     >
                       <span>
                         Not Interested ({notInterestedEligibleFiltered.length})
                       </span>
-                      <span className="text-[#6e6e73]">
+                      <span className="text-muted">
                         {notInterestedOpen ? "▼" : "▶"}
                       </span>
                     </button>
@@ -2331,7 +2331,7 @@ export function InterviewsBoard() {
                                           !canEditEligibleTab ||
                                           restoringNotInterestedId === c.id
                                         }
-                                        className="rounded-lg border border-[#1d1d1f] bg-white px-3 py-1.5 text-xs font-medium text-[#1d1d1f] hover:bg-[#fafafa] disabled:cursor-not-allowed disabled:opacity-50"
+                                        className="rounded-lg border border-foreground bg-elevated px-3 py-1.5 text-xs font-medium text-foreground hover:bg-background/80 disabled:cursor-not-allowed disabled:opacity-50"
                                         onClick={() =>
                                           void handleMarkNotInterestedActive(c)
                                         }
@@ -2355,10 +2355,10 @@ export function InterviewsBoard() {
                 {linkedInTrackFiltered.length > 0 ? (
                   <div className="mt-10 space-y-3">
                     <div>
-                      <h2 className="text-base font-semibold text-[#1d1d1f]">
+                      <h2 className="text-base font-semibold text-foreground">
                         LinkedIn track
                       </h2>
-                      <p className="mt-1 text-xs text-[#6e6e73]">
+                      <p className="mt-1 text-xs text-muted">
                         These candidates are no longer in the interview
                         scheduling queue. Update posting status and reward
                         eligibility below.
@@ -2418,7 +2418,7 @@ export function InterviewsBoard() {
                                         <button
                                           type="button"
                                           disabled={busy}
-                                          className="rounded-lg border border-[#e5e5e5] bg-white px-2.5 py-1.5 text-xs font-medium text-[#1d1d1f] hover:bg-[#f5f5f7] disabled:opacity-50"
+                                          className="rounded-lg border border-border bg-elevated px-2.5 py-1.5 text-xs font-medium text-foreground hover:bg-background disabled:opacity-50"
                                           onClick={() =>
                                             void setLinkedInPipelineStatus(
                                               c,
@@ -2434,7 +2434,7 @@ export function InterviewsBoard() {
                                         <button
                                           type="button"
                                           disabled={busy}
-                                          className="rounded-lg border border-[#e5e5e5] bg-white px-2.5 py-1.5 text-xs font-medium text-[#1d1d1f] hover:bg-[#f5f5f7] disabled:opacity-50"
+                                          className="rounded-lg border border-border bg-elevated px-2.5 py-1.5 text-xs font-medium text-foreground hover:bg-background disabled:opacity-50"
                                           onClick={() =>
                                             void setLinkedInPipelineStatus(
                                               c,
@@ -2478,14 +2478,14 @@ export function InterviewsBoard() {
                                       ) : null}
                                       {st === "eligible" ||
                                       st === "not_eligible" ? (
-                                        <span className="text-xs text-[#aeaeb2]">
+                                        <span className="text-xs text-muted/80">
                                           —
                                         </span>
                                       ) : null}
                                       <button
                                         type="button"
                                         disabled={busy}
-                                        className="rounded-lg border border-[#e5e5e5] bg-white px-2.5 py-1.5 text-xs font-medium text-[#6e6e73] hover:bg-[#f5f5f7] disabled:opacity-50"
+                                        className="rounded-lg border border-border bg-elevated px-2.5 py-1.5 text-xs font-medium text-muted hover:bg-background disabled:opacity-50"
                                         onClick={() =>
                                           void revokeLinkedInTrack(c)
                                         }
@@ -2501,7 +2501,7 @@ export function InterviewsBoard() {
                         </table>
                       </div>
                       {linkedInPageData.total > 0 ? (
-                        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#f0f0f0] bg-[#fafafa] px-4 py-3 text-xs text-[#6e6e73]">
+                        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border-subtle bg-background/60 px-4 py-3 text-xs text-muted">
                           <span>
                             Showing {linkedInListPage * PAGE_SIZE + 1}–
                             {Math.min(
@@ -2514,7 +2514,7 @@ export function InterviewsBoard() {
                             <button
                               type="button"
                               disabled={linkedInListPage <= 0}
-                              className="rounded-lg border border-[#e5e5e5] bg-white px-3 py-1.5 font-medium text-[#1d1d1f] transition-colors hover:bg-[#f5f5f7] disabled:cursor-not-allowed disabled:opacity-40"
+                              className="rounded-lg border border-border bg-elevated px-3 py-1.5 font-medium text-foreground transition-colors hover:bg-background disabled:cursor-not-allowed disabled:opacity-40"
                               onClick={() =>
                                 setLinkedInListPage((p) => Math.max(0, p - 1))
                               }
@@ -2527,7 +2527,7 @@ export function InterviewsBoard() {
                                 linkedInListPage >=
                                 linkedInPageData.totalPages - 1
                               }
-                              className="rounded-lg border border-[#e5e5e5] bg-white px-3 py-1.5 font-medium text-[#1d1d1f] transition-colors hover:bg-[#f5f5f7] disabled:cursor-not-allowed disabled:opacity-40"
+                              className="rounded-lg border border-border bg-elevated px-3 py-1.5 font-medium text-foreground transition-colors hover:bg-background disabled:cursor-not-allowed disabled:opacity-40"
                               onClick={() =>
                                 setLinkedInListPage((p) => p + 1)
                               }
@@ -2547,7 +2547,7 @@ export function InterviewsBoard() {
               <section className="space-y-4">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
                   <label className="flex min-w-0 flex-1 flex-col gap-1">
-                    <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+                    <span className="text-xs uppercase tracking-widest text-muted/80">
                       Search
                     </span>
                     <input
@@ -2562,7 +2562,7 @@ export function InterviewsBoard() {
                   </label>
                   <div className="flex w-full flex-col gap-3 sm:flex-row lg:w-auto lg:shrink-0">
                     <label className="flex w-full flex-col gap-1 sm:w-48">
-                      <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+                      <span className="text-xs uppercase tracking-widest text-muted/80">
                         Interview type
                       </span>
                       <select
@@ -2586,7 +2586,7 @@ export function InterviewsBoard() {
                       </select>
                     </label>
                     <label className="flex w-full flex-col gap-1 sm:w-48">
-                      <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+                      <span className="text-xs uppercase tracking-widest text-muted/80">
                         Language
                       </span>
                       <select
@@ -2607,7 +2607,7 @@ export function InterviewsBoard() {
                       </select>
                     </label>
                     <label className="flex w-full flex-col gap-1 sm:w-48">
-                      <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+                      <span className="text-xs uppercase tracking-widest text-muted/80">
                         Zoom status
                       </span>
                       <select
@@ -2627,7 +2627,7 @@ export function InterviewsBoard() {
                       </select>
                     </label>
                     <label className="flex w-full flex-col gap-1 sm:w-48">
-                      <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+                      <span className="text-xs uppercase tracking-widest text-muted/80">
                         POC
                       </span>
                       <select
@@ -2649,7 +2649,7 @@ export function InterviewsBoard() {
                       </select>
                     </label>
                     <label className="flex w-full flex-col gap-1 sm:w-48">
-                      <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+                      <span className="text-xs uppercase tracking-widest text-muted/80">
                         Interviewer
                       </span>
                       <select
@@ -2771,7 +2771,7 @@ export function InterviewsBoard() {
                                           ? "View only"
                                           : undefined
                                       }
-                                      className="rounded-lg border border-[#d4d4d8] bg-white px-3 py-1.5 text-xs font-medium text-[#1d1d1f] hover:bg-[#fafafa] disabled:cursor-not-allowed disabled:border-[#d1d5db] disabled:text-[#9ca3af]"
+                                      className="rounded-lg border border-border bg-elevated px-3 py-1.5 text-xs font-medium text-foreground hover:bg-background/80 disabled:cursor-not-allowed disabled:opacity-40"
                                       onClick={() =>
                                         canEditScheduledTab
                                           ? setEditInterviewFor(i)
@@ -2793,7 +2793,7 @@ export function InterviewsBoard() {
                                             ? "View only"
                                             : undefined
                                         }
-                                        className="rounded-lg bg-[#2563eb] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#1d4ed8] disabled:cursor-not-allowed disabled:bg-[#d1d5db] disabled:text-[#6b7280]"
+                                        className="rounded-lg bg-[#2563eb] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#1d4ed8] disabled:cursor-not-allowed disabled:opacity-40"
                                         onClick={() =>
                                           canEditScheduledTab
                                             ? setAssignInterviewerFor(i)
@@ -2817,7 +2817,7 @@ export function InterviewsBoard() {
                                             ? "Already completed"
                                             : "Send back to callings (same POC)"
                                       }
-                                      className="rounded-lg border border-[#d4d4d8] bg-white px-3 py-1.5 text-xs font-medium text-[#1d1d1f] hover:bg-[#fafafa] disabled:cursor-not-allowed disabled:border-[#d1d5db] disabled:text-[#9ca3af]"
+                                      className="rounded-lg border border-border bg-elevated px-3 py-1.5 text-xs font-medium text-foreground hover:bg-background/80 disabled:cursor-not-allowed disabled:opacity-40"
                                       onClick={() => {
                                         if (
                                           !canEditScheduledTab ||
@@ -2844,7 +2844,7 @@ export function InterviewsBoard() {
                                             ? "Already completed"
                                             : undefined
                                       }
-                                      className="rounded-lg bg-[#ea580c] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#c2410c] disabled:cursor-not-allowed disabled:bg-[#d1d5db] disabled:text-[#6b7280]"
+                                      className="rounded-lg bg-[#ea580c] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#c2410c] disabled:cursor-not-allowed disabled:opacity-40"
                                       onClick={() => {
                                         console.debug(
                                           "[InterviewsBoard] reschedule click",
@@ -2877,7 +2877,7 @@ export function InterviewsBoard() {
                                               ? "Add Zoom details first"
                                             : undefined
                                       }
-                                      className="rounded-lg bg-[#16a34a] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#15803d] disabled:cursor-not-allowed disabled:bg-[#d1d5db] disabled:text-[#6b7280]"
+                                      className="rounded-lg bg-[#16a34a] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#15803d] disabled:cursor-not-allowed disabled:opacity-40"
                                       onClick={() => {
                                         console.debug(
                                           "[InterviewsBoard] mark completed click",
@@ -2910,7 +2910,7 @@ export function InterviewsBoard() {
               <section className="space-y-4">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
                   <label className="flex min-w-0 flex-1 flex-col gap-1">
-                    <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+                    <span className="text-xs uppercase tracking-widest text-muted/80">
                       Search
                     </span>
                     <input
@@ -2925,7 +2925,7 @@ export function InterviewsBoard() {
                   </label>
                   <div className="flex w-full flex-col gap-3 sm:flex-row lg:w-auto lg:shrink-0">
                     <label className="flex w-full flex-col gap-1 sm:w-48">
-                      <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+                      <span className="text-xs uppercase tracking-widest text-muted/80">
                         Interview type
                       </span>
                       <select
@@ -2949,7 +2949,7 @@ export function InterviewsBoard() {
                       </select>
                     </label>
                     <label className="flex w-full flex-col gap-1 sm:w-48">
-                      <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+                      <span className="text-xs uppercase tracking-widest text-muted/80">
                         Language
                       </span>
                       <select
@@ -2973,17 +2973,17 @@ export function InterviewsBoard() {
                       type="button"
                       onClick={exportCompletedCsv}
                       disabled={completedFiltered.length === 0}
-                      className="rounded-xl border border-[#e5e5e5] bg-white px-4 py-2 text-sm font-medium text-[#1d1d1f] transition-colors hover:bg-[#f5f5f7] disabled:cursor-not-allowed disabled:opacity-40"
+                      className="rounded-xl border border-border bg-elevated px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-background disabled:cursor-not-allowed disabled:opacity-40"
                     >
                       Export CSV
                     </button>
                   </div>
                 </div>
 
-                <div className="flex flex-col gap-3 rounded-2xl border border-[#f0f0f0] bg-white p-4 shadow-sm">
+                <div className="flex flex-col gap-3 rounded-2xl border border-border-subtle bg-elevated p-4 shadow-sm">
                   <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
                     <label className="flex flex-col gap-1">
-                      <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+                      <span className="text-xs uppercase tracking-widest text-muted/80">
                         Post-interview eligible
                       </span>
                       <select
@@ -3001,7 +3001,7 @@ export function InterviewsBoard() {
                       </select>
                     </label>
                     <label className="flex flex-col gap-1">
-                      <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+                      <span className="text-xs uppercase tracking-widest text-muted/80">
                         Interviewer
                       </span>
                       <select
@@ -3025,7 +3025,7 @@ export function InterviewsBoard() {
                       </select>
                     </label>
                     <label className="flex flex-col gap-1">
-                      <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+                      <span className="text-xs uppercase tracking-widest text-muted/80">
                         POC
                       </span>
                       <select
@@ -3049,7 +3049,7 @@ export function InterviewsBoard() {
                       </select>
                     </label>
                     <label className="flex flex-col gap-1">
-                      <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+                      <span className="text-xs uppercase tracking-widest text-muted/80">
                         Completed from
                       </span>
                       <input
@@ -3064,7 +3064,7 @@ export function InterviewsBoard() {
                       />
                     </label>
                     <label className="flex flex-col gap-1">
-                      <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+                      <span className="text-xs uppercase tracking-widest text-muted/80">
                         Completed to
                       </span>
                       <input
@@ -3079,7 +3079,7 @@ export function InterviewsBoard() {
                       />
                     </label>
                     <label className="flex flex-col gap-1 sm:col-span-2 lg:col-span-1 xl:col-span-2">
-                      <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+                      <span className="text-xs uppercase tracking-widest text-muted/80">
                         Category
                       </span>
                       <select
@@ -3100,7 +3100,7 @@ export function InterviewsBoard() {
                       </select>
                     </label>
                   </div>
-                  <div className="flex justify-end border-t border-gray-100 pt-3">
+                  <div className="flex justify-end border-t border-border pt-3">
                     <button
                       type="button"
                       className="text-sm font-medium text-[#3b82f6] hover:text-[#2563eb]"
@@ -3214,7 +3214,7 @@ export function InterviewsBoard() {
                                           ? POST_PRODUCTION_ELIGIBILITY_TOOLTIP
                                           : undefined
                                       }
-                                      className="rounded-lg bg-[#1d1d1f] px-2.5 py-1 text-xs font-medium text-white hover:bg-[#2d2d2f] disabled:cursor-not-allowed disabled:bg-[#d1d5db] disabled:text-[#6b7280]"
+                                      className="rounded-lg bg-foreground px-2.5 py-1 text-xs font-medium text-background hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
                                       onMouseDown={(e) => e.stopPropagation()}
                                       onClick={(e) => {
                                         e.stopPropagation();
@@ -3244,22 +3244,22 @@ export function InterviewsBoard() {
                                     </button>
                                     {completedPopoverId === i.id ? (
                                       <div
-                                        className="absolute right-0 top-full z-50 mt-2 w-[min(20rem,calc(100vw-2rem))] max-w-sm rounded-xl border border-[#f0f0f0] bg-white p-4 text-left shadow-[0_8px_24px_rgba(0,0,0,0.12)]"
+                                        className="absolute right-0 top-full z-50 mt-2 w-[min(20rem,calc(100vw-2rem))] max-w-sm rounded-xl border border-border-subtle bg-elevated p-4 text-left shadow-[0_8px_24px_rgba(0,0,0,0.12)]"
                                         onMouseDown={(e) =>
                                           e.stopPropagation()
                                         }
                                         role="dialog"
                                         aria-label="Post-interview details"
                                       >
-                                        <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">
+                                        <p className="text-xs font-semibold uppercase tracking-wider text-muted">
                                           Post-interview details
                                         </p>
                                         <dl className="mt-3 space-y-3 text-sm">
                                           <div>
-                                            <dt className="text-xs text-[#aeaeb2]">
+                                            <dt className="text-xs text-muted/80">
                                               Post-interview eligible
                                             </dt>
-                                            <dd className="mt-0.5 text-[#1d1d1f]">
+                                            <dd className="mt-0.5 text-foreground">
                                               {i.post_interview_eligible ===
                                               true
                                                 ? i.reward_item?.trim() ===
@@ -3273,44 +3273,44 @@ export function InterviewsBoard() {
                                             </dd>
                                           </div>
                                           <div>
-                                            <dt className="text-xs text-[#aeaeb2]">
+                                            <dt className="text-xs text-muted/80">
                                               Reward item
                                             </dt>
-                                            <dd className="mt-0.5 text-[#1d1d1f]">
+                                            <dd className="mt-0.5 text-foreground">
                                               {i.reward_item?.trim() || "—"}
                                             </dd>
                                           </div>
                                           <div>
-                                            <dt className="text-xs text-[#aeaeb2]">
+                                            <dt className="text-xs text-muted/80">
                                               Category
                                             </dt>
-                                            <dd className="mt-0.5 whitespace-pre-wrap break-words text-[#1d1d1f]">
+                                            <dd className="mt-0.5 whitespace-pre-wrap break-words text-foreground">
                                               {catLines.length
                                                 ? catLines.join("\n")
                                                 : "—"}
                                             </dd>
                                           </div>
                                           <div>
-                                            <dt className="text-xs text-[#aeaeb2]">
+                                            <dt className="text-xs text-muted/80">
                                               Funnel
                                             </dt>
-                                            <dd className="mt-0.5 whitespace-pre-wrap break-words text-[#1d1d1f]">
+                                            <dd className="mt-0.5 whitespace-pre-wrap break-words text-foreground">
                                               {i.funnel?.trim() || "—"}
                                             </dd>
                                           </div>
                                           <div>
-                                            <dt className="text-xs text-[#aeaeb2]">
+                                            <dt className="text-xs text-muted/80">
                                               Comments
                                             </dt>
-                                            <dd className="mt-0.5 whitespace-pre-wrap break-words text-[#1d1d1f]">
+                                            <dd className="mt-0.5 whitespace-pre-wrap break-words text-foreground">
                                               {i.comments?.trim() || "—"}
                                             </dd>
                                           </div>
                                           <div>
-                                            <dt className="text-xs text-[#aeaeb2]">
+                                            <dt className="text-xs text-muted/80">
                                               Completed on
                                             </dt>
-                                            <dd className="mt-0.5 text-[#1d1d1f]">
+                                            <dd className="mt-0.5 text-foreground">
                                               {formatDateTime(i.completed_at)}
                                             </dd>
                                           </div>
@@ -3319,7 +3319,7 @@ export function InterviewsBoard() {
                                           <button
                                             type="button"
                                             disabled={!canEditCompletedTab}
-                                            className="rounded-lg border border-[#d4d4d8] bg-white px-2.5 py-1 text-xs font-medium text-[#1d1d1f] hover:bg-[#fafafa] disabled:cursor-not-allowed disabled:border-[#d1d5db] disabled:text-[#9ca3af]"
+                                            className="rounded-lg border border-border bg-elevated px-2.5 py-1 text-xs font-medium text-foreground hover:bg-background/80 disabled:cursor-not-allowed disabled:opacity-40"
                                             onClick={() => {
                                               if (!canEditCompletedTab) return;
                                               setCompletedPopoverId(null);
@@ -3334,7 +3334,7 @@ export function InterviewsBoard() {
                                               !canEditCompletedTab ||
                                               incompleteBusyId === i.id
                                             }
-                                            className="rounded-lg bg-[#dc2626] px-2.5 py-1 text-xs font-medium text-white hover:bg-[#b91c1c] disabled:cursor-not-allowed disabled:bg-[#d1d5db] disabled:text-[#6b7280]"
+                                            className="rounded-lg bg-[#dc2626] px-2.5 py-1 text-xs font-medium text-white hover:bg-[#b91c1c] disabled:cursor-not-allowed disabled:opacity-40"
                                             onClick={() =>
                                               void handleMarkIncomplete(i)
                                             }
@@ -3377,7 +3377,7 @@ export function InterviewsBoard() {
               <section className="space-y-4">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
                   <label className="flex min-w-0 flex-1 flex-col gap-1">
-                    <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+                    <span className="text-xs uppercase tracking-widest text-muted/80">
                       Search
                     </span>
                     <input
@@ -3392,7 +3392,7 @@ export function InterviewsBoard() {
                   </label>
                   <div className="flex w-full flex-col gap-3 sm:flex-row lg:w-auto lg:shrink-0">
                     <label className="flex w-full flex-col gap-1 sm:w-48">
-                      <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+                      <span className="text-xs uppercase tracking-widest text-muted/80">
                         Interview type
                       </span>
                       <select
@@ -3416,7 +3416,7 @@ export function InterviewsBoard() {
                       </select>
                     </label>
                     <label className="flex w-full flex-col gap-1 sm:w-48">
-                      <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+                      <span className="text-xs uppercase tracking-widest text-muted/80">
                         POC
                       </span>
                       <select
@@ -3440,7 +3440,7 @@ export function InterviewsBoard() {
                       </select>
                     </label>
                     <label className="flex w-full flex-col gap-1 sm:w-48">
-                      <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+                      <span className="text-xs uppercase tracking-widest text-muted/80">
                         Interviewer
                       </span>
                       <select
@@ -3526,18 +3526,18 @@ export function InterviewsBoard() {
                                 <td className={tdZoomStatus}>
                                   <div className="flex flex-col items-start gap-2">
                                     {zoomAccount ? (
-                                      <p className="text-xs text-[#6e6e73]">
+                                      <p className="text-xs text-muted">
                                         Account: {zoomAccount}
                                       </p>
                                     ) : (
-                                      <span className="text-[#6e6e73]">—</span>
+                                      <span className="text-muted">—</span>
                                     )}
                                     {zoomLink ? (
                                       <a
                                         href={zoomLink}
                                         target="_blank"
                                         rel="noopener noreferrer"
-                                        className="inline-flex rounded-lg border border-[#e5e5e5] bg-white px-2.5 py-1 text-xs font-medium text-[#1d1d1f] transition-colors hover:bg-[#f5f5f7]"
+                                        className="inline-flex rounded-lg border border-border bg-elevated px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:bg-background"
                                       >
                                         Join
                                       </a>
@@ -3549,7 +3549,7 @@ export function InterviewsBoard() {
                                     <div className="flex w-full min-w-0 max-w-[260px] flex-col gap-2">
                                       <input
                                         type="url"
-                                        className="w-full rounded-lg border border-[#e5e5e5] px-2 py-1 text-xs"
+                                        className="w-full rounded-lg border border-border px-2 py-1 text-xs"
                                         placeholder="Paste recording link"
                                         value={notEligibleRecordingEdit.value}
                                         onChange={(e) =>
@@ -3566,7 +3566,7 @@ export function InterviewsBoard() {
                                             !canEditCompletedTab ||
                                             notEligibleRecordingBusyId === i.id
                                           }
-                                          className="rounded bg-[#1d1d1f] px-2 py-0.5 text-[11px] font-medium text-white disabled:opacity-50"
+                                          className="rounded bg-foreground px-2 py-0.5 text-[11px] font-medium text-background disabled:opacity-50"
                                           onClick={() =>
                                             void saveNotEligibleRecordingLink(
                                               i.id,
@@ -3578,7 +3578,7 @@ export function InterviewsBoard() {
                                         </button>
                                         <button
                                           type="button"
-                                          className="text-[11px] text-[#6e6e73] underline"
+                                          className="text-[11px] text-muted underline"
                                           onClick={() =>
                                             setNotEligibleRecordingEdit(null)
                                           }
@@ -3593,7 +3593,7 @@ export function InterviewsBoard() {
                                         href={recordingLink}
                                         target="_blank"
                                         rel="noopener noreferrer"
-                                        className="inline-flex rounded-lg border border-[#e5e5e5] bg-white px-2 py-1 text-xs font-medium text-[#1d1d1f] hover:bg-[#f5f5f7]"
+                                        className="inline-flex rounded-lg border border-border bg-elevated px-2 py-1 text-xs font-medium text-foreground hover:bg-background"
                                       >
                                         View
                                       </a>
@@ -3615,7 +3615,7 @@ export function InterviewsBoard() {
                                     <button
                                       type="button"
                                       disabled={!canEditCompletedTab}
-                                      className="rounded border border-[#e5e5e5] bg-[#fafafa] px-2 py-1 text-xs font-medium text-[#6e6e73] hover:bg-[#f0f0f0] disabled:opacity-50"
+                                      className="rounded border border-border bg-background/80 px-2 py-1 text-xs font-medium text-muted hover:bg-background disabled:opacity-50"
                                       onClick={() =>
                                         setNotEligibleRecordingEdit({
                                           id: i.id,
