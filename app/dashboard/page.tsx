@@ -20,6 +20,7 @@ import {
 } from "@/lib/dashboard-ist-dates";
 import { getUserSafe } from "@/lib/supabase-auth";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 import { DashboardStatCard } from "./dashboard-stat-card";
 
@@ -129,8 +130,7 @@ function avatarHue(s: string): string {
 const TESTIMONIAL_CANDIDATE_TYPE_OR =
   "interview_type.is.null,interview_type.eq.testimonial,interview_type.eq.project";
 
-const cardChrome =
-  "shadow-[0_4px_16px_rgba(0,0,0,0.08)] border border-[#f0f0f0]";
+const cardChrome = "shadow-card border border-border-subtle";
 
 export default function DashboardPage() {
   const supabase = createBrowserSupabaseClient();
@@ -533,26 +533,27 @@ export default function DashboardPage() {
 
   return (
     <>
-      <header className="sticky top-14 z-30 bg-[#f5f5f7]/90 px-4 py-4 backdrop-blur-md sm:px-6 sm:py-5 lg:top-0 lg:px-8 lg:py-6">
+      <header className="sticky top-14 z-30 bg-background/90 px-4 py-4 backdrop-blur-md sm:px-6 sm:py-5 lg:top-0 lg:px-8 lg:py-6">
         <div className="mx-auto flex max-w-[1400px] items-start justify-between gap-4">
           <div>
-            <h1 className="text-xl font-semibold tracking-tight text-[#1d1d1f] sm:text-2xl">
+            <h1 className="text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
               {greeting}, {greetName}{" "}
               <span className="font-normal" aria-hidden>
                 👋
               </span>
             </h1>
-            <p className="mt-1 text-sm text-[#6e6e73]">
+            <p className="mt-1 text-sm text-muted">
               Here&apos;s what&apos;s happening today
             </p>
           </div>
+          <ThemeToggle />
         </div>
       </header>
 
       <main className="flex-1 px-4 pb-10 pt-2 sm:px-6 lg:px-8 lg:pb-12">
         <div className="mx-auto max-w-[1400px] space-y-10">
           <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-end">
-            <div className="inline-flex rounded-full bg-white p-1 shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
+            <div className="inline-flex rounded-full bg-elevated p-1 shadow-segment">
               {(
                 ["total", "monthly", "weekly"] as const satisfies readonly DashboardPeriod[]
               ).map((p) => (
@@ -562,8 +563,8 @@ export default function DashboardPage() {
                   onClick={() => setPeriod(p)}
                   className={`rounded-full px-4 py-1.5 text-sm transition-all duration-200 ease-in-out ${
                     period === p
-                      ? "bg-[#1d1d1f] font-medium text-white"
-                      : "text-[#6e6e73] hover:text-[#1d1d1f]"
+                      ? "bg-foreground font-medium text-background"
+                      : "text-muted hover:text-foreground"
                   }`}
                 >
                   {periodLabel(p)}
@@ -572,33 +573,33 @@ export default function DashboardPage() {
             </div>
             {period === "weekly" ? (
               <label className="flex min-w-[200px] flex-col gap-1">
-                <span className="text-xs font-medium text-[#6e6e73]">
+                <span className="text-xs font-medium text-muted">
                   Select week
                 </span>
                 <input
                   type="date"
                   value={weeklyDateInput}
                   onChange={(e) => setWeeklyDateInput(e.target.value)}
-                  className="rounded-xl border border-[#e5e5e5] bg-white px-3 py-2 text-sm text-[#1d1d1f] shadow-sm"
+                  className="rounded-xl border border-border bg-elevated px-3 py-2 text-sm text-foreground shadow-sm"
                 />
               </label>
             ) : null}
             {period === "monthly" ? (
               <label className="flex min-w-[200px] flex-col gap-1">
-                <span className="text-xs font-medium text-[#6e6e73]">
+                <span className="text-xs font-medium text-muted">
                   Select month
                 </span>
                 <input
                   type="month"
                   value={monthlyInput}
                   onChange={(e) => setMonthlyInput(e.target.value)}
-                  className="rounded-xl border border-[#e5e5e5] bg-white px-3 py-2 text-sm text-[#1d1d1f] shadow-sm"
+                  className="rounded-xl border border-border bg-elevated px-3 py-2 text-sm text-foreground shadow-sm"
                 />
               </label>
             ) : null}
           </div>
           {periodRangeLabel ? (
-            <p className="text-sm text-[#6e6e73]">{periodRangeLabel}</p>
+            <p className="text-sm text-muted">{periodRangeLabel}</p>
           ) : null}
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -616,20 +617,20 @@ export default function DashboardPage() {
             )}
           </div>
 
-          <div className="border-t border-[#e8e8ed] pt-10">
+          <div className="border-t border-border pt-10">
             <div className="grid grid-cols-1 gap-8 lg:grid-cols-5 lg:gap-10">
               <div className="w-full lg:col-span-3">
                 <div className="mb-5 border-l-4 border-blue-500 pl-3">
-                  <h2 className="text-base font-semibold text-gray-800">
+                  <h2 className="text-base font-semibold text-foreground">
                     Interviewer performance
                   </h2>
-                  <p className="mt-1 text-sm text-[#6e6e73]">
+                  <p className="mt-1 text-sm text-muted">
                     Completed testimonial interviews · share of team total
                   </p>
                 </div>
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   {!loading && interviewerGrid.length === 0 ? (
-                    <p className="text-sm text-gray-400 md:col-span-2">
+                    <p className="text-sm text-muted md:col-span-2">
                       No completed testimonial interviews in this period.
                     </p>
                   ) : null}
@@ -643,7 +644,7 @@ export default function DashboardPage() {
                     return (
                       <div
                         key={row.value}
-                        className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm"
+                        className="rounded-2xl border border-border bg-elevated p-4 shadow-sm"
                       >
                         <div className="flex items-start gap-3">
                           <div
@@ -653,19 +654,19 @@ export default function DashboardPage() {
                             {initials(row.name)}
                           </div>
                           <div className="min-w-0 flex-1">
-                            <p className="font-bold text-[#1d1d1f]">
+                            <p className="font-bold text-foreground">
                               {row.name}
                             </p>
                             {loading ? (
-                              <p className="mt-1 text-3xl font-bold tabular-nums text-[#1d1d1f]">
+                              <p className="mt-1 text-3xl font-bold tabular-nums text-foreground">
                                 —
                               </p>
                             ) : (
                               <>
-                                <p className="mt-1 text-3xl font-bold tabular-nums tracking-tight text-[#1d1d1f]">
+                                <p className="mt-1 text-3xl font-bold tabular-nums tracking-tight text-foreground">
                                   {row.count}
                                 </p>
-                                <p className="mt-0.5 text-xs text-[#6e6e73]">
+                                <p className="mt-0.5 text-xs text-muted">
                                   {barPct}% of team
                                 </p>
                               </>
@@ -673,7 +674,7 @@ export default function DashboardPage() {
                           </div>
                         </div>
                         {!loading && (
-                          <div className="mt-4 h-2 w-full overflow-hidden rounded-full bg-gray-100">
+                          <div className="mt-4 h-2 w-full overflow-hidden rounded-full bg-border/60">
                             <div
                               className="h-full rounded-full transition-all duration-300"
                               style={{
@@ -691,18 +692,18 @@ export default function DashboardPage() {
 
               <div className="w-full lg:col-span-2">
                 <div className="mb-5 border-l-4 border-violet-500 pl-3">
-                  <h2 className="text-base font-semibold text-gray-800">
+                  <h2 className="text-base font-semibold text-foreground">
                     Recent activity
                   </h2>
-                  <p className="mt-1 text-sm text-[#6e6e73]">
+                  <p className="mt-1 text-sm text-muted">
                     Latest changes from your team
                   </p>
                 </div>
-                <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
+                <div className="rounded-2xl border border-border bg-elevated p-5 shadow-sm">
                   {recentLoading ? (
-                    <p className="text-sm text-[#6e6e73]">Loading…</p>
+                    <p className="text-sm text-muted">Loading…</p>
                   ) : recentActivity.length === 0 ? (
-                    <p className="text-sm text-[#6e6e73]">No activity yet</p>
+                    <p className="text-sm text-muted">No activity yet</p>
                   ) : (
                     <ul className="space-y-3">
                       {recentActivity.map((a) => {
@@ -718,7 +719,7 @@ export default function DashboardPage() {
                         return (
                           <li
                             key={a.id}
-                            className={`flex items-start gap-3 rounded-xl border border-gray-100 border-l-4 border-l-transparent bg-[#fafafa]/80 py-3 pl-3 pr-3 ${borderAccent}`}
+                            className={`flex items-start gap-3 rounded-xl border border-border border-l-4 border-l-transparent bg-background/80 py-3 pl-3 pr-3 ${borderAccent}`}
                           >
                             <div
                               className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-medium text-white"
@@ -727,13 +728,13 @@ export default function DashboardPage() {
                               {initials(actor)}
                             </div>
                             <div className="min-w-0 flex-1">
-                              <p className="text-sm leading-snug text-[#1d1d1f]">
+                              <p className="text-sm leading-snug text-foreground">
                                 <span className="font-semibold">{actor}</span>{" "}
                                 {actionText}
                               </p>
                             </div>
                             <time
-                              className="shrink-0 text-right text-xs text-gray-400"
+                              className="shrink-0 text-right text-xs text-muted"
                               dateTime={a.created_at}
                             >
                               {formatDistanceToNow(parseISO(a.created_at), {
@@ -757,13 +758,13 @@ export default function DashboardPage() {
           </div>
 
           <section
-            className={`rounded-2xl bg-white p-8 transition-all duration-200 ease-in-out ${cardChrome}`}
+            className={`rounded-2xl bg-elevated p-8 transition-all duration-200 ease-in-out ${cardChrome}`}
           >
             <div className="mb-6 border-l-4 border-slate-500 pl-3">
-              <h2 className="text-base font-semibold text-gray-800">
+              <h2 className="text-base font-semibold text-foreground">
                 Conversion funnel
               </h2>
-              <p className="mt-1 text-sm text-[#6e6e73]">
+              <p className="mt-1 text-sm text-muted">
                 End-to-end candidate journey
               </p>
             </div>
@@ -771,20 +772,20 @@ export default function DashboardPage() {
               {funnelSteps.map((step, i) => (
                 <Fragment key={step.label}>
                   <div className="min-w-0 flex-1 text-center">
-                    <p className="text-4xl font-bold tabular-nums text-[#1d1d1f]">
+                    <p className="text-4xl font-bold tabular-nums text-foreground">
                       {loading ? "—" : step.value}
                     </p>
-                    <p className="mt-2 text-xs text-[#6e6e73]">{step.label}</p>
+                    <p className="mt-2 text-xs text-muted">{step.label}</p>
                   </div>
                   {i < funnelSteps.length - 1 ? (
                     <div className="flex flex-col items-center justify-center self-center px-1 py-2 sm:px-2 sm:pb-0 sm:pt-1">
                       <ChevronDown
-                        className="h-5 w-5 text-[#aeaeb2] sm:hidden"
+                        className="h-5 w-5 text-muted sm:hidden"
                         strokeWidth={2}
                         aria-hidden
                       />
                       <ChevronRight
-                        className="hidden h-5 w-5 text-[#aeaeb2] sm:block"
+                        className="hidden h-5 w-5 text-muted sm:block"
                         strokeWidth={2}
                         aria-hidden
                       />

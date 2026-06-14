@@ -249,7 +249,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
     <AccessControlProvider
       value={{ role, canManageTeam, canEditCurrentPage, showViewOnlyBadge }}
     >
-      <div className="flex min-h-screen bg-[#f5f5f7] font-sans">
+      <div className="flex min-h-screen bg-background font-sans">
       {mobileNavOpen ? (
         <button
           type="button"
@@ -334,17 +334,17 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
-      <div className="flex min-h-screen min-w-0 flex-1 flex-col bg-[#f5f5f7] lg:ml-64">
-        <div className="fixed left-0 right-0 top-0 z-[45] flex h-14 items-center gap-3 border-b border-[#e5e5e5] bg-[#f5f5f7]/95 px-4 backdrop-blur-md lg:hidden">
+      <div className="flex min-h-screen min-w-0 flex-1 flex-col bg-background lg:ml-64">
+        <div className="fixed left-0 right-0 top-0 z-[45] flex h-14 items-center gap-3 border-b border-border bg-background/95 px-4 backdrop-blur-md lg:hidden">
           <button
             type="button"
             onClick={() => setMobileNavOpen(true)}
-            className="rounded-lg p-2 text-[#1d1d1f] transition-colors hover:bg-black/[0.06]"
+            className="rounded-lg p-2 text-foreground transition-colors hover:bg-black/[0.06] dark:hover:bg-white/10"
             aria-label="Open menu"
           >
             <Menu className="h-5 w-5" strokeWidth={2} />
           </button>
-          <span className="truncate text-sm font-semibold text-[#1d1d1f]">
+          <span className="truncate text-sm font-semibold text-foreground">
             Testimonial CRM
           </span>
         </div>
