@@ -106,7 +106,7 @@ function StarRatingInput({
 
 function OverallBadge({ value }: { value: number | null }) {
   if (value == null) {
-    return <span className="text-sm text-gray-400">—</span>;
+    return <span className="text-sm text-muted">—</span>;
   }
   return (
     <span className="inline-flex min-w-[2.5rem] items-center justify-center rounded-full bg-amber-50 px-2.5 py-1 text-sm font-semibold tabular-nums text-amber-800 ring-1 ring-amber-200/80">
@@ -116,7 +116,7 @@ function OverallBadge({ value }: { value: number | null }) {
 }
 
 const th =
-  "bg-gray-50 px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-600 first:rounded-tl-xl last:rounded-tr-xl";
+  "bg-background/80 px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted first:rounded-tl-xl last:rounded-tr-xl";
 const td = "px-3 py-3 text-sm text-gray-900 align-middle";
 
 export type TeamReportRatingsTabProps = {
@@ -299,14 +299,14 @@ export function TeamReportRatingsTab({
 
   if (!bounds) {
     return (
-      <p className="text-sm text-gray-500">
+      <p className="text-sm text-muted">
         Choose a specific date range (not All time) to record monthly performance ratings.
       </p>
     );
   }
 
   if (loading) {
-    return <p className="text-sm text-gray-500">Loading ratings…</p>;
+    return <p className="text-sm text-muted">Loading ratings…</p>;
   }
 
   return (
@@ -317,7 +317,7 @@ export function TeamReportRatingsTab({
             type="button"
             onClick={() => void handleReset()}
             disabled={resetting || savingKey != null}
-            className="shrink-0 rounded-full border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-800 shadow-sm hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+            className="shrink-0 rounded-full border border-border bg-elevated px-4 py-2 text-sm font-medium text-foreground shadow-sm hover:bg-background/80 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {resetting ? "Resetting…" : "Reset ratings"}
           </button>
@@ -341,9 +341,9 @@ export function TeamReportRatingsTab({
       ) : null}
 
       {memberNames.length === 0 ? (
-        <p className="text-sm text-gray-500">No POCs or interviewers on the active roster.</p>
+        <p className="text-sm text-muted">No POCs or interviewers on the active roster.</p>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
+        <div className="overflow-x-auto rounded-xl border border-border shadow-sm">
           <table className="min-w-[560px] border-collapse text-left">
             <thead>
               <tr>
@@ -354,7 +354,7 @@ export function TeamReportRatingsTab({
                 <th className={`${th} text-center`}>Overall</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100 bg-white">
+            <tbody className="divide-y divide-gray-100 bg-elevated">
               {memberNames.map((name) => {
                 const row: RatingRow = {
                   member_name: name,
@@ -364,11 +364,11 @@ export function TeamReportRatingsTab({
                 const busy = savingKey === name;
 
                 return (
-                  <tr key={name} className="hover:bg-gray-50/80">
+                  <tr key={name} className="hover:bg-background/80/80">
                     <td className={`${td} font-medium`}>
                       {name}
                       {busy ? (
-                        <span className="ml-2 text-xs font-normal text-gray-400">Saving…</span>
+                        <span className="ml-2 text-xs font-normal text-muted">Saving…</span>
                       ) : null}
                     </td>
                     <td className={`${td} text-right`}>

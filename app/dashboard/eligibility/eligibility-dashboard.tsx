@@ -66,12 +66,12 @@ const SELECT_COLUMNS =
   "id, created_at, form_filled_date, email, full_name, whatsapp_number, role_before_program, salary_before_program, primary_goal, achievement_type, achievement_title, achieved_on_date, program_joined_date, quantified_result, skills_modules_helped, how_program_helped, proof_document_url, proof_description, linkedin_url, instagram_url, declaration_accepted, ai_eligibility_score, ai_eligibility_reason, eligibility_status, human_reviewed_by, human_reviewed_at, congratulation_call_pending, interview_type";
 
 const cardChrome =
-  "rounded-2xl bg-white shadow-[0_4px_16px_rgba(0,0,0,0.08)] border border-[#f0f0f0]";
+  "rounded-2xl bg-elevated shadow-card border border-border-subtle";
 
 function scorePillClass(score: number | null): string {
-  if (score === null) return "bg-[#fafafa] text-[#6e6e73]";
+  if (score === null) return "bg-background/80 text-muted";
   if (score < 45) return "bg-[#fef2f2] text-[#dc2626]";
-  if (score < 75) return "bg-[#fafafa] text-[#6e6e73]";
+  if (score < 75) return "bg-background/80 text-muted";
   return "bg-[#f0fdf4] text-[#16a34a]";
 }
 
@@ -83,7 +83,7 @@ function eligibilityStatusBadgeClass(status: EligibilityStatus): string {
       return "bg-[#fef2f2] text-[#dc2626]";
     case "pending_review":
     default:
-      return "bg-[#fafafa] text-[#6e6e73]";
+      return "bg-background/80 text-muted";
   }
 }
 
@@ -148,7 +148,7 @@ function interviewTypeTableCell(t: InterviewTrack | null | undefined) {
       </span>
     );
   }
-  return <span className="text-[#6e6e73]">—</span>;
+  return <span className="text-muted">—</span>;
 }
 
 function DetailField({
@@ -164,11 +164,11 @@ function DetailField({
     value == null || String(value).trim() === "" ? null : String(value);
   return (
     <div className={className}>
-      <dt className="text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
+      <dt className="text-xs font-medium uppercase tracking-widest text-muted/80">
         {label}
       </dt>
-      <dd className="mt-1 whitespace-pre-wrap break-words text-[#1d1d1f]">
-        {display ?? <span className="text-[#6e6e73]">—</span>}
+      <dd className="mt-1 whitespace-pre-wrap break-words text-foreground">
+        {display ?? <span className="text-muted">—</span>}
       </dd>
     </div>
   );
@@ -735,7 +735,7 @@ export function EligibilityDashboard() {
 
   if (!supabase && !loading) {
     return (
-      <div className="mx-auto max-w-4xl px-8 py-16 text-center text-sm text-[#6e6e73]">
+      <div className="mx-auto max-w-4xl px-8 py-16 text-center text-sm text-muted">
         <p>{error ?? "Cannot initialize Supabase client."}</p>
       </div>
     );
@@ -760,17 +760,17 @@ export function EligibilityDashboard() {
 
   return (
     <>
-      <header className="sticky top-14 z-30 bg-[#f5f5f7]/90 px-4 py-4 backdrop-blur-md sm:px-6 sm:py-5 lg:top-0 lg:px-8 lg:py-6">
+      <header className="sticky top-14 z-30 bg-background/90 px-4 py-4 backdrop-blur-md sm:px-6 sm:py-5 lg:top-0 lg:px-8 lg:py-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <h1 className="text-xl font-semibold tracking-tight text-[#1d1d1f] sm:text-2xl">
+            <h1 className="text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
               Eligibility review
             </h1>
-            <p className="mt-1 text-sm text-[#6e6e73]">
+            <p className="mt-1 text-sm text-muted">
               Review and update candidate eligibility
             </p>
             {showViewOnlyBadge ? (
-              <span className="mt-2 inline-flex rounded-full bg-[#f3f4f6] px-3 py-1 text-xs font-medium text-[#6b7280]">
+              <span className="mt-2 inline-flex rounded-full bg-border/40 px-3 py-1 text-xs font-medium text-muted">
                 View only
               </span>
             ) : null}
@@ -779,7 +779,7 @@ export function EligibilityDashboard() {
             type="button"
             disabled={!canEditCurrentPage || sheetSyncBusy || !supabase}
             onClick={() => void syncSheet()}
-            className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl border border-[#e5e5e5] bg-white px-4 py-2 text-sm font-medium text-[#1d1d1f] transition-all hover:bg-[#f5f5f7] disabled:opacity-50"
+            className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl border border-border bg-elevated px-4 py-2 text-sm font-medium text-foreground transition-all hover:bg-background disabled:opacity-50"
           >
             {sheetSyncBusy ? (
               <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
@@ -791,10 +791,10 @@ export function EligibilityDashboard() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-7xl px-4 pb-10 pt-2 text-sm text-[#1d1d1f] sm:px-6 lg:px-8 lg:pb-12">
+      <main className="mx-auto max-w-7xl px-4 pb-10 pt-2 text-sm text-foreground sm:px-6 lg:px-8 lg:pb-12">
         {error && (
           <div
-            className="mb-6 rounded-2xl border border-[#f0f0f0] bg-white px-4 py-3 text-sm text-[#1d1d1f] shadow-[0_4px_16px_rgba(0,0,0,0.08)]"
+            className="mb-6 rounded-2xl border border-border-subtle bg-elevated px-4 py-3 text-sm text-foreground shadow-card"
             role="alert"
           >
             {error}
@@ -809,7 +809,7 @@ export function EligibilityDashboard() {
         )}
 
         <section className="mb-4 flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-end">
-          <div className="inline-flex rounded-full bg-white p-1 shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
+          <div className="inline-flex rounded-full bg-elevated p-1 shadow-segment">
             {(["total", "weekly"] as const).map((p) => (
               <button
                 key={p}
@@ -817,8 +817,8 @@ export function EligibilityDashboard() {
                 onClick={() => setPeriod(p)}
                 className={`rounded-full px-4 py-1.5 text-sm transition-all duration-200 ease-in-out ${
                   period === p
-                    ? "bg-[#1d1d1f] font-medium text-white"
-                    : "text-[#6e6e73] hover:text-[#1d1d1f]"
+                    ? "bg-foreground font-medium text-background"
+                    : "text-muted hover:text-foreground"
                 }`}
               >
                 {periodLabel(p)}
@@ -827,21 +827,21 @@ export function EligibilityDashboard() {
           </div>
           {period === "weekly" ? (
             <label className="flex min-w-[220px] flex-col gap-1">
-              <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+              <span className="text-xs uppercase tracking-widest text-muted/80">
                 Select week
               </span>
               <input
                 type="date"
                 value={weeklyDateInput}
                 onChange={(e) => setWeeklyDateInput(e.target.value)}
-                className="rounded-xl border border-[#e5e5e5] bg-white px-3 py-2 text-sm text-[#1d1d1f] focus:border-[#3b82f6] focus:outline-none focus:ring-0"
+                className="rounded-xl border border-border bg-elevated px-3 py-2 text-sm text-foreground focus:border-[#3b82f6] focus:outline-none focus:ring-0"
               />
             </label>
           ) : null}
         </section>
 
         {periodRangeLabel ? (
-          <p className="mb-4 text-sm text-[#6e6e73]">{periodRangeLabel}</p>
+          <p className="mb-4 text-sm text-muted">{periodRangeLabel}</p>
         ) : null}
 
         <section className="mb-8 grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
@@ -890,25 +890,25 @@ export function EligibilityDashboard() {
             },
           ].map((card) => (
             <div key={card.label} className={`p-4 sm:p-6 ${cardChrome}`}>
-              <p className="mb-2 text-xs font-medium text-[#6e6e73] sm:mb-3">
+              <p className="mb-2 text-xs font-medium text-muted sm:mb-3">
                 {card.label}
               </p>
-              <p className="text-2xl font-bold tabular-nums tracking-tight text-[#1d1d1f] sm:text-4xl">
+              <p className="text-2xl font-bold tabular-nums tracking-tight text-foreground sm:text-4xl">
                 {loading ? "…" : card.value}
               </p>
-              <p className="mt-1 text-sm text-[#6e6e73]">{card.sub}</p>
+              <p className="mt-1 text-sm text-muted">{card.sub}</p>
               <div className="mt-4 h-0.5 w-8 rounded-full bg-[#3b82f6]" />
             </div>
           ))}
         </section>
 
-        <section className="mb-6 flex flex-col gap-4 rounded-2xl border border-[#f0f0f0] bg-white p-4 shadow-sm md:flex-row md:flex-wrap md:items-end">
+        <section className="mb-6 flex flex-col gap-4 rounded-2xl border border-border-subtle bg-elevated p-4 shadow-sm md:flex-row md:flex-wrap md:items-end">
           <label className="flex w-full min-w-0 flex-col gap-1 text-sm md:w-auto md:min-w-[140px]">
-            <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+            <span className="text-xs uppercase tracking-widest text-muted/80">
               Status
             </span>
             <select
-              className="rounded-xl border border-[#e5e5e5] bg-white px-3 py-2 text-sm text-[#1d1d1f] focus:border-[#3b82f6] focus:outline-none focus:ring-0"
+              className="rounded-xl border border-border bg-elevated px-3 py-2 text-sm text-foreground focus:border-[#3b82f6] focus:outline-none focus:ring-0"
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
             >
@@ -919,11 +919,11 @@ export function EligibilityDashboard() {
             </select>
           </label>
           <label className="flex w-full min-w-0 flex-col gap-1 text-sm md:w-auto md:min-w-[160px]">
-            <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+            <span className="text-xs uppercase tracking-widest text-muted/80">
               Industry / role
             </span>
             <select
-              className="rounded-xl border border-[#e5e5e5] bg-white px-3 py-2 text-sm text-[#1d1d1f] focus:border-[#3b82f6] focus:outline-none focus:ring-0"
+              className="rounded-xl border border-border bg-elevated px-3 py-2 text-sm text-foreground focus:border-[#3b82f6] focus:outline-none focus:ring-0"
               value={industryFilter}
               onChange={(e) => setIndustryFilter(e.target.value)}
             >
@@ -936,29 +936,29 @@ export function EligibilityDashboard() {
             </select>
           </label>
           <label className="flex w-full min-w-0 flex-col gap-1 text-sm md:w-auto">
-            <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+            <span className="text-xs uppercase tracking-widest text-muted/80">
               From
             </span>
             <input
               type="date"
-              className="rounded-xl border border-[#e5e5e5] px-3 py-2 text-sm text-[#1d1d1f] focus:border-[#3b82f6] focus:outline-none focus:ring-0"
+              className="rounded-xl border border-border px-3 py-2 text-sm text-foreground focus:border-[#3b82f6] focus:outline-none focus:ring-0"
               value={dateFrom}
               onChange={(e) => setDateFrom(e.target.value)}
             />
           </label>
           <label className="flex w-full min-w-0 flex-col gap-1 text-sm md:w-auto">
-            <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+            <span className="text-xs uppercase tracking-widest text-muted/80">
               To
             </span>
             <input
               type="date"
-              className="rounded-xl border border-[#e5e5e5] px-3 py-2 text-sm text-[#1d1d1f] focus:border-[#3b82f6] focus:outline-none focus:ring-0"
+              className="rounded-xl border border-border px-3 py-2 text-sm text-foreground focus:border-[#3b82f6] focus:outline-none focus:ring-0"
               value={dateTo}
               onChange={(e) => setDateTo(e.target.value)}
             />
           </label>
           <label className="flex w-full min-w-0 flex-col gap-1 text-sm md:min-w-[220px] md:flex-1">
-            <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+            <span className="text-xs uppercase tracking-widest text-muted/80">
               Email or phone
             </span>
             <input
@@ -966,7 +966,7 @@ export function EligibilityDashboard() {
               enterKeyHint="search"
               autoComplete="off"
               placeholder="Search by email or number…"
-              className="w-full rounded-xl border border-[#e5e5e5] px-3 py-2 text-sm text-[#1d1d1f] placeholder:text-[#aeaeb2] focus:border-[#3b82f6] focus:outline-none focus:ring-0"
+              className="w-full rounded-xl border border-border px-3 py-2 text-sm text-foreground placeholder:text-muted/80 focus:border-[#3b82f6] focus:outline-none focus:ring-0"
               value={contactSearch}
               onChange={(e) => setContactSearch(e.target.value)}
             />
@@ -990,14 +990,14 @@ export function EligibilityDashboard() {
           <div
             className={`mb-6 flex flex-col gap-3 p-4 md:flex-row md:items-center md:justify-between ${cardChrome}`}
           >
-            <p className="text-sm font-medium text-[#1d1d1f]">
+            <p className="text-sm font-medium text-foreground">
               {selected.size} selected
             </p>
             <div className="flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap sm:gap-3">
               <button
                 type="button"
                 disabled={bulkBusy}
-                className="w-full rounded-xl bg-[#1d1d1f] px-4 py-2.5 text-sm font-medium text-white transition-all hover:bg-[#2d2d2f] disabled:opacity-50 sm:w-auto"
+                className="w-full rounded-xl bg-foreground px-4 py-2.5 text-sm font-medium text-background transition-all hover:opacity-90 disabled:opacity-50 sm:w-auto"
                 onClick={() => void bulkMarkEligible()}
               >
                 Bulk mark eligible
@@ -1005,7 +1005,7 @@ export function EligibilityDashboard() {
               <button
                 type="button"
                 disabled={bulkBusy}
-                className="w-full rounded-xl border border-[#f0f0f0] bg-white px-4 py-2.5 text-sm font-medium text-[#ef4444] transition-all hover:bg-[#fafafa] disabled:opacity-50 sm:w-auto"
+                className="w-full rounded-xl border border-border-subtle bg-elevated px-4 py-2.5 text-sm font-medium text-[#ef4444] transition-all hover:bg-background/80 disabled:opacity-50 sm:w-auto"
                 onClick={() => void bulkMarkNotEligible()}
               >
                 Bulk mark not eligible
@@ -1030,37 +1030,37 @@ export function EligibilityDashboard() {
                   <th className="w-10 px-3 py-3">
                     <input
                       type="checkbox"
-                      className="rounded border-[#e5e5e5] text-[#1d1d1f] focus:ring-[#3b82f6]"
+                      className="rounded border-border text-foreground focus:ring-[#3b82f6]"
                       checked={allFilteredSelected}
                       onChange={toggleSelectAllFiltered}
                       aria-label="Select all visible"
                     />
                   </th>
-                  <th className="px-3 py-3 text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
+                  <th className="px-3 py-3 text-xs font-medium uppercase tracking-widest text-muted/80">
                     Name
                   </th>
-                  <th className="px-3 py-3 text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
+                  <th className="px-3 py-3 text-xs font-medium uppercase tracking-widest text-muted/80">
                     Email
                   </th>
-                  <th className="px-3 py-3 text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
+                  <th className="px-3 py-3 text-xs font-medium uppercase tracking-widest text-muted/80">
                     Industry
                   </th>
-                  <th className="px-3 py-3 text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
+                  <th className="px-3 py-3 text-xs font-medium uppercase tracking-widest text-muted/80">
                     Achievement
                   </th>
-                  <th className="px-3 py-3 text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
+                  <th className="px-3 py-3 text-xs font-medium uppercase tracking-widest text-muted/80">
                     AI score
                   </th>
-                  <th className="px-3 py-3 text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
+                  <th className="px-3 py-3 text-xs font-medium uppercase tracking-widest text-muted/80">
                     AI reason
                   </th>
-                  <th className="px-3 py-3 text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
+                  <th className="px-3 py-3 text-xs font-medium uppercase tracking-widest text-muted/80">
                     Status
                   </th>
-                  <th className="px-3 py-3 text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
+                  <th className="px-3 py-3 text-xs font-medium uppercase tracking-widest text-muted/80">
                     Interview type
                   </th>
-                  <th className="px-3 py-3 text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
+                  <th className="px-3 py-3 text-xs font-medium uppercase tracking-widest text-muted/80">
                     Actions
                   </th>
                 </tr>
@@ -1070,7 +1070,7 @@ export function EligibilityDashboard() {
                   <tr>
                     <td
                       colSpan={10}
-                      className="px-4 py-12 text-center text-sm text-[#6e6e73]"
+                      className="px-4 py-12 text-center text-sm text-muted"
                     >
                       Loading candidates…
                     </td>
@@ -1079,7 +1079,7 @@ export function EligibilityDashboard() {
                   <tr>
                     <td
                       colSpan={10}
-                      className="px-4 py-12 text-center text-sm text-[#6e6e73]"
+                      className="px-4 py-12 text-center text-sm text-muted"
                     >
                       No candidates match the current filters.
                     </td>
@@ -1094,28 +1094,28 @@ export function EligibilityDashboard() {
                     return (
                       <tr
                         key={r.id}
-                        className="border-b border-[#f5f5f5] last:border-b-0 hover:bg-[#fafafa]"
+                        className="border-b border-[#f5f5f5] last:border-b-0 hover:bg-background/80"
                       >
                         <td className="px-3 py-3 align-top">
                           <input
                             type="checkbox"
-                            className="rounded border-[#e5e5e5] text-[#1d1d1f] focus:ring-[#3b82f6]"
+                            className="rounded border-border text-foreground focus:ring-[#3b82f6]"
                             checked={selected.has(r.id)}
                             onChange={() => toggleSelect(r.id)}
                             aria-label={`Select ${r.full_name ?? r.email}`}
                           />
                         </td>
-                        <td className="max-w-[140px] truncate px-3 py-3 font-medium text-[#1d1d1f]">
+                        <td className="max-w-[140px] truncate px-3 py-3 font-medium text-foreground">
                           {r.full_name ?? "—"}
                         </td>
-                        <td className="max-w-[180px] truncate px-3 py-3 text-[#6e6e73]">
+                        <td className="max-w-[180px] truncate px-3 py-3 text-muted">
                           {r.email}
                         </td>
-                        <td className="max-w-[120px] truncate px-3 py-3 text-[#6e6e73]">
+                        <td className="max-w-[120px] truncate px-3 py-3 text-muted">
                           {r.role_before_program ?? "—"}
                         </td>
                         <td
-                          className="max-w-[200px] truncate px-3 py-3 text-[#6e6e73]"
+                          className="max-w-[200px] truncate px-3 py-3 text-muted"
                           title={summary || undefined}
                         >
                           {displaySummary}
@@ -1127,7 +1127,7 @@ export function EligibilityDashboard() {
                             {score === null ? "—" : score}
                           </span>
                         </td>
-                        <td className="max-w-[160px] px-3 py-3 text-[#6e6e73]">
+                        <td className="max-w-[160px] px-3 py-3 text-muted">
                           <span
                             className="line-clamp-2 cursor-help"
                             title={
@@ -1195,7 +1195,7 @@ export function EligibilityDashboard() {
                             </button>
                             <button
                               type="button"
-                              className="whitespace-nowrap text-sm font-medium text-[#6e6e73] transition-all hover:text-[#1d1d1f]"
+                              className="whitespace-nowrap text-sm font-medium text-muted transition-all hover:text-foreground"
                               onClick={() => setDetailCandidate(r)}
                             >
                               View details
@@ -1225,7 +1225,7 @@ export function EligibilityDashboard() {
               </tbody>
             </table>
           </div>
-          <p className="border-t border-[#f5f5f5] px-4 py-3 text-xs text-[#aeaeb2]">
+          <p className="border-t border-[#f5f5f5] px-4 py-3 text-xs text-muted/80">
             Showing {filteredRows.length} of {rows.length} loaded · Realtime
             updates enabled
           </p>
@@ -1236,12 +1236,12 @@ export function EligibilityDashboard() {
         <div className="fixed inset-0 z-50 flex min-h-0 items-center justify-center p-0 sm:p-4">
           <button
             type="button"
-            className="absolute inset-0 bg-[#1d1d1f]/60 backdrop-blur-sm"
+            className="absolute inset-0 bg-foreground/60 backdrop-blur-sm"
             aria-label="Close details"
             onClick={() => setDetailCandidate(null)}
           />
           <div
-            className="relative mx-4 flex max-h-[min(90vh,100dvh-2rem)] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-xl sm:mx-auto"
+            className="relative mx-4 flex max-h-[min(90vh,100dvh-2rem)] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-elevated shadow-xl sm:mx-auto"
             role="dialog"
             aria-modal="true"
             aria-labelledby="candidate-detail-title"
@@ -1249,13 +1249,13 @@ export function EligibilityDashboard() {
             <div className="flex items-start justify-between border-b border-[#f5f5f5] px-6 py-4">
               <h2
                 id="candidate-detail-title"
-                className="pr-8 text-xl font-semibold text-[#1d1d1f]"
+                className="pr-8 text-xl font-semibold text-foreground"
               >
                 {detailCandidate.full_name ?? "Candidate"}
               </h2>
               <button
                 type="button"
-                className="shrink-0 rounded-lg p-2 text-[#aeaeb2] transition-all hover:bg-[#f5f5f7] hover:text-[#1d1d1f]"
+                className="shrink-0 rounded-lg p-2 text-muted/80 transition-all hover:bg-background hover:text-foreground"
                 aria-label="Close"
                 onClick={() => setDetailCandidate(null)}
               >
@@ -1263,7 +1263,7 @@ export function EligibilityDashboard() {
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto px-6 py-5 text-sm text-[#1d1d1f]">
+            <div className="flex-1 overflow-y-auto px-6 py-5 text-sm text-foreground">
               <dl className="grid gap-5 sm:grid-cols-2">
                 <DetailField
                   label="Name"
@@ -1271,7 +1271,7 @@ export function EligibilityDashboard() {
                   className="sm:col-span-2"
                 />
                 <div className="sm:col-span-2">
-                  <dt className="text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
+                  <dt className="text-xs font-medium uppercase tracking-widest text-muted/80">
                     Interview type
                   </dt>
                   <dd className="mt-1">
@@ -1312,7 +1312,7 @@ export function EligibilityDashboard() {
                   className="sm:col-span-2"
                 />
                 <div className="sm:col-span-2">
-                  <dt className="text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
+                  <dt className="text-xs font-medium uppercase tracking-widest text-muted/80">
                     Proof
                   </dt>
                   <dd className="mt-2 space-y-2">
@@ -1321,22 +1321,22 @@ export function EligibilityDashboard() {
                         href={detailCandidate.proof_document_url.trim()}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex rounded-xl bg-[#1d1d1f] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#2d2d2f]"
+                        className="inline-flex rounded-xl bg-foreground px-4 py-2 text-sm font-medium text-background transition-colors hover:opacity-90"
                       >
                         View Proof
                       </a>
                     ) : (
-                      <span className="text-[#6e6e73]">—</span>
+                      <span className="text-muted">—</span>
                     )}
                     {detailCandidate.proof_description?.trim() ? (
-                      <p className="whitespace-pre-wrap text-[#6e6e73]">
+                      <p className="whitespace-pre-wrap text-muted">
                         {detailCandidate.proof_description}
                       </p>
                     ) : null}
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
+                  <dt className="text-xs font-medium uppercase tracking-widest text-muted/80">
                     LinkedIn
                   </dt>
                   <dd className="mt-1 break-all">
@@ -1350,12 +1350,12 @@ export function EligibilityDashboard() {
                         {detailCandidate.linkedin_url.trim()}
                       </a>
                     ) : (
-                      <span className="text-[#6e6e73]">—</span>
+                      <span className="text-muted">—</span>
                     )}
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
+                  <dt className="text-xs font-medium uppercase tracking-widest text-muted/80">
                     Instagram
                   </dt>
                   <dd className="mt-1 break-all">
@@ -1369,7 +1369,7 @@ export function EligibilityDashboard() {
                         {detailCandidate.instagram_url.trim()}
                       </a>
                     ) : (
-                      <span className="text-[#6e6e73]">—</span>
+                      <span className="text-muted">—</span>
                     )}
                   </dd>
                 </div>

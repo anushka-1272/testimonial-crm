@@ -13,7 +13,7 @@ import { LogoOnDark, LogoOnLight } from "@/components/brand-logo";
 import { CandidateLookupSection } from "@/components/candidate-lookup/candidate-lookup-section";
 
 const inputClass =
-  "w-full rounded-xl border border-[#e5e5e5] px-4 py-3 text-sm text-[#1d1d1f] placeholder:text-[#aeaeb2] focus:border-[#3b82f6] focus:outline-none focus:ring-1 focus:ring-[#3b82f6]";
+  "w-full rounded-xl border border-border px-4 py-3 text-sm text-foreground placeholder:text-muted/80 focus:border-[#3b82f6] focus:outline-none focus:ring-1 focus:ring-[#3b82f6]";
 
 function authFormErrorMessage(message: string): string {
   if (message === "Invalid login credentials") {
@@ -148,7 +148,7 @@ export default function LoginPage() {
 
       {/* Right — 40% */}
       <div
-        className={`flex min-h-screen w-full flex-1 flex-col bg-white transition-opacity duration-500 ease-out lg:w-2/5 lg:min-h-0 lg:flex-none ${
+        className={`flex min-h-screen w-full flex-1 flex-col bg-elevated transition-opacity duration-500 ease-out lg:w-2/5 lg:min-h-0 lg:flex-none ${
           rightVisible ? "opacity-100" : "opacity-0"
         }`}
       >
@@ -159,10 +159,10 @@ export default function LoginPage() {
             </div>
             {authView === "sign_in" ? (
               <>
-                <h2 className="mt-4 text-center text-2xl font-semibold text-[#1d1d1f]">
+                <h2 className="mt-4 text-center text-2xl font-semibold text-foreground">
                   Welcome back
                 </h2>
-                <p className="mt-1 text-center text-sm text-[#6e6e73]">
+                <p className="mt-1 text-center text-sm text-muted">
                   Sign in to your account
                 </p>
 
@@ -170,7 +170,7 @@ export default function LoginPage() {
                   <div>
                     <label
                       htmlFor="login-email"
-                      className="mb-1.5 block text-xs font-medium text-[#1d1d1f]"
+                      className="mb-1.5 block text-xs font-medium text-foreground"
                     >
                       Email address
                     </label>
@@ -190,7 +190,7 @@ export default function LoginPage() {
                   <div className="mt-5">
                     <label
                       htmlFor="login-password"
-                      className="mb-1.5 block text-xs font-medium text-[#1d1d1f]"
+                      className="mb-1.5 block text-xs font-medium text-foreground"
                     >
                       Password
                     </label>
@@ -212,7 +212,7 @@ export default function LoginPage() {
                           showPassword ? "Hide password" : "Show password"
                         }
                         onClick={() => setShowPassword((v) => !v)}
-                        className="absolute inset-y-0 right-0 flex w-11 items-center justify-center text-[#6e6e73] hover:text-[#1d1d1f]"
+                        className="absolute inset-y-0 right-0 flex w-11 items-center justify-center text-muted hover:text-foreground"
                       >
                         {showPassword ? (
                           <EyeOff className="h-4 w-4" aria-hidden />
@@ -230,7 +230,7 @@ export default function LoginPage() {
                           setResetError("");
                           setResetSuccess("");
                         }}
-                        className="text-xs text-[#8e8e93] hover:text-[#6e6e73]"
+                        className="text-xs text-[#8e8e93] hover:text-muted"
                       >
                         Forgot password?
                       </button>
@@ -246,7 +246,7 @@ export default function LoginPage() {
                   <button
                     type="submit"
                     disabled={loading}
-                    className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-[#1d1d1f] py-3 text-sm font-medium text-white transition-all duration-200 hover:bg-[#2d2d2f] disabled:cursor-not-allowed disabled:opacity-70"
+                    className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-foreground py-3 text-sm font-medium text-background transition-all duration-200 hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-70"
                   >
                     {loading ? (
                       <>
@@ -266,17 +266,17 @@ export default function LoginPage() {
               </>
             ) : (
               <>
-                <h2 className="mt-4 text-center text-2xl font-semibold text-[#1d1d1f]">
+                <h2 className="mt-4 text-center text-2xl font-semibold text-foreground">
                   Reset your password
                 </h2>
-                <p className="mt-1 text-center text-sm text-[#6e6e73]">
+                <p className="mt-1 text-center text-sm text-muted">
                   Enter your email and we&apos;ll send you a reset link
                 </p>
 
                 <form onSubmit={handleResetPassword} className="mt-8">
                   <label
                     htmlFor="reset-email"
-                    className="mb-1.5 block text-xs font-medium text-[#1d1d1f]"
+                    className="mb-1.5 block text-xs font-medium text-foreground"
                   >
                     Email address
                   </label>
@@ -309,7 +309,7 @@ export default function LoginPage() {
                   <button
                     type="submit"
                     disabled={resetLoading}
-                    className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-[#1d1d1f] py-3 text-sm font-medium text-white transition-all duration-200 hover:bg-[#2d2d2f] disabled:cursor-not-allowed disabled:opacity-70"
+                    className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-foreground py-3 text-sm font-medium text-background transition-all duration-200 hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-70"
                   >
                     {resetLoading ? (
                       <>
@@ -332,14 +332,14 @@ export default function LoginPage() {
                     setResetError("");
                     setResetSuccess("");
                   }}
-                  className="mt-4 text-sm text-[#6e6e73] hover:text-[#1d1d1f]"
+                  className="mt-4 text-sm text-muted hover:text-foreground"
                 >
                   ← Back to sign in
                 </button>
               </>
             )}
 
-            <p className="mt-8 text-center text-xs text-[#aeaeb2]">
+            <p className="mt-8 text-center text-xs text-muted/80">
               © 2026 House of Ed-Tech. All rights reserved.
             </p>
           </div>

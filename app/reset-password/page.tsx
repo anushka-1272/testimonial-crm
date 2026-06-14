@@ -9,7 +9,7 @@ import { type FormEvent, useEffect, useState } from "react";
 import { LogoOnDark, LogoOnLight } from "@/components/brand-logo";
 
 const inputClass =
-  "w-full rounded-xl border border-[#e5e5e5] px-4 py-3 text-sm text-[#1d1d1f] placeholder:text-[#aeaeb2] focus:border-[#3b82f6] focus:outline-none focus:ring-1 focus:ring-[#3b82f6]";
+  "w-full rounded-xl border border-border px-4 py-3 text-sm text-foreground placeholder:text-muted/80 focus:border-[#3b82f6] focus:outline-none focus:ring-1 focus:ring-[#3b82f6]";
 
 const LINK_EXPIRED_MESSAGE =
   "This link has expired or was already used. Please request a new password reset.";
@@ -208,7 +208,7 @@ export default function ResetPasswordPage() {
       </div>
 
       <div
-        className={`flex flex-1 flex-col bg-white transition-opacity duration-500 ease-out lg:w-2/5 lg:flex-none ${
+        className={`flex flex-1 flex-col bg-elevated transition-opacity duration-500 ease-out lg:w-2/5 lg:flex-none ${
           rightVisible ? "opacity-100" : "opacity-0"
         }`}
       >
@@ -218,20 +218,20 @@ export default function ResetPasswordPage() {
               <LogoOnLight className="h-10 w-10" />
             </div>
 
-            <h2 className="mt-4 text-center text-2xl font-semibold text-[#1d1d1f]">
+            <h2 className="mt-4 text-center text-2xl font-semibold text-foreground">
               Set your password
             </h2>
-            <p className="mt-1 text-center text-sm text-[#6e6e73]">
+            <p className="mt-1 text-center text-sm text-muted">
               Choose a password to finish signing in
             </p>
 
             {initializing ? (
               <div className="mt-10 flex flex-col items-center justify-center gap-3 py-6">
                 <Loader2
-                  className="h-8 w-8 animate-spin text-[#1d1d1f]"
+                  className="h-8 w-8 animate-spin text-foreground"
                   aria-hidden
                 />
-                <p className="text-sm text-[#6e6e73]">Verifying your link…</p>
+                <p className="text-sm text-muted">Verifying your link…</p>
               </div>
             ) : !sessionOk ? (
               <div className="mt-8 space-y-4">
@@ -244,14 +244,14 @@ export default function ResetPasswordPage() {
                 {offerRequestNewLink ? (
                   <Link
                     href="/login?forgot_password=1"
-                    className="flex w-full items-center justify-center rounded-xl bg-[#1d1d1f] py-3 text-sm font-medium text-white transition-colors hover:bg-[#2d2d2f]"
+                    className="flex w-full items-center justify-center rounded-xl bg-foreground py-3 text-sm font-medium text-background transition-colors hover:opacity-90"
                   >
                     Request new link
                   </Link>
                 ) : null}
                 <Link
                   href="/login"
-                  className={`block text-center text-sm font-medium text-[#1d1d1f] underline-offset-2 hover:underline ${
+                  className={`block text-center text-sm font-medium text-foreground underline-offset-2 hover:underline ${
                     offerRequestNewLink ? "pt-1" : ""
                   }`}
                 >
@@ -263,7 +263,7 @@ export default function ResetPasswordPage() {
                 <div>
                   <label
                     htmlFor="reset-new-password"
-                    className="mb-1.5 block text-xs font-medium text-[#1d1d1f]"
+                    className="mb-1.5 block text-xs font-medium text-foreground"
                   >
                     New password
                   </label>
@@ -285,7 +285,7 @@ export default function ResetPasswordPage() {
                         showPassword ? "Hide password" : "Show password"
                       }
                       onClick={() => setShowPassword((v) => !v)}
-                      className="absolute inset-y-0 right-0 flex w-11 items-center justify-center text-[#6e6e73] hover:text-[#1d1d1f]"
+                      className="absolute inset-y-0 right-0 flex w-11 items-center justify-center text-muted hover:text-foreground"
                     >
                       {showPassword ? (
                         <EyeOff className="h-4 w-4" aria-hidden />
@@ -299,7 +299,7 @@ export default function ResetPasswordPage() {
                 <div className="mt-5">
                   <label
                     htmlFor="reset-confirm-password"
-                    className="mb-1.5 block text-xs font-medium text-[#1d1d1f]"
+                    className="mb-1.5 block text-xs font-medium text-foreground"
                   >
                     Confirm password
                   </label>
@@ -321,7 +321,7 @@ export default function ResetPasswordPage() {
                         showConfirm ? "Hide password" : "Show password"
                       }
                       onClick={() => setShowConfirm((v) => !v)}
-                      className="absolute inset-y-0 right-0 flex w-11 items-center justify-center text-[#6e6e73] hover:text-[#1d1d1f]"
+                      className="absolute inset-y-0 right-0 flex w-11 items-center justify-center text-muted hover:text-foreground"
                     >
                       {showConfirm ? (
                         <EyeOff className="h-4 w-4" aria-hidden />
@@ -341,7 +341,7 @@ export default function ResetPasswordPage() {
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-[#1d1d1f] py-3 text-sm font-medium text-white transition-all duration-200 hover:bg-[#2d2d2f] disabled:cursor-not-allowed disabled:opacity-70"
+                  className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-foreground py-3 text-sm font-medium text-background transition-all duration-200 hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-70"
                 >
                   {submitting ? (
                     <>
@@ -358,14 +358,14 @@ export default function ResetPasswordPage() {
 
                 <Link
                   href="/login"
-                  className="mt-4 block text-center text-sm text-[#6e6e73] hover:text-[#1d1d1f]"
+                  className="mt-4 block text-center text-sm text-muted hover:text-foreground"
                 >
                   ← Back to sign in
                 </Link>
               </form>
             )}
 
-            <p className="mt-8 text-center text-xs text-[#aeaeb2]">
+            <p className="mt-8 text-center text-xs text-muted/80">
               © 2026 House of Ed-Tech. All rights reserved.
             </p>
           </div>

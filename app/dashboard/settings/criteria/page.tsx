@@ -10,7 +10,7 @@ import { modalOverlayClass, modalPanelClass } from "@/lib/modal-responsive";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 
 const cardChrome =
-  "rounded-2xl bg-white p-6 shadow-[0_4px_16px_rgba(0,0,0,0.08)] border border-[#f0f0f0]";
+  "rounded-2xl bg-elevated p-6 shadow-card border border-border-subtle";
 
 type Criteria = {
   id: string;
@@ -178,47 +178,47 @@ export default function CriteriaPage() {
       : "No active criteria yet.";
 
   const inputClass =
-    "w-full rounded-xl border border-[#e5e5e5] px-3 py-2.5 text-sm text-[#1d1d1f] focus:border-[#3b82f6] focus:outline-none focus:ring-0";
+    "w-full rounded-xl border border-border px-3 py-2.5 text-sm text-foreground focus:border-[#3b82f6] focus:outline-none focus:ring-0";
 
   return (
     <>
-      <header className="sticky top-14 z-30 bg-[#f5f5f7]/90 px-4 py-4 backdrop-blur-md sm:px-6 sm:py-5 lg:top-0 lg:px-8 lg:py-6">
+      <header className="sticky top-14 z-30 bg-background/90 px-4 py-4 backdrop-blur-md sm:px-6 sm:py-5 lg:top-0 lg:px-8 lg:py-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight text-[#1d1d1f]">
+            <h1 className="text-2xl font-semibold tracking-tight text-foreground">
               Eligibility criteria
             </h1>
-            <p className="mt-1 text-sm text-[#6e6e73]">
+            <p className="mt-1 text-sm text-muted">
               Manage AI evaluation rules for candidates
             </p>
           </div>
           <div className="-mx-1 flex flex-nowrap items-center gap-3 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] sm:flex-wrap sm:overflow-visible [&::-webkit-scrollbar]:hidden">
             <Link
               href="/dashboard/settings/team"
-              className="shrink-0 text-sm font-medium text-[#6e6e73] transition-all hover:text-[#1d1d1f]"
+              className="shrink-0 text-sm font-medium text-muted transition-all hover:text-foreground"
             >
               Team
             </Link>
             <Link
               href="/dashboard/settings/criteria"
-              className="shrink-0 text-sm font-medium text-[#1d1d1f]"
+              className="shrink-0 text-sm font-medium text-foreground"
             >
               Criteria
             </Link>
             <Link
               href="/dashboard/settings/roster"
-              className="shrink-0 text-sm font-medium text-[#6e6e73] transition-all hover:text-[#1d1d1f]"
+              className="shrink-0 text-sm font-medium text-muted transition-all hover:text-foreground"
             >
               Roster
             </Link>
             <Link
               href="/dashboard/settings/deleted-entries"
-              className="shrink-0 text-sm font-medium text-[#6e6e73] transition-all hover:text-[#1d1d1f]"
+              className="shrink-0 text-sm font-medium text-muted transition-all hover:text-foreground"
             >
               Deleted Entries
             </Link>
             {showViewOnlyBadge ? (
-              <span className="rounded-full bg-[#f3f4f6] px-3 py-1 text-xs font-medium text-[#6b7280]">
+              <span className="rounded-full bg-border/40 px-3 py-1 text-xs font-medium text-muted">
                 View only
               </span>
             ) : null}
@@ -232,7 +232,7 @@ export default function CriteriaPage() {
                   setFormDesc("");
                   setFormActive(true);
                 }}
-                className="rounded-xl bg-[#1d1d1f] px-4 py-2 text-sm font-medium text-white transition-all hover:bg-[#2d2d2f]"
+                className="rounded-xl bg-foreground px-4 py-2 text-sm font-medium text-background transition-all hover:opacity-90"
               >
                 Add criteria
               </button>
@@ -241,16 +241,16 @@ export default function CriteriaPage() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-6xl px-4 pb-10 pt-2 text-sm text-[#1d1d1f] sm:px-6 lg:px-8 lg:pb-12">
+      <main className="mx-auto max-w-6xl px-4 pb-10 pt-2 text-sm text-foreground sm:px-6 lg:px-8 lg:pb-12">
         <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
           <div>
-            <h2 className="text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
+            <h2 className="text-xs font-medium uppercase tracking-widest text-muted/80">
               Active & inactive criteria
             </h2>
             {loading ? (
-              <p className="mt-4 text-sm text-[#6e6e73]">Loading…</p>
+              <p className="mt-4 text-sm text-muted">Loading…</p>
             ) : criteriaList.length === 0 ? (
-              <p className="mt-4 text-sm text-[#6e6e73]">
+              <p className="mt-4 text-sm text-muted">
                 No criteria added yet.
               </p>
             ) : (
@@ -262,16 +262,16 @@ export default function CriteriaPage() {
                   >
                     <div className="flex items-start justify-between gap-4">
                       <div className="min-w-0 flex-1">
-                        <h3 className="font-semibold text-[#1d1d1f]">
+                        <h3 className="font-semibold text-foreground">
                           {c.criteria_name}
                         </h3>
-                        <p className="mt-1 text-sm text-[#6e6e73]">
+                        <p className="mt-1 text-sm text-muted">
                           {c.criteria_description}
                         </p>
                       </div>
                       <div className="flex shrink-0 flex-col items-end gap-3">
                         <div className="flex items-center gap-2">
-                          <span className="text-xs text-[#6e6e73]">
+                          <span className="text-xs text-muted">
                             {c.is_active ? "Active" : "Inactive"}
                           </span>
                           {canEditCurrentPage ? (
@@ -281,11 +281,11 @@ export default function CriteriaPage() {
                               aria-checked={c.is_active}
                               onClick={() => toggleActive(c.id, c.is_active)}
                               className={`relative h-7 w-11 shrink-0 rounded-full transition-colors ${
-                                c.is_active ? "bg-[#1d1d1f]" : "bg-[#e5e5e5]"
+                                c.is_active ? "bg-foreground" : "bg-border"
                               }`}
                             >
                               <span
-                                className={`pointer-events-none absolute top-0.5 h-6 w-6 rounded-full bg-white shadow-sm transition-all duration-200 ${
+                                className={`pointer-events-none absolute top-0.5 h-6 w-6 rounded-full bg-elevated shadow-sm transition-all duration-200 ${
                                   c.is_active
                                     ? "left-[calc(100%-1.625rem)]"
                                     : "left-0.5"
@@ -324,22 +324,22 @@ export default function CriteriaPage() {
 
           <div className="space-y-6">
             <section className={cardChrome}>
-              <h2 className="text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
+              <h2 className="text-xs font-medium uppercase tracking-widest text-muted/80">
                 Compiled prompt preview
               </h2>
-              <p className="mt-1 text-sm text-[#6e6e73]">
+              <p className="mt-1 text-sm text-muted">
                 Text sent to the model for evaluation:
               </p>
-              <pre className="mt-4 whitespace-pre-wrap rounded-xl bg-[#f5f5f7] p-4 font-mono text-sm text-[#1d1d1f]">
+              <pre className="mt-4 whitespace-pre-wrap rounded-xl bg-background p-4 font-mono text-sm text-foreground">
                 {compiledPrompt}
               </pre>
             </section>
 
             <section className={cardChrome}>
-              <h2 className="text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
+              <h2 className="text-xs font-medium uppercase tracking-widest text-muted/80">
                 Test criteria
               </h2>
-              <p className="mt-1 text-sm text-[#6e6e73]">
+              <p className="mt-1 text-sm text-muted">
                 Paste a sample achievement to preview scoring:
               </p>
               <textarea
@@ -353,13 +353,13 @@ export default function CriteriaPage() {
                   type="button"
                   onClick={() => void testCriteria()}
                   disabled={testLoading}
-                  className="mt-3 w-full rounded-xl bg-[#1d1d1f] px-4 py-2.5 text-sm font-medium text-white transition-all hover:bg-[#2d2d2f] disabled:opacity-50"
+                  className="mt-3 w-full rounded-xl bg-foreground px-4 py-2.5 text-sm font-medium text-background transition-all hover:opacity-90 disabled:opacity-50"
                 >
                   {testLoading ? "Testing…" : "Run test"}
                 </button>
               ) : null}
               {testResult && !testResult.error && (
-                <div className="mt-4 rounded-xl border border-[#f0f0f0] bg-[#f5f5f7] p-4">
+                <div className="mt-4 rounded-xl border border-border-subtle bg-background p-4">
                   <div className="mb-2 flex items-center justify-between">
                     <span
                       className={`inline-flex rounded-full px-3 py-1 text-xs font-medium ${
@@ -372,17 +372,17 @@ export default function CriteriaPage() {
                         ? "Eligible"
                         : "Not eligible"}
                     </span>
-                    <span className="text-lg font-bold tabular-nums text-[#1d1d1f]">
+                    <span className="text-lg font-bold tabular-nums text-foreground">
                       {String(testResult.score ?? "—")}/100
                     </span>
                   </div>
-                  <p className="text-sm text-[#6e6e73]">
+                  <p className="text-sm text-muted">
                     {String(testResult.reason ?? "")}
                   </p>
                 </div>
               )}
               {testResult?.error ? (
-                <p className="mt-4 text-sm text-[#6e6e73]">
+                <p className="mt-4 text-sm text-muted">
                   {String(testResult.error)}
                 </p>
               ) : null}
@@ -399,14 +399,14 @@ export default function CriteriaPage() {
               onClick={() => setShowForm(false)}
             />
             <div
-              className={`${modalPanelClass} p-6 shadow-[0_4px_16px_rgba(0,0,0,0.08)]`}
+              className={`${modalPanelClass} p-6 shadow-card`}
             >
-              <h2 className="text-lg font-semibold text-[#1d1d1f]">
+              <h2 className="text-lg font-semibold text-foreground">
                 {editingId ? "Edit criteria" : "Add criteria"}
               </h2>
               <div className="mt-4 space-y-4">
                 <label className="block">
-                  <span className="text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
+                  <span className="text-xs font-medium uppercase tracking-widest text-muted/80">
                     Name
                   </span>
                   <input
@@ -417,7 +417,7 @@ export default function CriteriaPage() {
                   />
                 </label>
                 <label className="block">
-                  <span className="text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
+                  <span className="text-xs font-medium uppercase tracking-widest text-muted/80">
                     Description
                   </span>
                   <textarea
@@ -434,18 +434,18 @@ export default function CriteriaPage() {
                     aria-checked={formActive}
                     onClick={() => setFormActive((a) => !a)}
                     className={`relative h-7 w-11 shrink-0 rounded-full transition-colors ${
-                      formActive ? "bg-[#1d1d1f]" : "bg-[#e5e5e5]"
+                      formActive ? "bg-foreground" : "bg-border"
                     }`}
                   >
                     <span
-                      className={`pointer-events-none absolute top-0.5 h-6 w-6 rounded-full bg-white shadow-sm transition-all duration-200 ${
+                      className={`pointer-events-none absolute top-0.5 h-6 w-6 rounded-full bg-elevated shadow-sm transition-all duration-200 ${
                         formActive
                           ? "left-[calc(100%-1.625rem)]"
                           : "left-0.5"
                       }`}
                     />
                   </button>
-                  <span className="text-sm text-[#6e6e73]">
+                  <span className="text-sm text-muted">
                     Active (include in live evaluation)
                   </span>
                 </div>
@@ -454,14 +454,14 @@ export default function CriteriaPage() {
                 <button
                   type="button"
                   onClick={() => void saveCriteria()}
-                  className="flex-1 rounded-xl bg-[#1d1d1f] py-2.5 text-sm font-medium text-white transition-all hover:bg-[#2d2d2f]"
+                  className="flex-1 rounded-xl bg-foreground py-2.5 text-sm font-medium text-background transition-all hover:opacity-90"
                 >
                   {editingId ? "Save" : "Add"}
                 </button>
                 <button
                   type="button"
                   onClick={() => setShowForm(false)}
-                  className="flex-1 rounded-xl border border-[#f0f0f0] bg-white py-2.5 text-sm font-medium text-[#1d1d1f] transition-all hover:bg-[#fafafa]"
+                  className="flex-1 rounded-xl border border-border-subtle bg-elevated py-2.5 text-sm font-medium text-foreground transition-all hover:bg-background/80"
                 >
                   Cancel
                 </button>

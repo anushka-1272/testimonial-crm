@@ -52,12 +52,12 @@ function memberSortKey(row: TeamMemberRow): string {
 }
 
 function roleBadgeClass(role: TeamRole): string {
-  if (role === "admin") return "bg-[#1d1d1f] text-white";
+  if (role === "admin") return "bg-foreground text-background";
   if (role === "interviewer") return "bg-[#dbeafe] text-[#1d4ed8]";
   if (role === "poc") return "bg-[#dcfce7] text-[#166534]";
   if (role === "operations") return "bg-[#ffedd5] text-[#9a3412]";
   if (role === "post_production") return "bg-[#f3e8ff] text-[#7e22ce]";
-  return "bg-[#f3f4f6] text-[#4b5563]";
+  return "bg-border/40 text-[#4b5563]";
 }
 
 function statusBadgeClass(status: TeamMemberRow["status"]): string {
@@ -297,21 +297,21 @@ export default function TeamSettingsPage() {
   return (
     <>
       {toast ? (
-        <div className="fixed bottom-6 left-1/2 z-[80] -translate-x-1/2 rounded-xl bg-[#1d1d1f] px-4 py-2 text-sm text-white shadow-lg">
+        <div className="fixed bottom-6 left-1/2 z-[80] -translate-x-1/2 rounded-xl bg-foreground px-4 py-2 text-sm text-background shadow-lg">
           {toast}
         </div>
       ) : null}
-      <header className="sticky top-14 z-30 bg-[#f5f5f7]/90 px-4 py-4 backdrop-blur-md sm:px-6 sm:py-5 lg:top-0 lg:px-8 lg:py-6">
+      <header className="sticky top-14 z-30 bg-background/90 px-4 py-4 backdrop-blur-md sm:px-6 sm:py-5 lg:top-0 lg:px-8 lg:py-6">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight text-[#1d1d1f]">
+            <h1 className="text-2xl font-semibold tracking-tight text-foreground">
               Team Management
             </h1>
-            <p className="mt-1 text-sm text-[#6e6e73]">Manage who has access to the CRM</p>
+            <p className="mt-1 text-sm text-muted">Manage who has access to the CRM</p>
           </div>
           <div className="flex items-center gap-2">
             {showViewOnlyBadge ? (
-              <span className="rounded-full bg-[#f3f4f6] px-3 py-1 text-xs font-medium text-[#6b7280]">
+              <span className="rounded-full bg-border/40 px-3 py-1 text-xs font-medium text-muted">
                 View only
               </span>
             ) : null}
@@ -321,14 +321,14 @@ export default function TeamSettingsPage() {
                   type="button"
                   onClick={() => void syncMembers()}
                   disabled={syncing}
-                  className="rounded-xl border border-[#e5e5e5] bg-white px-4 py-2 text-sm font-medium text-[#1d1d1f] hover:bg-[#fafafa] disabled:opacity-50"
+                  className="rounded-xl border border-border bg-elevated px-4 py-2 text-sm font-medium text-foreground hover:bg-background/80 disabled:opacity-50"
                 >
                   {syncing ? "Syncing..." : "Sync Members"}
                 </button>
                 <button
                   type="button"
                   onClick={() => setInviteOpen(true)}
-                  className="rounded-xl bg-[#1d1d1f] px-4 py-2 text-sm font-medium text-white hover:bg-[#2d2d2f]"
+                  className="rounded-xl bg-foreground px-4 py-2 text-sm font-medium text-background hover:opacity-90"
                 >
                   Add Member
                 </button>
@@ -339,25 +339,25 @@ export default function TeamSettingsPage() {
         <div className="mt-3 flex flex-nowrap items-center gap-4 overflow-x-auto pb-1 text-sm [-ms-overflow-style:none] [scrollbar-width:none] sm:flex-wrap sm:overflow-visible [&::-webkit-scrollbar]:hidden">
           <Link
             href="/dashboard/settings/team"
-            className="shrink-0 font-medium text-[#1d1d1f]"
+            className="shrink-0 font-medium text-foreground"
           >
             Team
           </Link>
           <Link
             href="/dashboard/settings/roster"
-            className="shrink-0 text-[#6e6e73] hover:text-[#1d1d1f]"
+            className="shrink-0 text-muted hover:text-foreground"
           >
             Roster
           </Link>
           <Link
             href="/dashboard/settings/criteria"
-            className="shrink-0 text-[#6e6e73] hover:text-[#1d1d1f]"
+            className="shrink-0 text-muted hover:text-foreground"
           >
             Criteria
           </Link>
           <Link
             href="/dashboard/settings/deleted-entries"
-            className="shrink-0 text-[#6e6e73] hover:text-[#1d1d1f]"
+            className="shrink-0 text-muted hover:text-foreground"
           >
             Deleted Entries
           </Link>
@@ -366,11 +366,11 @@ export default function TeamSettingsPage() {
 
       <main className="mx-auto max-w-7xl px-4 pb-10 pt-2 sm:px-6 lg:px-8 lg:pb-12">
         {error ? (
-          <p className="mb-3 rounded-xl border border-[#f0f0f0] bg-white px-4 py-2 text-sm text-[#dc2626]">
+          <p className="mb-3 rounded-xl border border-border-subtle bg-elevated px-4 py-2 text-sm text-[#dc2626]">
             {error}
           </p>
         ) : null}
-        <div className="overflow-hidden rounded-2xl border border-[#f0f0f0] bg-white shadow-sm">
+        <div className="overflow-hidden rounded-2xl border border-border-subtle bg-elevated shadow-sm">
           <div className="w-full overflow-x-auto">
             <table className="w-full min-w-[980px] border-collapse">
               <thead>
@@ -378,7 +378,7 @@ export default function TeamSettingsPage() {
                   {["MEMBER", "EMAIL", "ROLE", "STATUS", "JOINED", canManageTeam ? "ACTIONS" : ""]
                     .filter(Boolean)
                     .map((h) => (
-                      <th key={h} className="border-b border-gray-100 bg-[#fafafa] px-4 py-3 text-left text-xs font-semibold tracking-wider text-gray-400">
+                      <th key={h} className="border-b border-border bg-background/80 px-4 py-3 text-left text-xs font-semibold tracking-wider text-muted">
                         {h}
                       </th>
                     ))}
@@ -387,39 +387,39 @@ export default function TeamSettingsPage() {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td className="px-4 py-6 text-sm text-[#6e6e73]" colSpan={canManageTeam ? 6 : 5}>
+                    <td className="px-4 py-6 text-sm text-muted" colSpan={canManageTeam ? 6 : 5}>
                       Loading...
                     </td>
                   </tr>
                 ) : members.length === 0 ? (
                   <tr>
-                    <td className="px-4 py-8 text-sm text-[#6e6e73]" colSpan={canManageTeam ? 6 : 5}>
+                    <td className="px-4 py-8 text-sm text-muted" colSpan={canManageTeam ? 6 : 5}>
                       No team members yet.
                     </td>
                   </tr>
                 ) : (
                   members.map((m) => (
                     <tr key={m.id}>
-                      <td className="border-b border-gray-100 px-4 py-4 text-sm">
+                      <td className="border-b border-border px-4 py-4 text-sm">
                         <div className="flex items-center gap-3">
-                          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#1d1d1f] text-xs font-semibold text-white">
+                          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-foreground text-xs font-semibold text-background">
                             {initials(m.full_name, m.email)}
                           </div>
                           <span>{m.full_name?.trim() || "—"}</span>
                         </div>
                       </td>
-                      <td className="border-b border-gray-100 px-4 py-4 text-sm text-[#6e6e73]">{m.email}</td>
-                      <td className="border-b border-gray-100 px-4 py-4 text-sm">
+                      <td className="border-b border-border px-4 py-4 text-sm text-muted">{m.email}</td>
+                      <td className="border-b border-border px-4 py-4 text-sm">
                         <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${roleBadgeClass(m.role)}`}>
                           {roleLabel(m.role)}
                         </span>
                       </td>
-                      <td className="border-b border-gray-100 px-4 py-4 text-sm">
+                      <td className="border-b border-border px-4 py-4 text-sm">
                         <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${statusBadgeClass(m.status)}`}>
                           {m.status === "invited" ? "Invited" : m.status === "active" ? "Active" : "Removed"}
                         </span>
                       </td>
-                      <td className="border-b border-gray-100 px-4 py-4 text-sm text-[#6e6e73]">
+                      <td className="border-b border-border px-4 py-4 text-sm text-muted">
                         {m.status === "invited"
                           ? "Pending"
                           : m.created_at
@@ -427,12 +427,12 @@ export default function TeamSettingsPage() {
                             : "Pending"}
                       </td>
                       {canManageTeam ? (
-                        <td className="border-b border-gray-100 px-4 py-4 text-sm">
+                        <td className="border-b border-border px-4 py-4 text-sm">
                           <div className="flex items-center gap-2">
                             <select
                               value={m.role}
                               onChange={(e) => void changeRole(m.id, e.target.value as TeamRole)}
-                              className="rounded-lg border border-[#e5e5e5] px-2 py-1.5 text-xs text-[#1d1d1f]"
+                              className="rounded-lg border border-border px-2 py-1.5 text-xs text-foreground"
                             >
                               {ROLE_OPTIONS.map((r) => (
                                 <option key={r.value} value={r.value}>
@@ -441,7 +441,7 @@ export default function TeamSettingsPage() {
                               ))}
                             </select>
                             {m.status === "removed" ? (
-                              <span className="rounded-lg bg-[#f3f4f6] px-2.5 py-1.5 text-xs font-medium text-[#6b7280]">
+                              <span className="rounded-lg bg-border/40 px-2.5 py-1.5 text-xs font-medium text-muted">
                                 Access Revoked
                               </span>
                             ) : (
@@ -472,24 +472,24 @@ export default function TeamSettingsPage() {
             className="absolute inset-0"
             onClick={() => setInviteOpen(false)}
           />
-          <div className={`${modalPanelClass} p-6 shadow-[0_4px_16px_rgba(0,0,0,0.08)]`}>
-            <h2 className="text-lg font-semibold text-[#1d1d1f]">Add Team Member</h2>
+          <div className={`${modalPanelClass} p-6 shadow-card`}>
+            <h2 className="text-lg font-semibold text-foreground">Add Team Member</h2>
             <div className="mt-4 space-y-4">
               <label className="block text-sm">
-                <span className="text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">Full name</span>
-                <input className="mt-1 w-full rounded-xl border border-[#e5e5e5] px-3 py-2.5 text-sm" value={inviteName} onChange={(e) => setInviteName(e.target.value)} />
+                <span className="text-xs font-medium uppercase tracking-widest text-muted/80">Full name</span>
+                <input className="mt-1 w-full rounded-xl border border-border px-3 py-2.5 text-sm" value={inviteName} onChange={(e) => setInviteName(e.target.value)} />
               </label>
               <label className="block text-sm">
-                <span className="text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">Email</span>
-                <input type="email" className="mt-1 w-full rounded-xl border border-[#e5e5e5] px-3 py-2.5 text-sm" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} />
+                <span className="text-xs font-medium uppercase tracking-widest text-muted/80">Email</span>
+                <input type="email" className="mt-1 w-full rounded-xl border border-border px-3 py-2.5 text-sm" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} />
               </label>
               <label className="block text-sm">
-                <span className="text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">Password</span>
-                <input type="password" className="mt-1 w-full rounded-xl border border-[#e5e5e5] px-3 py-2.5 text-sm" value={invitePassword} onChange={(e) => setInvitePassword(e.target.value)} />
+                <span className="text-xs font-medium uppercase tracking-widest text-muted/80">Password</span>
+                <input type="password" className="mt-1 w-full rounded-xl border border-border px-3 py-2.5 text-sm" value={invitePassword} onChange={(e) => setInvitePassword(e.target.value)} />
               </label>
               <label className="block text-sm">
-                <span className="text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">Role</span>
-                <select className="mt-1 w-full rounded-xl border border-[#e5e5e5] px-3 py-2.5 text-sm" value={inviteRole} onChange={(e) => setInviteRole(e.target.value as TeamRole)}>
+                <span className="text-xs font-medium uppercase tracking-widest text-muted/80">Role</span>
+                <select className="mt-1 w-full rounded-xl border border-border px-3 py-2.5 text-sm" value={inviteRole} onChange={(e) => setInviteRole(e.target.value as TeamRole)}>
                   {ROLE_OPTIONS.map((r) => (
                     <option key={r.value} value={r.value}>
                       {r.label}
@@ -497,19 +497,19 @@ export default function TeamSettingsPage() {
                   ))}
                 </select>
               </label>
-              <p className="text-xs text-[#6e6e73]">
+              <p className="text-xs text-muted">
                 {selectedRole?.description}. No invitation email will be sent.
               </p>
             </div>
             <div className="mt-6 flex justify-end gap-2">
-              <button type="button" className="rounded-xl border border-[#f0f0f0] bg-white px-4 py-2 text-sm font-medium text-[#1d1d1f]" onClick={() => setInviteOpen(false)}>
+              <button type="button" className="rounded-xl border border-border-subtle bg-elevated px-4 py-2 text-sm font-medium text-foreground" onClick={() => setInviteOpen(false)}>
                 Cancel
               </button>
               <button
                 type="button"
                 disabled={submitting}
                 onClick={() => void inviteMember()}
-                className="rounded-xl bg-[#1d1d1f] px-4 py-2 text-sm font-medium text-white hover:bg-[#2d2d2f] disabled:opacity-50"
+                className="rounded-xl bg-foreground px-4 py-2 text-sm font-medium text-background hover:opacity-90 disabled:opacity-50"
               >
                 {submitting ? "Adding..." : "Add Member"}
               </button>

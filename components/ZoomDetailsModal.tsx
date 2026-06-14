@@ -106,13 +106,13 @@ export function ZoomDetailsModal({
         onClick={onClose}
       />
       <div
-        className={`${modalPanelClass} p-6 shadow-[0_4px_16px_rgba(0,0,0,0.08)]`}
+        className={`${modalPanelClass} p-6 shadow-card`}
       >
         <div className="mb-4 flex items-start justify-between">
-          <h2 className="text-lg font-semibold text-[#1d1d1f]">{title}</h2>
+          <h2 className="text-lg font-semibold text-foreground">{title}</h2>
           <button
             type="button"
-            className="rounded-xl p-2 text-[#aeaeb2] transition-all hover:bg-[#f5f5f7] hover:text-[#1d1d1f]"
+            className="rounded-xl p-2 text-muted/80 transition-all hover:bg-background hover:text-foreground"
             onClick={onClose}
             aria-label="Close"
           >
@@ -122,19 +122,19 @@ export function ZoomDetailsModal({
 
         <div className="space-y-4 text-sm">
           {error ? (
-            <p className="rounded-xl border border-[#f0f0f0] bg-[#f5f5f7] px-3 py-2 text-sm text-[#1d1d1f]">
+            <p className="rounded-xl border border-border-subtle bg-background px-3 py-2 text-sm text-foreground">
               {error}
             </p>
           ) : null}
 
           <label className="block text-sm">
-            <span className="text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
+            <span className="text-xs font-medium uppercase tracking-widest text-muted/80">
               Zoom Link
             </span>
             <input
               type="url"
               required
-              className="mt-1 w-full rounded-xl border border-[#e5e5e5] px-3 py-2.5 text-sm text-[#1d1d1f] focus:border-[#3b82f6] focus:outline-none focus:ring-0"
+              className="mt-1 w-full rounded-xl border border-border px-3 py-2.5 text-sm text-foreground focus:border-[#3b82f6] focus:outline-none focus:ring-0"
               placeholder="https://zoom.us/j/..."
               value={zoomLink}
               onChange={(e) => setZoomLink(e.target.value)}
@@ -143,13 +143,13 @@ export function ZoomDetailsModal({
           </label>
 
           <label className="block text-sm">
-            <span className="text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
+            <span className="text-xs font-medium uppercase tracking-widest text-muted/80">
               Zoom Account Email
             </span>
             <input
               type="email"
               required
-              className="mt-1 w-full rounded-xl border border-[#e5e5e5] px-3 py-2.5 text-sm text-[#1d1d1f] focus:border-[#3b82f6] focus:outline-none focus:ring-0"
+              className="mt-1 w-full rounded-xl border border-border px-3 py-2.5 text-sm text-foreground focus:border-[#3b82f6] focus:outline-none focus:ring-0"
               placeholder="host@example.com"
               value={zoomAccount}
               onChange={(e) => setZoomAccount(e.target.value)}
@@ -160,7 +160,7 @@ export function ZoomDetailsModal({
           <div className="flex justify-end gap-2 pt-2">
             <button
               type="button"
-              className="rounded-xl border border-[#f0f0f0] bg-white px-4 py-2 text-sm font-medium text-[#1d1d1f] transition-all hover:bg-[#fafafa]"
+              className="rounded-xl border border-border-subtle bg-elevated px-4 py-2 text-sm font-medium text-foreground transition-all hover:bg-background/80"
               onClick={onClose}
             >
               Cancel
@@ -168,7 +168,7 @@ export function ZoomDetailsModal({
             <button
               type="button"
               disabled={saving}
-              className="rounded-xl bg-[#1d1d1f] px-4 py-2 text-sm font-medium text-white transition-all hover:bg-[#2d2d2f] disabled:opacity-50"
+              className="rounded-xl bg-foreground px-4 py-2 text-sm font-medium text-background transition-all hover:opacity-90 disabled:opacity-50"
               onClick={() => void handleSave()}
             >
               {saving ? "Saving..." : "Save"}

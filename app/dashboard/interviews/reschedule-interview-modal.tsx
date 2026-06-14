@@ -96,8 +96,8 @@ export function RescheduleInterviewModal({
   };
 
   const inp =
-    "mt-1 w-full rounded-xl border border-[#e5e5e5] px-3 py-2.5 text-sm text-[#1d1d1f] focus:border-[#3b82f6] focus:outline-none focus:ring-0";
-  const lab = "text-xs font-medium uppercase tracking-widest text-[#aeaeb2]";
+    "mt-1 w-full rounded-xl border border-border px-3 py-2.5 text-sm text-foreground focus:border-[#3b82f6] focus:outline-none focus:ring-0";
+  const lab = "text-xs font-medium uppercase tracking-widest text-muted/80";
   const title = mode === "from_scheduled" ? "Reschedule interview" : "Schedule again";
 
   return (
@@ -109,12 +109,12 @@ export function RescheduleInterviewModal({
         onClick={onClose}
       />
       <div
-        className={`${modalPanelClass} p-6 shadow-[0_4px_16px_rgba(0,0,0,0.08)]`}
+        className={`${modalPanelClass} p-6 shadow-card`}
       >
         <div className="mb-4 flex items-start justify-between">
           <div>
-            <h2 className="text-lg font-semibold text-[#1d1d1f]">{title}</h2>
-            <p className="text-sm text-[#6e6e73]">
+            <h2 className="text-lg font-semibold text-foreground">{title}</h2>
+            <p className="text-sm text-muted">
               {isProjectInterviewRow(interview)
                 ? `${interview.project_candidates?.project_title?.trim() || "Project"} · ${interview.project_candidates?.email ?? ""}`
                 : `${interview.candidates?.full_name ?? "Candidate"} · ${interview.candidates?.email}`}
@@ -122,7 +122,7 @@ export function RescheduleInterviewModal({
           </div>
           <button
             type="button"
-            className="rounded-xl p-2 text-[#aeaeb2] transition-all hover:bg-[#f5f5f7] hover:text-[#1d1d1f]"
+            className="rounded-xl p-2 text-muted/80 transition-all hover:bg-background hover:text-foreground"
             onClick={onClose}
           >
             ✕
@@ -131,7 +131,7 @@ export function RescheduleInterviewModal({
 
         <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4 text-sm">
           {error && (
-            <p className="rounded-xl border border-[#f0f0f0] bg-[#f5f5f7] px-3 py-2 text-sm text-[#1d1d1f]">
+            <p className="rounded-xl border border-border-subtle bg-background px-3 py-2 text-sm text-foreground">
               {error}
             </p>
           )}
@@ -176,7 +176,7 @@ export function RescheduleInterviewModal({
           <div className="flex justify-end gap-2 pt-2">
             <button
               type="button"
-              className="rounded-xl border border-[#f0f0f0] bg-white px-4 py-2 text-sm font-medium text-[#1d1d1f] transition-all hover:bg-[#fafafa]"
+              className="rounded-xl border border-border-subtle bg-elevated px-4 py-2 text-sm font-medium text-foreground transition-all hover:bg-background/80"
               onClick={onClose}
             >
               Cancel
@@ -187,7 +187,7 @@ export function RescheduleInterviewModal({
               className={
                 mode === "from_scheduled"
                   ? "rounded-xl bg-[#ea580c] px-4 py-2 text-sm font-medium text-white transition-all hover:bg-[#c2410c] disabled:opacity-50"
-                  : "rounded-xl bg-[#1d1d1f] px-4 py-2 text-sm font-medium text-white transition-all hover:bg-[#2d2d2f] disabled:opacity-50"
+                  : "rounded-xl bg-foreground px-4 py-2 text-sm font-medium text-background transition-all hover:opacity-90 disabled:opacity-50"
               }
             >
               {submitting ? "Saving…" : "Save"}

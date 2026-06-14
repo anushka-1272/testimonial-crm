@@ -23,6 +23,7 @@
     --color-border-subtle: #252536;
     --color-card-shadow: rgba(0, 0, 0, 0.35);
     --color-segment-shadow: rgba(0, 0, 0, 0.25);
+    color-scheme: dark;
   }
 
   body {

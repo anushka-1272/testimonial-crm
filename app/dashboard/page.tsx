@@ -20,7 +20,6 @@ import {
 } from "@/lib/dashboard-ist-dates";
 import { getUserSafe } from "@/lib/supabase-auth";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
-import { ThemeToggle } from "@/components/theme-toggle";
 
 import { DashboardStatCard } from "./dashboard-stat-card";
 
@@ -546,7 +545,6 @@ export default function DashboardPage() {
               Here&apos;s what&apos;s happening today
             </p>
           </div>
-          <ThemeToggle />
         </div>
       </header>
 

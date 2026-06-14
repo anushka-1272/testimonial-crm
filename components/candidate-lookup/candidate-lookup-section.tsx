@@ -9,7 +9,7 @@ import type {
 } from "@/lib/candidate-lookup/types";
 
 const inputClass =
-  "w-full rounded-xl border border-[#e5e5e5] px-4 py-3 text-sm text-[#1d1d1f] placeholder:text-[#aeaeb2] focus:border-[#3b82f6] focus:outline-none focus:ring-1 focus:ring-[#3b82f6]";
+  "w-full rounded-xl border border-border px-4 py-3 text-sm text-foreground placeholder:text-muted/80 focus:border-[#3b82f6] focus:outline-none focus:ring-1 focus:ring-[#3b82f6]";
 
 function InterviewTypeBadge({ type }: { type: CandidateLookupCardData["interviewType"] }) {
   if (type === "testimonial") {
@@ -33,20 +33,20 @@ function InterviewTypeBadge({ type }: { type: CandidateLookupCardData["interview
       </span>
     );
   }
-  return <span className="text-xs font-medium text-[#6e6e73]">Not set</span>;
+  return <span className="text-xs font-medium text-muted">Not set</span>;
 }
 
 function LookupResultCard({ card }: { card: CandidateLookupCardData }) {
   return (
-    <div className="mt-5 rounded-2xl border border-[#f0f0f0] bg-[#fafafa] p-5 text-left">
-      <p className="text-xl font-bold text-[#1d1d1f]">{card.fullName}</p>
-      <div className="mt-3 space-y-1 text-sm text-[#6e6e73]">
+    <div className="mt-5 rounded-2xl border border-border-subtle bg-background/80 p-5 text-left">
+      <p className="text-xl font-bold text-foreground">{card.fullName}</p>
+      <div className="mt-3 space-y-1 text-sm text-muted">
         <p className="break-all">
-          <span className="text-[#9ca3af]">Email </span>
+          <span className="text-muted">Email </span>
           {card.email}
         </p>
         <p>
-          <span className="text-[#9ca3af]">Phone </span>
+          <span className="text-muted">Phone </span>
           {card.phone ? (
             card.phone
           ) : (
@@ -55,13 +55,13 @@ function LookupResultCard({ card }: { card: CandidateLookupCardData }) {
         </p>
       </div>
       <div className="mt-4">
-        <p className="mb-2 text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
+        <p className="mb-2 text-xs font-medium uppercase tracking-widest text-muted/80">
           Interview type
         </p>
         <InterviewTypeBadge type={card.interviewType} />
       </div>
-      <div className="mt-4 border-t border-[#e5e5e5] pt-4">
-        <p className="mb-2 text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
+      <div className="mt-4 border-t border-border pt-4">
+        <p className="mb-2 text-xs font-medium uppercase tracking-widest text-muted/80">
           Current status
         </p>
         <span
@@ -70,7 +70,7 @@ function LookupResultCard({ card }: { card: CandidateLookupCardData }) {
           {card.statusTitle}
         </span>
         {card.statusDetailLines.length > 0 ? (
-          <div className="mt-3 space-y-1.5 text-sm leading-snug text-[#6e6e73]">
+          <div className="mt-3 space-y-1.5 text-sm leading-snug text-muted">
             {card.statusDetailLines.map((line, i) => (
               <p key={i}>{line}</p>
             ))}
@@ -78,32 +78,32 @@ function LookupResultCard({ card }: { card: CandidateLookupCardData }) {
         ) : null}
       </div>
       {card.followup ? (
-        <div className="mt-4 border-t border-[#e5e5e5] pt-4">
-          <p className="mb-2 text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
+        <div className="mt-4 border-t border-border pt-4">
+          <p className="mb-2 text-xs font-medium uppercase tracking-widest text-muted/80">
             Follow-up status
           </p>
-          <p className="text-sm font-medium text-[#1d1d1f]">{card.followup.title}</p>
+          <p className="text-sm font-medium text-foreground">{card.followup.title}</p>
           {card.followup.subtitle ? (
-            <p className="mt-1 text-sm leading-snug text-[#6e6e73]">
+            <p className="mt-1 text-sm leading-snug text-muted">
               {card.followup.subtitle}
             </p>
           ) : null}
         </div>
       ) : null}
       {card.poc ? (
-        <div className="mt-4 border-t border-[#e5e5e5] pt-4">
-          <p className="text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
+        <div className="mt-4 border-t border-border pt-4">
+          <p className="text-xs font-medium uppercase tracking-widest text-muted/80">
             POC assigned
           </p>
-          <p className="mt-1 text-sm font-medium text-[#1d1d1f]">{card.poc}</p>
+          <p className="mt-1 text-sm font-medium text-foreground">{card.poc}</p>
         </div>
       ) : null}
       {card.rewardItem ? (
-        <div className="mt-4 border-t border-[#e5e5e5] pt-4">
-          <p className="text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
+        <div className="mt-4 border-t border-border pt-4">
+          <p className="text-xs font-medium uppercase tracking-widest text-muted/80">
             Reward item
           </p>
-          <p className="mt-1 text-sm text-[#1d1d1f]">{card.rewardItem}</p>
+          <p className="mt-1 text-sm text-foreground">{card.rewardItem}</p>
         </div>
       ) : null}
     </div>
@@ -184,7 +184,7 @@ export function CandidateLookupSection() {
           resetResults();
           setQuery("");
         }}
-        className="mt-3 flex w-full items-center justify-center rounded-xl border-2 border-[#1d1d1f] bg-white py-3 text-sm font-medium text-[#1d1d1f] transition-colors hover:bg-[#fafafa]"
+        className="mt-3 flex w-full items-center justify-center rounded-xl border-2 border-foreground bg-elevated py-3 text-sm font-medium text-foreground transition-colors hover:bg-background/80"
       >
         🔍 Candidate lookup
       </button>
@@ -204,24 +204,24 @@ export function CandidateLookupSection() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="candidate-lookup-title"
-            className="relative z-10 flex h-full min-h-[100dvh] w-full max-w-none flex-col overflow-hidden rounded-none bg-white shadow-xl sm:h-auto sm:min-h-0 sm:max-h-[min(90vh,720px)] sm:max-w-md sm:rounded-2xl"
+            className="relative z-10 flex h-full min-h-[100dvh] w-full max-w-none flex-col overflow-hidden rounded-none bg-elevated shadow-xl sm:h-auto sm:min-h-0 sm:max-h-[min(90vh,720px)] sm:max-w-md sm:rounded-2xl"
           >
-            <div className="flex shrink-0 items-start justify-between gap-4 border-b border-[#f0f0f0] px-6 pb-4 pt-5">
+            <div className="flex shrink-0 items-start justify-between gap-4 border-b border-border-subtle px-6 pb-4 pt-5">
               <div className="min-w-0 pr-2">
                 <h2
                   id="candidate-lookup-title"
-                  className="text-lg font-semibold text-[#1d1d1f]"
+                  className="text-lg font-semibold text-foreground"
                 >
                   Candidate lookup
                 </h2>
-                <p className="mt-1 text-sm text-[#6e6e73]">
+                <p className="mt-1 text-sm text-muted">
                   Enter mobile number or email to check status
                 </p>
               </div>
               <button
                 type="button"
                 onClick={close}
-                className="shrink-0 rounded-lg p-2 text-[#6e6e73] transition-colors hover:bg-[#f5f5f7] hover:text-[#1d1d1f]"
+                className="shrink-0 rounded-lg p-2 text-muted transition-colors hover:bg-background hover:text-foreground"
                 aria-label="Close"
               >
                 <X className="h-5 w-5" strokeWidth={2} />
@@ -248,7 +248,7 @@ export function CandidateLookupSection() {
                 type="button"
                 disabled={loading}
                 onClick={() => void search()}
-                className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-[#1d1d1f] py-3 text-sm font-medium text-white transition-colors hover:bg-[#2d2d2f] disabled:cursor-not-allowed disabled:opacity-70"
+                className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-foreground py-3 text-sm font-medium text-background transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-70"
               >
                 {loading ? (
                   <>
@@ -263,18 +263,18 @@ export function CandidateLookupSection() {
               <div className="mt-6 min-h-[120px]">
                 {loading ? (
                   <div className="flex flex-col items-center justify-center py-10">
-                    <Loader2 className="h-8 w-8 animate-spin text-[#1d1d1f]" aria-hidden />
-                    <p className="mt-3 text-sm text-[#6e6e73]">Searching…</p>
+                    <Loader2 className="h-8 w-8 animate-spin text-foreground" aria-hidden />
+                    <p className="mt-3 text-sm text-muted">Searching…</p>
                   </div>
                 ) : multiPhone ? (
-                  <p className="py-8 text-center text-sm text-[#6e6e73]">
+                  <p className="py-8 text-center text-sm text-muted">
                     Several records match this number. Please search using the email on your
                     application.
                   </p>
                 ) : error ? (
                   <p className="py-8 text-center text-sm text-[#dc2626]">{error}</p>
                 ) : notFound && !card ? (
-                  <p className="py-8 text-center text-sm text-[#6e6e73]">No candidate found</p>
+                  <p className="py-8 text-center text-sm text-muted">No candidate found</p>
                 ) : card ? (
                   <LookupResultCard card={card} />
                 ) : null}

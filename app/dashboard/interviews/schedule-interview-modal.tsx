@@ -334,7 +334,7 @@ export function ScheduleInterviewModal({
         onClick={onClose}
       />
       <div
-        className={`${modalPanelClass} p-6 shadow-[0_4px_16px_rgba(0,0,0,0.08)]`}
+        className={`${modalPanelClass} p-6 shadow-card`}
       >
         <div className="mb-4 flex items-start justify-between">
           <div>

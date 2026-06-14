@@ -492,7 +492,7 @@ function postInterviewEligibleBadge(
       </span>
     );
   }
-  return <span className="text-[#6e6e73]">—</span>;
+  return <span className="text-muted">—</span>;
 }
 
 function alreadyCompletedFollowupBadge(
@@ -532,7 +532,7 @@ function postProductionGateBadgeProject(
       </span>
     );
   }
-  return <span className="text-[#6e6e73]">—</span>;
+  return <span className="text-muted">—</span>;
 }
 
 function truncateWithTooltip(text: string | null | undefined, maxLen: number) {
@@ -1062,7 +1062,7 @@ export function ProjectInterviewsPanel({
     (projectCandidateId: string) => {
       const logs = followupLogsByProjectCandidateId.get(projectCandidateId) ?? [];
       const summary = getFollowUpStatus(logs);
-      if (!summary) return <span className="text-[#6e6e73]">—</span>;
+      if (!summary) return <span className="text-muted">—</span>;
       return followupStatusBadgeFromSnapshot(summary);
     },
     [followupLogsByProjectCandidateId],
@@ -1422,21 +1422,21 @@ export function ProjectInterviewsPanel({
   };
 
   const tableWrap =
-    "overflow-hidden rounded-2xl border border-[#f0f0f0] bg-white shadow-sm";
+    "overflow-hidden rounded-2xl border border-border-subtle bg-elevated shadow-sm";
   const thBase =
-    "border-b border-gray-100 bg-[#fafafa] py-3 px-4 text-xs font-semibold tracking-wider text-gray-400";
+    "border-b border-border bg-background/80 py-3 px-4 text-xs font-semibold tracking-wider text-muted";
   const tdBase =
-    "border-b border-gray-100 py-4 px-4 text-sm align-middle text-[#1d1d1f]";
+    "border-b border-border py-4 px-4 text-sm align-middle text-foreground";
   const thName = `${thBase} min-w-[160px] text-left`;
   const tdName = `${tdBase} min-w-[160px] text-left`;
   const thEmail = `${thBase} min-w-[220px] text-left`;
-  const tdEmail = `${tdBase} min-w-[220px] text-left text-[#6e6e73]`;
+  const tdEmail = `${tdBase} min-w-[220px] text-left text-muted`;
   const thProjTitle = `${thBase} min-w-[180px] text-left`;
-  const tdProjTitle = `${tdBase} min-w-[180px] text-left text-[#6e6e73]`;
+  const tdProjTitle = `${tdBase} min-w-[180px] text-left text-muted`;
   const thPoc = `${thBase} min-w-[160px] text-left`;
   const thAssignedOn = `${thBase} min-w-[140px] text-left`;
   const tdPoc = `${tdBase} min-w-[160px] text-left`;
-  const tdAssignedOn = `${tdBase} min-w-[140px] text-left text-[#6e6e73]`;
+  const tdAssignedOn = `${tdBase} min-w-[140px] text-left text-muted`;
   const thFollowUp = `${thBase} min-w-[150px] text-left`;
   const tdFollowUp = `${tdBase} min-w-[150px] text-left`;
   const thActions = `${thBase} min-w-[120px] text-right`;
@@ -1446,7 +1446,7 @@ export function ProjectInterviewsPanel({
   const thInterviewer = `${thBase} min-w-[120px] text-left`;
   const tdInterviewer = `${tdBase} min-w-[120px] text-left`;
   const thReason = `${thBase} min-w-[180px] text-left`;
-  const tdReason = `${tdBase} min-w-[180px] text-left text-[#6e6e73]`;
+  const tdReason = `${tdBase} min-w-[180px] text-left text-muted`;
   const thZoomStatus = `${thBase} min-w-[150px] text-left`;
   const tdZoomStatus = `${tdBase} min-w-[150px] text-left align-top`;
   const thCompletedOn = `${thBase} min-w-[170px] text-left`;
@@ -1456,16 +1456,16 @@ export function ProjectInterviewsPanel({
   const thPostProdGate = `${thBase} min-w-[120px] text-left`;
   const tdPostProdGate = `${tdBase} min-w-[120px] text-left align-top`;
   const thFunnelCol = `${thBase} min-w-[120px] text-left`;
-  const tdFunnelCol = `${tdBase} min-w-[120px] text-left text-[#6e6e73]`;
+  const tdFunnelCol = `${tdBase} min-w-[120px] text-left text-muted`;
   const thCommentsCol = `${thBase} min-w-[160px] text-left`;
-  const tdCommentsCol = `${tdBase} min-w-[160px] text-left text-[#6e6e73]`;
+  const tdCommentsCol = `${tdBase} min-w-[160px] text-left text-muted`;
   const filterInp =
-    "w-full rounded-xl border border-[#e5e5e5] bg-white px-3 py-2 text-sm text-[#1d1d1f] focus:border-[#3b82f6] focus:outline-none focus:ring-0";
+    "w-full rounded-xl border border-border bg-elevated px-3 py-2 text-sm text-foreground focus:border-[#3b82f6] focus:outline-none focus:ring-0";
   const nameLinkBtn =
     "max-w-full min-w-0 truncate text-left font-medium text-[#3b82f6] hover:underline focus:outline-none focus:ring-2 focus:ring-[#3b82f6]/25 rounded-sm";
 
   const emptyState = (
-    <div className="py-16 text-center text-sm text-[#aeaeb2]">
+    <div className="py-16 text-center text-sm text-muted/80">
       No entries here yet
     </div>
   );
@@ -1478,7 +1478,7 @@ export function ProjectInterviewsPanel({
     const page = filters[tab].page;
     if (total === 0) return null;
     return (
-      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#f0f0f0] bg-[#fafafa] px-4 py-3 text-xs text-[#6e6e73]">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border-subtle bg-background/80 px-4 py-3 text-xs text-muted">
         <span>
           Showing {page * PAGE_SIZE + 1}–
           {Math.min((page + 1) * PAGE_SIZE, total)} of {total}
@@ -1487,7 +1487,7 @@ export function ProjectInterviewsPanel({
           <button
             type="button"
             disabled={page <= 0}
-            className="rounded-lg border border-[#e5e5e5] bg-white px-3 py-1.5 font-medium text-[#1d1d1f] transition-colors hover:bg-[#f5f5f7] disabled:cursor-not-allowed disabled:opacity-40"
+            className="rounded-lg border border-border bg-elevated px-3 py-1.5 font-medium text-foreground transition-colors hover:bg-background disabled:cursor-not-allowed disabled:opacity-40"
             onClick={() => setPage(tab, page - 1)}
           >
             Previous
@@ -1495,7 +1495,7 @@ export function ProjectInterviewsPanel({
           <button
             type="button"
             disabled={page >= totalPages - 1}
-            className="rounded-lg border border-[#e5e5e5] bg-white px-3 py-1.5 font-medium text-[#1d1d1f] transition-colors hover:bg-[#f5f5f7] disabled:cursor-not-allowed disabled:opacity-40"
+            className="rounded-lg border border-border bg-elevated px-3 py-1.5 font-medium text-foreground transition-colors hover:bg-background disabled:cursor-not-allowed disabled:opacity-40"
             onClick={() => setPage(tab, page + 1)}
           >
             Next
@@ -1507,14 +1507,14 @@ export function ProjectInterviewsPanel({
 
   if (loading) {
     return (
-      <p className="text-sm text-[#6e6e73]">Loading project interviews…</p>
+      <p className="text-sm text-muted">Loading project interviews…</p>
     );
   }
 
   return (
     <>
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex flex-wrap gap-2 border-b border-[#e5e5e5] pb-1 sm:border-0 sm:pb-0">
+        <div className="flex flex-wrap gap-2 border-b border-border pb-1 sm:border-0 sm:pb-0">
           {(
             [
               ["pending", "Pending", pendingQueue.length],
@@ -1529,12 +1529,12 @@ export function ProjectInterviewsPanel({
               onClick={() => setSubTab(id)}
               className={
                 subTab === id
-                  ? "rounded-full bg-[#1d1d1f] px-4 py-2 text-sm font-medium text-white"
-                  : "rounded-full px-4 py-2 text-sm font-medium text-[#6e6e73] transition-colors hover:text-[#1d1d1f]"
+                  ? "rounded-full bg-foreground px-4 py-2 text-sm font-medium text-background"
+                  : "rounded-full px-4 py-2 text-sm font-medium text-muted transition-colors hover:text-foreground"
               }
             >
               {label}{" "}
-              <span className={subTab === id ? "text-white/80" : ""}>({n})</span>
+              <span className={subTab === id ? "text-background/80" : ""}>({n})</span>
             </button>
           ))}
         </div>
@@ -1542,7 +1542,7 @@ export function ProjectInterviewsPanel({
           type="button"
           disabled={sheetSyncBusy}
           onClick={() => void syncProjectSheet()}
-          className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl border border-[#e5e5e5] bg-white px-4 py-2 text-sm font-medium text-[#1d1d1f] transition-all hover:bg-[#f5f5f7] disabled:opacity-50"
+          className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl border border-border bg-elevated px-4 py-2 text-sm font-medium text-foreground transition-all hover:bg-background disabled:opacity-50"
         >
           {sheetSyncBusy ? (
             <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
@@ -1557,7 +1557,7 @@ export function ProjectInterviewsPanel({
         <section className="space-y-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
             <label className="flex min-w-0 flex-1 flex-col gap-1 sm:max-w-md">
-              <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+              <span className="text-xs uppercase tracking-widest text-muted/80">
                 Search
               </span>
               <input
@@ -1571,7 +1571,7 @@ export function ProjectInterviewsPanel({
               />
             </label>
             <label className="flex w-full flex-col gap-1 sm:w-48 sm:shrink-0">
-              <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+              <span className="text-xs uppercase tracking-widest text-muted/80">
                 POC
               </span>
               <select
@@ -1591,7 +1591,7 @@ export function ProjectInterviewsPanel({
               </select>
             </label>
             <label className="flex w-full flex-col gap-1 sm:w-48 sm:shrink-0">
-              <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+              <span className="text-xs uppercase tracking-widest text-muted/80">
                 Interviewer
               </span>
               <select
@@ -1663,7 +1663,7 @@ export function ProjectInterviewsPanel({
                               <div className="flex flex-wrap items-center gap-2">
                                 <select
                                   disabled={pocSavingId === c.id}
-                                  className="max-w-[180px] rounded-lg border border-[#e5e5e5] bg-white px-2 py-1.5 text-xs text-[#1d1d1f] focus:border-[#3b82f6] focus:outline-none disabled:opacity-50"
+                                  className="max-w-[180px] rounded-lg border border-border bg-elevated px-2 py-1.5 text-xs text-foreground focus:border-[#3b82f6] focus:outline-none disabled:opacity-50"
                                   value={c.poc_assigned ?? ""}
                                   onChange={(e) =>
                                     void handlePocChange(c, e.target.value)
@@ -1684,7 +1684,7 @@ export function ProjectInterviewsPanel({
                                 {hasPoc ? (
                                   <button
                                     type="button"
-                                    className="text-xs font-medium text-[#6e6e73] underline decoration-[#d1d5db] underline-offset-2 hover:text-[#1d1d1f]"
+                                    className="text-xs font-medium text-muted underline decoration-[#d1d5db] underline-offset-2 hover:text-foreground"
                                     onClick={() => setPocEditingId(null)}
                                   >
                                     Cancel
@@ -1693,7 +1693,7 @@ export function ProjectInterviewsPanel({
                               </div>
                             ) : (
                               <div className="flex items-center gap-2">
-                                <span className="inline-flex rounded-full bg-[#f5f5f7] px-2.5 py-1 text-xs font-medium text-[#6e6e73]">
+                                <span className="inline-flex rounded-full bg-background px-2.5 py-1 text-xs font-medium text-muted">
                                   {c.poc_assigned}
                                 </span>
                                 <button
@@ -1748,7 +1748,7 @@ export function ProjectInterviewsPanel({
                                     ? "View only"
                                     : undefined
                                 }
-                                className="rounded-lg border border-[#e5e5e5] bg-white px-3 py-1.5 text-xs font-medium text-[#1d1d1f] transition-colors hover:bg-[#fafafa] disabled:cursor-not-allowed disabled:opacity-50"
+                                className="rounded-lg border border-border bg-elevated px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-background/80 disabled:cursor-not-allowed disabled:opacity-50"
                                 onClick={() =>
                                   canEditScheduledTab
                                     ? setLogFollowupFor(
@@ -1770,7 +1770,7 @@ export function ProjectInterviewsPanel({
                                 title={
                                   hasPoc ? undefined : "Assign a POC first"
                                 }
-                                className="rounded-lg bg-[#1d1d1f] px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-[#2d2d2f] disabled:cursor-not-allowed disabled:bg-[#d1d5db] disabled:text-[#6b7280]"
+                                className="rounded-lg bg-foreground px-3 py-1.5 text-xs font-medium text-background transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40 disabled:text-muted"
                                 onClick={() =>
                                   onScheduleProject({
                                     id: c.id,
@@ -1826,7 +1826,7 @@ export function ProjectInterviewsPanel({
         <section className="space-y-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
             <label className="flex min-w-0 flex-1 flex-col gap-1 sm:max-w-md">
-              <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+              <span className="text-xs uppercase tracking-widest text-muted/80">
                 Search
               </span>
               <input
@@ -1840,7 +1840,7 @@ export function ProjectInterviewsPanel({
               />
             </label>
             <label className="flex w-full flex-col gap-1 sm:w-48 sm:shrink-0">
-              <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+              <span className="text-xs uppercase tracking-widest text-muted/80">
                 POC
               </span>
               <select
@@ -1860,7 +1860,7 @@ export function ProjectInterviewsPanel({
               </select>
             </label>
             <label className="flex w-full flex-col gap-1 sm:w-48 sm:shrink-0">
-              <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+              <span className="text-xs uppercase tracking-widest text-muted/80">
                 Interviewer
               </span>
               <select
@@ -1970,7 +1970,7 @@ export function ProjectInterviewsPanel({
                                   Already completed
                                 </span>
                               ) : awaitingIv ? (
-                                <span className="inline-flex rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-600">
+                                <span className="inline-flex rounded-full bg-border/50 px-2.5 py-1 text-xs font-medium text-muted">
                                   Awaiting Interviewer
                                 </span>
                               ) : awaitingZoom ? (
@@ -1982,10 +1982,10 @@ export function ProjectInterviewsPanel({
                                   Zoom Added
                                 </span>
                               ) : (
-                                <span className="text-[#6e6e73]">—</span>
+                                <span className="text-muted">—</span>
                               )}
                               {zoomAdded && i.zoom_account?.trim() ? (
-                                <p className="text-xs text-[#6e6e73]">
+                                <p className="text-xs text-muted">
                                   Account: {i.zoom_account.trim()}
                                 </p>
                               ) : null}
@@ -1995,7 +1995,7 @@ export function ProjectInterviewsPanel({
                                     href={zoomLink}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="inline-flex rounded-lg border border-[#e5e5e5] bg-white px-2.5 py-1 text-xs font-medium text-[#1d1d1f] transition-colors hover:bg-[#f5f5f7]"
+                                    className="inline-flex rounded-lg border border-border bg-elevated px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:bg-background"
                                   >
                                     Join
                                   </a>
@@ -2003,7 +2003,7 @@ export function ProjectInterviewsPanel({
                                   <button
                                     type="button"
                                     disabled
-                                    className="inline-flex cursor-not-allowed rounded-lg border border-[#d1d5db] bg-[#f9fafb] px-2.5 py-1 text-xs font-medium text-[#9ca3af]"
+                                    className="inline-flex cursor-not-allowed rounded-lg border border-border bg-[#f9fafb] px-2.5 py-1 text-xs font-medium text-muted"
                                   >
                                     Join
                                   </button>
@@ -2018,7 +2018,7 @@ export function ProjectInterviewsPanel({
                                         ? "Assign interviewer first"
                                         : undefined
                                   }
-                                  className="rounded-lg border border-[#1d1d1f] bg-white px-2.5 py-1 text-xs font-medium text-[#1d1d1f] hover:bg-[#fafafa] disabled:cursor-not-allowed disabled:border-[#d1d5db] disabled:text-[#9ca3af]"
+                                  className="rounded-lg border border-foreground bg-elevated px-2.5 py-1 text-xs font-medium text-foreground hover:bg-background/80 disabled:cursor-not-allowed disabled:border-border disabled:text-muted"
                                   onClick={() =>
                                     canEditZoom ? setAddZoomFor(i) : undefined
                                   }
@@ -2049,7 +2049,7 @@ export function ProjectInterviewsPanel({
                                     ? "View only"
                                     : undefined
                                 }
-                                className="rounded-lg border border-[#d4d4d8] bg-white px-3 py-1.5 text-xs font-medium text-[#1d1d1f] hover:bg-[#fafafa] disabled:cursor-not-allowed disabled:border-[#d1d5db] disabled:text-[#9ca3af]"
+                                className="rounded-lg border border-border bg-elevated px-3 py-1.5 text-xs font-medium text-foreground hover:bg-background/80 disabled:cursor-not-allowed disabled:border-border disabled:text-muted"
                                 onClick={() =>
                                   canEditScheduledTab
                                     ? setEditInterviewFor(i)
@@ -2080,7 +2080,7 @@ export function ProjectInterviewsPanel({
                                   blockedActionTitle ??
                                   "Send back to callings (same POC)"
                                 }
-                                className="rounded-lg border border-[#d4d4d8] bg-white px-3 py-1.5 text-xs font-medium text-[#1d1d1f] hover:bg-[#fafafa] disabled:cursor-not-allowed disabled:border-[#d1d5db] disabled:text-[#9ca3af]"
+                                className="rounded-lg border border-border bg-elevated px-3 py-1.5 text-xs font-medium text-foreground hover:bg-background/80 disabled:cursor-not-allowed disabled:border-border disabled:text-muted"
                                 onClick={() => {
                                   if (
                                     !canEditScheduledTab ||
@@ -2097,7 +2097,7 @@ export function ProjectInterviewsPanel({
                               </button>
                               <button
                                 type="button"
-                                className="rounded-lg bg-[#ea580c] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#c2410c] disabled:cursor-not-allowed disabled:bg-[#d1d5db] disabled:text-[#6b7280]"
+                                className="rounded-lg bg-[#ea580c] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#c2410c] disabled:cursor-not-allowed disabled:opacity-40 disabled:text-muted"
                                 onClick={() =>
                                   onRescheduleProjectInterview(
                                     i,
@@ -2113,7 +2113,7 @@ export function ProjectInterviewsPanel({
                               </button>
                               <button
                                 type="button"
-                                className="rounded-lg bg-[#16a34a] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#15803d] disabled:cursor-not-allowed disabled:bg-[#d1d5db] disabled:text-[#6b7280]"
+                                className="rounded-lg bg-[#16a34a] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#15803d] disabled:cursor-not-allowed disabled:opacity-40 disabled:text-muted"
                                 onClick={() => onPostProjectInterview(i)}
                                 disabled={!canEditScheduledTab || !canTakeInterviewActions}
                                 title={blockedActionTitle}
@@ -2142,7 +2142,7 @@ export function ProjectInterviewsPanel({
         <section className="space-y-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
             <label className="flex min-w-0 flex-1 flex-col gap-1 sm:max-w-md">
-              <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+              <span className="text-xs uppercase tracking-widest text-muted/80">
                 Search
               </span>
               <input
@@ -2156,7 +2156,7 @@ export function ProjectInterviewsPanel({
               />
             </label>
             <label className="flex w-full flex-col gap-1 sm:w-48 sm:shrink-0">
-              <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+              <span className="text-xs uppercase tracking-widest text-muted/80">
                 POC
               </span>
               <select
@@ -2176,7 +2176,7 @@ export function ProjectInterviewsPanel({
               </select>
             </label>
             <label className="flex w-full flex-col gap-1 sm:w-48 sm:shrink-0">
-              <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+              <span className="text-xs uppercase tracking-widest text-muted/80">
                 Interviewer
               </span>
               <select
@@ -2294,7 +2294,7 @@ export function ProjectInterviewsPanel({
                                     ? "View only"
                                     : undefined
                                 }
-                                className="rounded-lg border border-[#e5e5e5] bg-white px-3 py-1.5 text-xs font-medium text-[#1d1d1f] transition-colors hover:bg-[#fafafa] disabled:cursor-not-allowed disabled:opacity-50"
+                                className="rounded-lg border border-border bg-elevated px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-background/80 disabled:cursor-not-allowed disabled:opacity-50"
                                 onMouseDown={(e) => e.stopPropagation()}
                                 onClick={(e) => {
                                   e.stopPropagation();
@@ -2318,7 +2318,7 @@ export function ProjectInterviewsPanel({
                                     ? POST_PRODUCTION_ELIGIBILITY_TOOLTIP
                                     : undefined
                                 }
-                                className="rounded-lg bg-[#1d1d1f] px-2.5 py-1 text-xs font-medium text-white hover:bg-[#2d2d2f] disabled:cursor-not-allowed disabled:bg-[#d1d5db] disabled:text-[#6b7280]"
+                                className="rounded-lg bg-foreground px-2.5 py-1 text-xs font-medium text-background hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40 disabled:text-muted"
                                 onMouseDown={(e) => e.stopPropagation()}
                                 onClick={(e) => {
                                   e.stopPropagation();
@@ -2348,20 +2348,20 @@ export function ProjectInterviewsPanel({
                               </button>
                               {completedPopoverId === i.id ? (
                                 <div
-                                  className="absolute right-0 top-full z-50 mt-2 w-[min(20rem,calc(100vw-2rem))] max-w-sm rounded-xl border border-[#f0f0f0] bg-white p-4 text-left shadow-[0_8px_24px_rgba(0,0,0,0.12)]"
+                                  className="absolute right-0 top-full z-50 mt-2 w-[min(20rem,calc(100vw-2rem))] max-w-sm rounded-xl border border-border-subtle bg-elevated p-4 text-left shadow-[0_8px_24px_rgba(0,0,0,0.12)]"
                                   onMouseDown={(e) => e.stopPropagation()}
                                   role="dialog"
                                   aria-label="Post-interview details"
                                 >
-                                  <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">
+                                  <p className="text-xs font-semibold uppercase tracking-wider text-muted">
                                     Post-interview details
                                   </p>
                                   <dl className="mt-3 space-y-3 text-sm">
                                     <div>
-                                      <dt className="text-xs text-[#aeaeb2]">
+                                      <dt className="text-xs text-muted/80">
                                         Post-interview eligible
                                       </dt>
-                                      <dd className="mt-0.5 text-[#1d1d1f]">
+                                      <dd className="mt-0.5 text-foreground">
                                         {i.post_interview_eligible === true
                                           ? i.reward_item?.trim() ===
                                             REWARD_NO_DISPATCH
@@ -2373,34 +2373,34 @@ export function ProjectInterviewsPanel({
                                       </dd>
                                     </div>
                                     <div>
-                                      <dt className="text-xs text-[#aeaeb2]">
+                                      <dt className="text-xs text-muted/80">
                                         Reward item
                                       </dt>
-                                      <dd className="mt-0.5 text-[#1d1d1f]">
+                                      <dd className="mt-0.5 text-foreground">
                                         {i.reward_item?.trim() || "—"}
                                       </dd>
                                     </div>
                                     <div>
-                                      <dt className="text-xs text-[#aeaeb2]">
+                                      <dt className="text-xs text-muted/80">
                                         Funnel
                                       </dt>
-                                      <dd className="mt-0.5 whitespace-pre-wrap break-words text-[#1d1d1f]">
+                                      <dd className="mt-0.5 whitespace-pre-wrap break-words text-foreground">
                                         {i.funnel?.trim() || "—"}
                                       </dd>
                                     </div>
                                     <div>
-                                      <dt className="text-xs text-[#aeaeb2]">
+                                      <dt className="text-xs text-muted/80">
                                         Comments
                                       </dt>
-                                      <dd className="mt-0.5 whitespace-pre-wrap break-words text-[#1d1d1f]">
+                                      <dd className="mt-0.5 whitespace-pre-wrap break-words text-foreground">
                                         {i.comments?.trim() || "—"}
                                       </dd>
                                     </div>
                                     <div>
-                                      <dt className="text-xs text-[#aeaeb2]">
+                                      <dt className="text-xs text-muted/80">
                                         Completed on
                                       </dt>
-                                      <dd className="mt-0.5 text-[#1d1d1f]">
+                                      <dd className="mt-0.5 text-foreground">
                                         {formatDateTime(i.completed_at)}
                                       </dd>
                                     </div>
@@ -2414,7 +2414,7 @@ export function ProjectInterviewsPanel({
                                           ? "View only"
                                           : undefined
                                       }
-                                      className="rounded-lg border border-[#d4d4d8] bg-white px-2.5 py-1 text-xs font-medium text-[#1d1d1f] hover:bg-[#fafafa] disabled:cursor-not-allowed disabled:border-[#d1d5db] disabled:text-[#9ca3af]"
+                                      className="rounded-lg border border-border bg-elevated px-2.5 py-1 text-xs font-medium text-foreground hover:bg-background/80 disabled:cursor-not-allowed disabled:border-border disabled:text-muted"
                                       onClick={() => {
                                         if (!canEditScheduledTab) return;
                                         setCompletedPopoverId(null);
@@ -2455,7 +2455,7 @@ export function ProjectInterviewsPanel({
         <section className="space-y-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
             <label className="flex min-w-0 flex-1 flex-col gap-1 sm:max-w-md">
-              <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+              <span className="text-xs uppercase tracking-widest text-muted/80">
                 Search
               </span>
               <input
@@ -2469,7 +2469,7 @@ export function ProjectInterviewsPanel({
               />
             </label>
             <label className="flex w-full flex-col gap-1 sm:w-48 sm:shrink-0">
-              <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+              <span className="text-xs uppercase tracking-widest text-muted/80">
                 POC
               </span>
               <select
@@ -2489,7 +2489,7 @@ export function ProjectInterviewsPanel({
               </select>
             </label>
             <label className="flex w-full flex-col gap-1 sm:w-48 sm:shrink-0">
-              <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+              <span className="text-xs uppercase tracking-widest text-muted/80">
                 Interviewer
               </span>
               <select
@@ -2573,18 +2573,18 @@ export function ProjectInterviewsPanel({
                           <td className={tdZoomStatus}>
                             <div className="flex flex-col items-start gap-2">
                               {zoomAccount ? (
-                                <p className="text-xs text-[#6e6e73]">
+                                <p className="text-xs text-muted">
                                   Account: {zoomAccount}
                                 </p>
                               ) : (
-                                <span className="text-[#6e6e73]">—</span>
+                                <span className="text-muted">—</span>
                               )}
                               {zoomLink ? (
                                 <a
                                   href={zoomLink}
                                   target="_blank"
                                   rel="noopener noreferrer"
-                                  className="inline-flex rounded-lg border border-[#e5e5e5] bg-white px-2.5 py-1 text-xs font-medium text-[#1d1d1f] transition-colors hover:bg-[#f5f5f7]"
+                                  className="inline-flex rounded-lg border border-border bg-elevated px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:bg-background"
                                 >
                                   Join
                                 </a>
@@ -2596,7 +2596,7 @@ export function ProjectInterviewsPanel({
                               <div className="flex w-full min-w-0 max-w-[260px] flex-col gap-2">
                                 <input
                                   type="url"
-                                  className="w-full rounded-lg border border-[#e5e5e5] px-2 py-1 text-xs"
+                                  className="w-full rounded-lg border border-border px-2 py-1 text-xs"
                                   placeholder="Paste recording link"
                                   value={notEligibleRecordingEdit.value}
                                   onChange={(e) =>
@@ -2613,7 +2613,7 @@ export function ProjectInterviewsPanel({
                                       !canEditScheduledTab ||
                                       notEligibleRecordingBusyId === i.id
                                     }
-                                    className="rounded bg-[#1d1d1f] px-2 py-0.5 text-[11px] font-medium text-white disabled:opacity-50"
+                                    className="rounded bg-foreground px-2 py-0.5 text-[11px] font-medium text-background disabled:opacity-50"
                                     onClick={() =>
                                       void saveNotEligibleRecordingLink(
                                         i.id,
@@ -2625,7 +2625,7 @@ export function ProjectInterviewsPanel({
                                   </button>
                                   <button
                                     type="button"
-                                    className="text-[11px] text-[#6e6e73] underline"
+                                    className="text-[11px] text-muted underline"
                                     onClick={() =>
                                       setNotEligibleRecordingEdit(null)
                                     }
@@ -2640,7 +2640,7 @@ export function ProjectInterviewsPanel({
                                   href={recordingLink}
                                   target="_blank"
                                   rel="noopener noreferrer"
-                                  className="inline-flex rounded-lg border border-[#e5e5e5] bg-white px-2 py-1 text-xs font-medium text-[#1d1d1f] hover:bg-[#f5f5f7]"
+                                  className="inline-flex rounded-lg border border-border bg-elevated px-2 py-1 text-xs font-medium text-foreground hover:bg-background"
                                 >
                                   View
                                 </a>
@@ -2662,7 +2662,7 @@ export function ProjectInterviewsPanel({
                               <button
                                 type="button"
                                 disabled={!canEditScheduledTab}
-                                className="rounded border border-[#e5e5e5] bg-[#fafafa] px-2 py-1 text-xs font-medium text-[#6e6e73] hover:bg-[#f0f0f0] disabled:opacity-50"
+                                className="rounded border border-border bg-background/80 px-2 py-1 text-xs font-medium text-muted hover:bg-background disabled:opacity-50"
                                 onClick={() =>
                                   setNotEligibleRecordingEdit({
                                     id: i.id,

@@ -616,24 +616,24 @@ export function InterviewLibraryDashboard() {
 
   if (!supabase) {
     return (
-      <div className="py-16 text-center text-sm text-[#6e6e73]">
+      <div className="py-16 text-center text-sm text-muted">
         {error ?? "Cannot connect to Supabase."}
       </div>
     );
   }
 
   const th =
-    "border-b border-gray-100 bg-[#fafafa] py-2.5 px-3 text-left text-xs font-semibold tracking-wider text-gray-500";
-  const td = "border-b border-gray-100 px-3 py-2.5 text-sm align-top text-[#1d1d1f]";
+    "border-b border-border bg-background/80 py-2.5 px-3 text-left text-xs font-semibold tracking-wider text-muted";
+  const td = "border-b border-border px-3 py-2.5 text-sm align-top text-foreground";
 
   return (
     <>
-      <header className="sticky top-14 z-30 bg-[#f5f5f7]/90 px-4 py-4 backdrop-blur-md sm:px-6 sm:py-5 lg:top-0 lg:px-8 lg:py-6">
+      <header className="sticky top-14 z-30 bg-background/90 px-4 py-4 backdrop-blur-md sm:px-6 sm:py-5 lg:top-0 lg:px-8 lg:py-6">
         <div className="mx-auto max-w-[1600px]">
-          <h1 className="text-xl font-semibold tracking-tight text-[#1d1d1f] sm:text-2xl">
+          <h1 className="text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
             Interview Library
           </h1>
-          <p className="mt-1 text-sm text-[#6e6e73]">
+          <p className="mt-1 text-sm text-muted">
             Post-interview eligible, completed, with a YouTube link · read-only ·
             dates in IST ({TIMEZONE_IST})
           </p>
@@ -647,26 +647,26 @@ export function InterviewLibraryDashboard() {
           </div>
         ) : null}
 
-        <div className="mb-6 flex flex-col gap-4 rounded-2xl border border-[#f0f0f0] bg-white p-4 shadow-sm">
+        <div className="mb-6 flex flex-col gap-4 rounded-2xl border border-border-subtle bg-elevated p-4 shadow-sm">
           <div className="flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-end">
             <label className="flex min-w-[200px] flex-1 flex-col gap-1">
-              <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+              <span className="text-xs uppercase tracking-widest text-muted/80">
                 Search
               </span>
               <input
                 type="search"
                 placeholder="Name or email"
-                className="rounded-xl border border-[#e5e5e5] px-3 py-2 text-sm"
+                className="rounded-xl border border-border px-3 py-2 text-sm"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
             </label>
             <label className="flex w-full flex-col gap-1 sm:w-44">
-              <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+              <span className="text-xs uppercase tracking-widest text-muted/80">
                 Type
               </span>
               <select
-                className="rounded-xl border border-[#e5e5e5] px-3 py-2 text-sm"
+                className="rounded-xl border border-border px-3 py-2 text-sm"
                 value={typeFilter}
                 onChange={(e) =>
                   setTypeFilter(e.target.value as typeof typeFilter)
@@ -678,11 +678,11 @@ export function InterviewLibraryDashboard() {
               </select>
             </label>
             <label className="flex w-full min-w-[180px] flex-col gap-1 sm:w-52">
-              <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+              <span className="text-xs uppercase tracking-widest text-muted/80">
                 Domain
               </span>
               <select
-                className="rounded-xl border border-[#e5e5e5] px-3 py-2 text-sm"
+                className="rounded-xl border border-border px-3 py-2 text-sm"
                 value={domainFilter}
                 onChange={(e) => setDomainFilter(e.target.value)}
               >
@@ -695,23 +695,23 @@ export function InterviewLibraryDashboard() {
               </select>
             </label>
             <label className="flex w-full flex-col gap-1 sm:w-40">
-              <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+              <span className="text-xs uppercase tracking-widest text-muted/80">
                 From (IST)
               </span>
               <input
                 type="date"
-                className="rounded-xl border border-[#e5e5e5] px-3 py-2 text-sm"
+                className="rounded-xl border border-border px-3 py-2 text-sm"
                 value={dateFrom}
                 onChange={(e) => setDateFrom(e.target.value)}
               />
             </label>
             <label className="flex w-full flex-col gap-1 sm:w-40">
-              <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+              <span className="text-xs uppercase tracking-widest text-muted/80">
                 To (IST)
               </span>
               <input
                 type="date"
-                className="rounded-xl border border-[#e5e5e5] px-3 py-2 text-sm"
+                className="rounded-xl border border-border px-3 py-2 text-sm"
                 value={dateTo}
                 onChange={(e) => setDateTo(e.target.value)}
               />
@@ -720,7 +720,7 @@ export function InterviewLibraryDashboard() {
               <button
                 type="button"
                 disabled={exportingCsv}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-[#1d1d1f] bg-[#1d1d1f] px-4 py-2 text-sm font-medium text-white hover:bg-[#2c2c2e] disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex items-center gap-1.5 rounded-xl border border-foreground bg-foreground px-4 py-2 text-sm font-medium text-background hover:bg-[#2c2c2e] disabled:cursor-not-allowed disabled:opacity-60"
                 onClick={() => void handleExportCsv()}
               >
                 {exportingCsv ? (
@@ -732,7 +732,7 @@ export function InterviewLibraryDashboard() {
               </button>
               <button
                 type="button"
-                className="rounded-xl border border-[#e5e5e5] bg-white px-4 py-2 text-sm font-medium text-[#1d1d1f] hover:bg-[#fafafa]"
+                className="rounded-xl border border-border bg-elevated px-4 py-2 text-sm font-medium text-foreground hover:bg-background/80"
                 onClick={() => {
                   setSearch("");
                   setTypeFilter("all");
@@ -748,18 +748,18 @@ export function InterviewLibraryDashboard() {
         </div>
 
         {loading ? (
-          <p className="flex items-center gap-2 text-sm text-[#6e6e73]">
+          <p className="flex items-center gap-2 text-sm text-muted">
             <Loader2 className="h-4 w-4 animate-spin" />
             Loading…
           </p>
         ) : filtered.length === 0 ? (
-          <p className="rounded-2xl border border-[#f0f0f0] bg-white py-16 text-center text-sm text-[#6e6e73] shadow-sm">
+          <p className="rounded-2xl border border-border-subtle bg-elevated py-16 text-center text-sm text-muted shadow-sm">
             {rows.length === 0
               ? "No completed & approved interviews with YouTube link yet."
               : "No interviews match your filters."}
           </p>
         ) : (
-          <div className="overflow-hidden rounded-2xl border border-[#f0f0f0] bg-white shadow-sm">
+          <div className="overflow-hidden rounded-2xl border border-border-subtle bg-elevated shadow-sm">
             <div className="w-full overflow-x-auto">
               <table className="w-full min-w-[980px] table-fixed border-collapse text-sm">
                 <thead>
@@ -794,7 +794,7 @@ export function InterviewLibraryDashboard() {
                             {r.name}
                           </button>
                         </td>
-                        <td className={`${td} break-all text-[#6e6e73]`}>{r.email}</td>
+                        <td className={`${td} break-all text-muted`}>{r.email}</td>
                         <td className={td}>
                           <span
                             className={
@@ -806,19 +806,19 @@ export function InterviewLibraryDashboard() {
                             {r.interviewType === "project" ? "Project" : "Testimonial"}
                           </span>
                         </td>
-                        <td className={`${td} text-[#6e6e73]`}>
+                        <td className={`${td} text-muted`}>
                           {r.domain?.trim() || "—"}
                         </td>
-                        <td className={`${td} text-[#6e6e73]`}>
+                        <td className={`${td} text-muted`}>
                           {r.role?.trim() || "—"}
                         </td>
-                        <td className={`${td} whitespace-nowrap text-[#6e6e73]`}>
+                        <td className={`${td} whitespace-nowrap text-muted`}>
                           {formatCompletedAt(r.completedAt)}
                         </td>
                         <td className={td}>
                           {sum ? (
                             <div className="max-w-md">
-                              <p className="whitespace-pre-wrap text-[#1d1d1f]">
+                              <p className="whitespace-pre-wrap text-foreground">
                                 {preview}
                               </p>
                               {showExpand ? (
@@ -832,7 +832,7 @@ export function InterviewLibraryDashboard() {
                               ) : null}
                             </div>
                           ) : (
-                            <span className="text-[#aeaeb2]">—</span>
+                            <span className="text-muted/80">—</span>
                           )}
                         </td>
                         <td className={td}>
@@ -874,16 +874,16 @@ export function InterviewLibraryDashboard() {
           >
             <div className="mb-4 flex items-start justify-between gap-4">
               <div>
-                <h2 className="text-xl font-semibold text-[#1d1d1f]">
+                <h2 className="text-xl font-semibold text-foreground">
                   {detailData?.name?.trim() || detailRow.name || "—"}
                 </h2>
-                <p className="mt-1 text-sm text-[#6e6e73]">
+                <p className="mt-1 text-sm text-muted">
                   {detailRow.source === "project" ? "Project" : "Testimonial"}
                 </p>
               </div>
               <button
                 type="button"
-                className="rounded-lg px-2 py-1 text-sm font-medium text-[#6e6e73] hover:bg-[#f5f5f7] hover:text-[#1d1d1f]"
+                className="rounded-lg px-2 py-1 text-sm font-medium text-muted hover:bg-background hover:text-foreground"
                 onClick={() => {
                   setDetailRow(null);
                   setExpandedTextKeys(new Set());
@@ -894,15 +894,15 @@ export function InterviewLibraryDashboard() {
             </div>
 
             {detailLoading ? (
-              <p className="text-sm text-[#6e6e73]">Loading details...</p>
+              <p className="text-sm text-muted">Loading details...</p>
             ) : detailError ? (
-              <p className="rounded-xl border border-[#f0f0f0] bg-[#f5f5f7] px-3 py-2 text-sm text-[#1d1d1f]">
+              <p className="rounded-xl border border-border-subtle bg-background px-3 py-2 text-sm text-foreground">
                 {detailError}
               </p>
             ) : detailData ? (
               <div className="space-y-4 text-sm">
-                <section className="rounded-xl border border-[#f0f0f0] bg-white p-4">
-                  <h3 className="mb-3 text-sm font-semibold text-[#1d1d1f]">
+                <section className="rounded-xl border border-border-subtle bg-elevated p-4">
+                  <h3 className="mb-3 text-sm font-semibold text-foreground">
                     Basic Info
                   </h3>
                   <div className="grid gap-3 sm:grid-cols-2">
@@ -925,8 +925,8 @@ export function InterviewLibraryDashboard() {
 
                 {detailData.source === "testimonial" ? (
                   <>
-                    <section className="rounded-xl border border-[#f0f0f0] bg-white p-4">
-                      <h3 className="mb-3 text-sm font-semibold text-[#1d1d1f]">
+                    <section className="rounded-xl border border-border-subtle bg-elevated p-4">
+                      <h3 className="mb-3 text-sm font-semibold text-foreground">
                         Achievement
                       </h3>
                       <div className="grid gap-3 sm:grid-cols-2">
@@ -936,8 +936,8 @@ export function InterviewLibraryDashboard() {
                       </div>
                     </section>
 
-                    <section className="rounded-xl border border-[#f0f0f0] bg-white p-4">
-                      <h3 className="mb-3 text-sm font-semibold text-[#1d1d1f]">
+                    <section className="rounded-xl border border-border-subtle bg-elevated p-4">
+                      <h3 className="mb-3 text-sm font-semibold text-foreground">
                         Program Impact
                       </h3>
                       <p className="whitespace-pre-wrap">
@@ -945,8 +945,8 @@ export function InterviewLibraryDashboard() {
                       </p>
                     </section>
 
-                    <section className="rounded-xl border border-[#f0f0f0] bg-white p-4">
-                      <h3 className="mb-3 text-sm font-semibold text-[#1d1d1f]">Links</h3>
+                    <section className="rounded-xl border border-border-subtle bg-elevated p-4">
+                      <h3 className="mb-3 text-sm font-semibold text-foreground">Links</h3>
                       <div className="grid gap-3 sm:grid-cols-3">
                         <div>
                           <p className="font-medium">Proof</p>
@@ -955,12 +955,12 @@ export function InterviewLibraryDashboard() {
                               href={detailData.proofLink.trim()}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="mt-1 inline-flex rounded-xl bg-[#1d1d1f] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#2d2d2f]"
+                              className="mt-1 inline-flex rounded-xl bg-foreground px-3 py-1.5 text-xs font-medium text-background hover:opacity-90"
                             >
                               View Proof
                             </a>
                           ) : (
-                            <p className="text-[#6e6e73]">—</p>
+                            <p className="text-muted">—</p>
                           )}
                         </div>
                         <div>
@@ -969,7 +969,7 @@ export function InterviewLibraryDashboard() {
                             <a href={detailData.linkedin.trim()} target="_blank" rel="noopener noreferrer" className="text-[#3b82f6] hover:underline">
                               Open profile
                             </a>
-                          ) : <p className="text-[#6e6e73]">—</p>}
+                          ) : <p className="text-muted">—</p>}
                         </div>
                         <div>
                           <p className="font-medium">Instagram</p>
@@ -977,13 +977,13 @@ export function InterviewLibraryDashboard() {
                             <a href={detailData.instagram.trim()} target="_blank" rel="noopener noreferrer" className="text-[#3b82f6] hover:underline">
                               Open profile
                             </a>
-                          ) : <p className="text-[#6e6e73]">—</p>}
+                          ) : <p className="text-muted">—</p>}
                         </div>
                       </div>
                     </section>
 
-                    <section className="rounded-xl border border-[#f0f0f0] bg-white p-4">
-                      <h3 className="mb-3 text-sm font-semibold text-[#1d1d1f]">
+                    <section className="rounded-xl border border-border-subtle bg-elevated p-4">
+                      <h3 className="mb-3 text-sm font-semibold text-foreground">
                         AI Evaluation
                       </h3>
                       <p>
@@ -991,15 +991,15 @@ export function InterviewLibraryDashboard() {
                         {detailData.aiScore == null ? "—" : detailData.aiScore}
                       </p>
                       <p className="mt-1 whitespace-pre-wrap text-[#4b5563]">
-                        <span className="font-medium text-[#1d1d1f]">AI Reason:</span>{" "}
+                        <span className="font-medium text-foreground">AI Reason:</span>{" "}
                         {detailData.aiReason?.trim() || "—"}
                       </p>
                     </section>
                   </>
                 ) : (
                   <>
-                    <section className="rounded-xl border border-[#f0f0f0] bg-white p-4">
-                      <h3 className="mb-3 text-sm font-semibold text-[#1d1d1f]">
+                    <section className="rounded-xl border border-border-subtle bg-elevated p-4">
+                      <h3 className="mb-3 text-sm font-semibold text-foreground">
                         Candidate Details
                       </h3>
                       <p>
@@ -1046,7 +1046,7 @@ export function InterviewLibraryDashboard() {
                 )}
               </div>
             ) : (
-              <p className="text-sm text-[#6e6e73]">Details unavailable.</p>
+              <p className="text-sm text-muted">Details unavailable.</p>
             )}
           </div>
         </div>

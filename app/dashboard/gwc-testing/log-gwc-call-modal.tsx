@@ -25,9 +25,9 @@ const OUTCOMES: { value: GwcCallOutcome; label: string }[] = [
 ];
 
 const fieldLabelClass =
-  "text-xs font-medium uppercase tracking-widest text-[#aeaeb2]";
+  "text-xs font-medium uppercase tracking-widest text-muted/80";
 const fieldInputClass =
-  "mt-1 w-full rounded-xl border border-[#e5e5e5] px-3 py-2.5 text-sm text-[#1d1d1f] focus:border-[#3b82f6] focus:outline-none focus:ring-0";
+  "mt-1 w-full rounded-xl border border-border px-3 py-2.5 text-sm text-foreground focus:border-[#3b82f6] focus:outline-none focus:ring-0";
 
 type Props = {
   open: boolean;
@@ -110,19 +110,19 @@ export function LogGwcCallModal({
         role="dialog"
         aria-labelledby="gwc-log-call-title"
       >
-        <div className="flex shrink-0 items-start justify-between border-b border-[#f0f0f0] px-6 py-4">
+        <div className="flex shrink-0 items-start justify-between border-b border-border-subtle px-6 py-4">
           <div>
             <h2
               id="gwc-log-call-title"
-              className="text-lg font-semibold text-[#1d1d1f]"
+              className="text-lg font-semibold text-foreground"
             >
               Log call
             </h2>
-            <p className="mt-1 text-sm text-[#6e6e73]">{display}</p>
+            <p className="mt-1 text-sm text-muted">{display}</p>
           </div>
           <button
             type="button"
-            className="rounded-xl p-2 text-[#aeaeb2] transition-colors hover:bg-[#f5f5f7] hover:text-[#1d1d1f]"
+            className="rounded-xl p-2 text-muted/80 transition-colors hover:bg-background hover:text-foreground"
             aria-label="Close dialog"
             onClick={onClose}
           >
@@ -166,10 +166,10 @@ export function LogGwcCallModal({
             </div>
           </div>
 
-          <div className="flex shrink-0 justify-end gap-2 border-t border-[#f0f0f0] bg-white px-6 py-4">
+          <div className="flex shrink-0 justify-end gap-2 border-t border-border-subtle bg-elevated px-6 py-4">
             <button
               type="button"
-              className="rounded-xl px-4 py-2.5 text-sm font-medium text-[#6e6e73] transition-colors hover:bg-[#f5f5f5]"
+              className="rounded-xl px-4 py-2.5 text-sm font-medium text-muted transition-colors hover:bg-[#f5f5f5]"
               onClick={onClose}
             >
               Cancel
@@ -177,7 +177,7 @@ export function LogGwcCallModal({
             <button
               type="submit"
               disabled={submitting}
-              className="rounded-xl bg-[#1d1d1f] px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[#2d2d2f] disabled:opacity-50"
+              className="rounded-xl bg-foreground px-4 py-2.5 text-sm font-medium text-background transition-colors hover:opacity-90 disabled:opacity-50"
             >
               {submitting ? "Saving…" : "Save"}
             </button>

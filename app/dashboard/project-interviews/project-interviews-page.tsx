@@ -16,7 +16,7 @@ import {
 import type { ProjectInterviewWithProjectCandidate } from "../interviews/types";
 
 const cardChrome =
-  "rounded-2xl bg-white shadow-[0_4px_16px_rgba(0,0,0,0.08)] border border-[#f0f0f0]";
+  "rounded-2xl bg-elevated shadow-card border border-border-subtle";
 
 type ProjectPipelineStats = {
   pending: number;
@@ -145,7 +145,7 @@ export function ProjectInterviewsPage() {
 
   if (!supabase) {
     return (
-      <div className="mx-auto max-w-lg px-8 py-16 text-center text-sm text-[#6e6e73]">
+      <div className="mx-auto max-w-lg px-8 py-16 text-center text-sm text-muted">
         {error ?? "Cannot connect to Supabase."}
       </div>
     );
@@ -155,30 +155,30 @@ export function ProjectInterviewsPage() {
     <>
       {toastMessage ? (
         <div
-          className="fixed bottom-6 left-1/2 z-[70] max-w-md -translate-x-1/2 rounded-xl border border-[#e5e5e5] bg-[#1d1d1f] px-4 py-3 text-center text-sm font-medium text-white shadow-lg"
+          className="fixed bottom-6 left-1/2 z-[70] max-w-md -translate-x-1/2 rounded-xl border border-border bg-foreground px-4 py-3 text-center text-sm font-medium text-background shadow-lg"
           role="status"
         >
           {toastMessage}
         </div>
       ) : null}
 
-      <header className="sticky top-14 z-30 bg-[#f5f5f7]/90 px-4 py-4 backdrop-blur-md sm:px-6 sm:py-5 lg:top-0 lg:px-8 lg:py-6">
-        <h1 className="text-xl font-semibold tracking-tight text-[#1d1d1f] sm:text-2xl">
+      <header className="sticky top-14 z-30 bg-background/90 px-4 py-4 backdrop-blur-md sm:px-6 sm:py-5 lg:top-0 lg:px-8 lg:py-6">
+        <h1 className="text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
           Project Interviews
         </h1>
-        <p className="mt-1 text-sm text-[#6e6e73]">
+        <p className="mt-1 text-sm text-muted">
           Manage project interview pipeline
         </p>
         {showViewOnlyBadge ? (
-          <span className="mt-2 inline-flex rounded-full bg-[#f3f4f6] px-3 py-1 text-xs font-medium text-[#6b7280]">
+          <span className="mt-2 inline-flex rounded-full bg-border/40 px-3 py-1 text-xs font-medium text-muted">
             View only
           </span>
         ) : null}
       </header>
 
-      <main className="mx-auto max-w-[1600px] px-4 pb-10 pt-2 text-sm text-[#1d1d1f] sm:px-6 lg:px-8 lg:pb-12">
+      <main className="mx-auto max-w-[1600px] px-4 pb-10 pt-2 text-sm text-foreground sm:px-6 lg:px-8 lg:pb-12">
         {error ? (
-          <div className="mb-4 rounded-2xl border border-[#f0f0f0] bg-white px-4 py-3 text-sm text-[#1d1d1f] shadow-[0_4px_16px_rgba(0,0,0,0.08)]">
+          <div className="mb-4 rounded-2xl border border-border-subtle bg-elevated px-4 py-3 text-sm text-foreground shadow-card">
             {error}
             <button
               type="button"
@@ -214,10 +214,10 @@ export function ProjectInterviewsPage() {
             ] as const
           ).map((card) => (
             <div key={card.key} className={`p-4 sm:p-6 ${cardChrome}`}>
-              <p className="mb-2 text-xs font-medium text-[#6e6e73] sm:mb-3">
+              <p className="mb-2 text-xs font-medium text-muted sm:mb-3">
                 {card.label}
               </p>
-              <p className="text-2xl font-bold tabular-nums tracking-tight text-[#1d1d1f] sm:text-4xl">
+              <p className="text-2xl font-bold tabular-nums tracking-tight text-foreground sm:text-4xl">
                 {card.value}
               </p>
               <div

@@ -245,9 +245,9 @@ const LANG_LABELS: Record<Exclude<InterviewLanguageFilter, "all">, string> = {
 };
 
 const cardClass =
-  "rounded-2xl border border-gray-100 bg-white p-6 shadow-sm";
-const chartTitle = "text-base font-semibold text-gray-800";
-const chartSubtitle = "mt-1 text-sm text-gray-500";
+  "rounded-2xl border border-border bg-elevated p-6 shadow-sm";
+const chartTitle = "text-base font-semibold text-foreground";
+const chartSubtitle = "mt-1 text-sm text-muted";
 
 function ChartCard({
   title,
@@ -269,7 +269,7 @@ function ChartCard({
       {subtitle ? <p className={chartSubtitle}>{subtitle}</p> : null}
       <div className={`mt-4 w-full ${chartHeightClass}`}>
         {empty ? (
-          <div className="flex h-full items-center justify-center text-sm text-gray-500">
+          <div className="flex h-full items-center justify-center text-sm text-muted">
             No data for this range
           </div>
         ) : (
@@ -282,7 +282,7 @@ function ChartCard({
 
 function StatSkeleton() {
   return (
-    <div className="animate-pulse rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
+    <div className="animate-pulse rounded-2xl border border-border bg-elevated p-6 shadow-sm">
       <div className="mb-3 h-3 w-24 rounded bg-gray-200" />
       <div className="h-9 w-20 rounded bg-gray-200" />
     </div>
@@ -291,10 +291,10 @@ function StatSkeleton() {
 
 function ChartSkeleton() {
   return (
-    <div className="animate-pulse rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
+    <div className="animate-pulse rounded-2xl border border-border bg-elevated p-6 shadow-sm">
       <div className="mb-2 h-4 w-40 rounded bg-gray-200" />
       <div className="mb-4 h-3 w-56 rounded bg-gray-200" />
-      <div className="h-[280px] rounded-lg bg-gray-100" />
+      <div className="h-[280px] rounded-lg bg-border/40" />
     </div>
   );
 }
@@ -676,7 +676,7 @@ export function AnalyticsDashboard() {
           <h1 className="text-xl font-semibold text-gray-900 sm:text-2xl">
             Analytics
           </h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <p className="mt-1 text-sm text-muted">
             Testimonial CRM performance overview
           </p>
         </div>
@@ -684,7 +684,7 @@ export function AnalyticsDashboard() {
           <button
             type="button"
             onClick={() => setTeamReportOpen(true)}
-            className="shrink-0 rounded-full border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-800 shadow-sm hover:bg-gray-50"
+            className="shrink-0 rounded-full border border-border bg-elevated px-4 py-2 text-sm font-medium text-foreground shadow-sm hover:bg-background/80"
           >
             Team report
           </button>
@@ -697,7 +697,7 @@ export function AnalyticsDashboard() {
                 className={`shrink-0 rounded-full px-3 py-2 text-sm font-medium transition-colors sm:px-4 ${
                   preset === k
                     ? "bg-[#1d4ed8] text-white"
-                    : "border border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
+                    : "border border-border bg-elevated text-foreground/80 hover:bg-background/80"
                 }`}
               >
                 {RANGE_LABELS[k]}
@@ -734,7 +734,7 @@ export function AnalyticsDashboard() {
         </div>
       ) : !hasAnyData ? (
         <div
-          className={`${cardClass} py-16 text-center text-sm text-gray-500`}
+          className={`${cardClass} py-16 text-center text-sm text-muted`}
         >
           No data yet. Form entries and pipeline activity will appear here.
         </div>
@@ -742,7 +742,7 @@ export function AnalyticsDashboard() {
         <>
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
             <div className={cardClass}>
-              <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted">
                 Total form entries
               </p>
               <p className="mt-2 text-2xl font-bold tabular-nums text-gray-900 sm:text-3xl">
@@ -750,25 +750,25 @@ export function AnalyticsDashboard() {
               </p>
             </div>
             <div className={cardClass}>
-              <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted">
                 Eligible rate
               </p>
               <p className="mt-2 text-2xl font-bold tabular-nums text-gray-900 sm:text-3xl">
                 {overview.totalEntries > 0 ? `${overview.eligibleRate}%` : "—"}
               </p>
-              <p className="mt-1 text-xs text-gray-500">Eligible / total in range</p>
+              <p className="mt-1 text-xs text-muted">Eligible / total in range</p>
             </div>
             <div className={cardClass}>
-              <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted">
                 Interviews completed
               </p>
               <p className="mt-2 text-2xl font-bold tabular-nums text-gray-900 sm:text-3xl">
                 {overview.interviewsCompleted}
               </p>
-              <p className="mt-1 text-xs text-gray-500">Testimonial interviews</p>
+              <p className="mt-1 text-xs text-muted">Testimonial interviews</p>
             </div>
             <div className={cardClass}>
-              <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted">
                 Total dispatched
               </p>
               <p className="mt-2 text-2xl font-bold tabular-nums text-gray-900 sm:text-3xl">
@@ -819,7 +819,7 @@ export function AnalyticsDashboard() {
                       const np =
                         Math.round(p.notEligiblePct * 10) / 10;
                       return (
-                        <div className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs shadow-md">
+                        <div className="rounded-lg border border-border bg-elevated px-3 py-2 text-xs shadow-md">
                           <p className="font-medium text-gray-900">{p.domain}</p>
                           <p className="mt-1 text-green-700">
                             Eligible: {p.eligible} ({ep}%)
@@ -827,7 +827,7 @@ export function AnalyticsDashboard() {
                           <p className="text-red-700">
                             Not eligible: {p.notEligible} ({np}%)
                           </p>
-                          <p className="mt-1 text-gray-500">
+                          <p className="mt-1 text-muted">
                             Total: {p.total}
                           </p>
                         </div>
@@ -916,7 +916,7 @@ export function AnalyticsDashboard() {
                       if (!active || !payload?.length) return null;
                       const p = payload[0]!.payload as (typeof jobRoleData)[0];
                       return (
-                        <div className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs shadow-md">
+                        <div className="rounded-lg border border-border bg-elevated px-3 py-2 text-xs shadow-md">
                           <p className="max-w-[240px] font-medium text-gray-900">
                             {p.role}
                           </p>
@@ -934,7 +934,7 @@ export function AnalyticsDashboard() {
                               : 0}
                             %)
                           </p>
-                          <p className="mt-1 text-gray-500">Total: {p.total}</p>
+                          <p className="mt-1 text-muted">Total: {p.total}</p>
                         </div>
                       );
                     }}
@@ -1022,9 +1022,9 @@ export function AnalyticsDashboard() {
                         pct: number;
                       };
                       return (
-                        <div className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs shadow-md">
+                        <div className="rounded-lg border border-border bg-elevated px-3 py-2 text-xs shadow-md">
                           <p className="font-medium">{p.name}</p>
-                          <p className="text-gray-600">
+                          <p className="text-muted">
                             {p.value} ({p.pct}%)
                           </p>
                         </div>
@@ -1066,9 +1066,9 @@ export function AnalyticsDashboard() {
                       if (!active || !payload?.length) return null;
                       const p = payload[0]!.payload as (typeof topCategories)[0];
                       return (
-                        <div className="max-w-xs rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs shadow-md">
+                        <div className="max-w-xs rounded-lg border border-border bg-elevated px-3 py-2 text-xs shadow-md">
                           <p className="font-medium text-gray-900">{p.name}</p>
-                          <p className="mt-1 text-gray-600">Count: {p.count}</p>
+                          <p className="mt-1 text-muted">Count: {p.count}</p>
                         </div>
                       );
                     }}
@@ -1099,7 +1099,7 @@ export function AnalyticsDashboard() {
               date, delivery, or record created)
             </p>
             {avgDispatchDays.avg == null ? (
-              <p className="mt-6 text-sm text-gray-500">
+              <p className="mt-6 text-sm text-muted">
                 No matching interview-to-dispatch pairs in this range.
               </p>
             ) : (
@@ -1108,22 +1108,22 @@ export function AnalyticsDashboard() {
                   <p className="text-5xl font-bold tabular-nums text-gray-900">
                     {avgDispatchDays.avg}
                   </p>
-                  <p className="mt-1 text-sm text-gray-500">Average days</p>
+                  <p className="mt-1 text-sm text-muted">Average days</p>
                 </div>
                 <div className="flex gap-8 text-sm">
                   <div>
-                    <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted">
                       Fastest
                     </p>
-                    <p className="mt-1 text-lg font-semibold text-gray-800">
+                    <p className="mt-1 text-lg font-semibold text-foreground">
                       {avgDispatchDays.min} days
                     </p>
                   </div>
                   <div>
-                    <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted">
                       Slowest
                     </p>
-                    <p className="mt-1 text-lg font-semibold text-gray-800">
+                    <p className="mt-1 text-lg font-semibold text-foreground">
                       {avgDispatchDays.max} days
                     </p>
                   </div>

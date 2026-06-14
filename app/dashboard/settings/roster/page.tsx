@@ -14,7 +14,7 @@ import { getUserSafe } from "@/lib/supabase-auth";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 
 const cardChrome =
-  "rounded-2xl bg-white shadow-[0_4px_16px_rgba(0,0,0,0.08)] border border-[#f0f0f0]";
+  "rounded-2xl bg-elevated shadow-card border border-border-subtle";
 
 const ROLE_TABS: { role: TeamRosterRole; label: string }[] = [
   { role: "poc", label: "POC" },
@@ -215,43 +215,43 @@ export default function RosterSettingsPage() {
 
   return (
     <>
-      <header className="sticky top-14 z-30 bg-[#f5f5f7]/90 px-4 py-4 backdrop-blur-md sm:px-6 sm:py-5 lg:top-0 lg:px-8 lg:py-6">
+      <header className="sticky top-14 z-30 bg-background/90 px-4 py-4 backdrop-blur-md sm:px-6 sm:py-5 lg:top-0 lg:px-8 lg:py-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight text-[#1d1d1f]">
+            <h1 className="text-2xl font-semibold tracking-tight text-foreground">
               Team Roster
             </h1>
-            <p className="mt-1 text-sm text-[#6e6e73]">
+            <p className="mt-1 text-sm text-muted">
               Manage team members for each role
             </p>
           </div>
           <div className="-mx-1 flex flex-nowrap items-center gap-3 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] sm:flex-wrap sm:overflow-visible [&::-webkit-scrollbar]:hidden">
             <Link
               href="/dashboard/settings/team"
-              className="shrink-0 text-sm font-medium text-[#6e6e73] transition-all hover:text-[#1d1d1f]"
+              className="shrink-0 text-sm font-medium text-muted transition-all hover:text-foreground"
             >
               Team
             </Link>
             <Link
               href="/dashboard/settings/roster"
-              className="shrink-0 text-sm font-medium text-[#1d1d1f]"
+              className="shrink-0 text-sm font-medium text-foreground"
             >
               Roster
             </Link>
             <Link
               href="/dashboard/settings/criteria"
-              className="shrink-0 text-sm font-medium text-[#6e6e73] transition-all hover:text-[#1d1d1f]"
+              className="shrink-0 text-sm font-medium text-muted transition-all hover:text-foreground"
             >
               Criteria
             </Link>
             <Link
               href="/dashboard/settings/deleted-entries"
-              className="shrink-0 text-sm font-medium text-[#6e6e73] transition-all hover:text-[#1d1d1f]"
+              className="shrink-0 text-sm font-medium text-muted transition-all hover:text-foreground"
             >
               Deleted Entries
             </Link>
             {showViewOnlyBadge ? (
-              <span className="rounded-full bg-[#f3f4f6] px-3 py-1 text-xs font-medium text-[#6b7280]">
+              <span className="rounded-full bg-border/40 px-3 py-1 text-xs font-medium text-muted">
                 View only
               </span>
             ) : null}
@@ -261,7 +261,7 @@ export default function RosterSettingsPage() {
 
       <main className="mx-auto max-w-6xl px-4 pb-10 pt-2 sm:px-6 lg:px-8 lg:pb-12">
         {error ? (
-          <p className="mb-4 rounded-xl border border-[#f0f0f0] bg-white px-4 py-2 text-sm text-[#dc2626]">
+          <p className="mb-4 rounded-xl border border-border-subtle bg-elevated px-4 py-2 text-sm text-[#dc2626]">
             {error}
             <button
               type="button"
@@ -281,8 +281,8 @@ export default function RosterSettingsPage() {
               onClick={() => setActiveRole(tab.role)}
               className={`rounded-full px-4 py-2 text-sm font-medium ${
                 activeRole === tab.role
-                  ? "bg-[#1d1d1f] text-white"
-                  : "bg-white text-[#6e6e73] border border-[#e5e5e5] hover:text-[#1d1d1f]"
+                  ? "bg-foreground text-background"
+                  : "bg-elevated text-muted border border-border hover:text-foreground"
               }`}
             >
               {tab.label}
@@ -291,14 +291,14 @@ export default function RosterSettingsPage() {
         </div>
 
         <section className={`${cardChrome} overflow-hidden`}>
-          <div className="flex items-center justify-between border-b border-[#f0f0f0] px-4 py-3">
-            <h2 className="text-sm font-semibold text-[#1d1d1f]">
+          <div className="flex items-center justify-between border-b border-border-subtle px-4 py-3">
+            <h2 className="text-sm font-semibold text-foreground">
               {ROLE_TABS.find((r) => r.role === activeRole)?.label}
             </h2>
             {canManageTeam ? (
               <button
                 type="button"
-                className="inline-flex items-center gap-1 rounded-lg border border-[#e5e5e5] px-3 py-1.5 text-xs font-medium text-[#1d1d1f] hover:bg-[#fafafa]"
+                className="inline-flex items-center gap-1 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground hover:bg-background/80"
                 onClick={() =>
                   setAddDraft((prev) => ({
                     ...prev,
@@ -313,7 +313,7 @@ export default function RosterSettingsPage() {
           </div>
 
           {canManageTeam && addDraft[activeRole].open ? (
-            <div className="grid gap-2 border-b border-[#f0f0f0] bg-[#fafafa] px-4 py-3 sm:grid-cols-[1fr_1fr_auto]">
+            <div className="grid gap-2 border-b border-border-subtle bg-background/80 px-4 py-3 sm:grid-cols-[1fr_1fr_auto]">
               <input
                 value={addDraft[activeRole].name}
                 onChange={(e) =>
@@ -322,7 +322,7 @@ export default function RosterSettingsPage() {
                     [activeRole]: { ...prev[activeRole], name: e.target.value },
                   }))
                 }
-                className="rounded-lg border border-[#e5e5e5] px-3 py-2 text-sm"
+                className="rounded-lg border border-border px-3 py-2 text-sm"
                 placeholder="Name *"
               />
               <input
@@ -333,13 +333,13 @@ export default function RosterSettingsPage() {
                     [activeRole]: { ...prev[activeRole], email: e.target.value },
                   }))
                 }
-                className="rounded-lg border border-[#e5e5e5] px-3 py-2 text-sm"
+                className="rounded-lg border border-border px-3 py-2 text-sm"
                 placeholder="Email (optional)"
               />
               <button
                 type="button"
                 disabled={savingKey === `add:${activeRole}`}
-                className="rounded-lg bg-[#1d1d1f] px-4 py-2 text-sm font-medium text-white hover:bg-[#2d2d2f] disabled:opacity-50"
+                className="rounded-lg bg-foreground px-4 py-2 text-sm font-medium text-background hover:opacity-90 disabled:opacity-50"
                 onClick={() => void addMember(activeRole)}
               >
                 Save
@@ -351,16 +351,16 @@ export default function RosterSettingsPage() {
             <table className="w-full min-w-[760px] border-collapse text-left">
               <thead>
                 <tr>
-                  <th className="border-b border-gray-100 bg-[#fafafa] px-4 py-3 text-xs font-semibold tracking-wider text-gray-400">
+                  <th className="border-b border-border bg-background/80 px-4 py-3 text-xs font-semibold tracking-wider text-muted">
                     NAME
                   </th>
-                  <th className="border-b border-gray-100 bg-[#fafafa] px-4 py-3 text-xs font-semibold tracking-wider text-gray-400">
+                  <th className="border-b border-border bg-background/80 px-4 py-3 text-xs font-semibold tracking-wider text-muted">
                     EMAIL
                   </th>
-                  <th className="border-b border-gray-100 bg-[#fafafa] px-4 py-3 text-xs font-semibold tracking-wider text-gray-400">
+                  <th className="border-b border-border bg-background/80 px-4 py-3 text-xs font-semibold tracking-wider text-muted">
                     STATUS
                   </th>
-                  <th className="border-b border-gray-100 bg-[#fafafa] px-4 py-3 text-right text-xs font-semibold tracking-wider text-gray-400">
+                  <th className="border-b border-border bg-background/80 px-4 py-3 text-right text-xs font-semibold tracking-wider text-muted">
                     ACTIONS
                   </th>
                 </tr>
@@ -368,13 +368,13 @@ export default function RosterSettingsPage() {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td className="px-4 py-6 text-sm text-[#6e6e73]" colSpan={4}>
+                    <td className="px-4 py-6 text-sm text-muted" colSpan={4}>
                       Loading...
                     </td>
                   </tr>
                 ) : roleRows.length === 0 ? (
                   <tr>
-                    <td className="px-4 py-8 text-sm text-[#6e6e73]" colSpan={4}>
+                    <td className="px-4 py-8 text-sm text-muted" colSpan={4}>
                       No members in this roster.
                     </td>
                   </tr>
@@ -383,10 +383,10 @@ export default function RosterSettingsPage() {
                     const isEditing = editingId === row.id;
                     return (
                       <tr key={row.id}>
-                        <td className="border-b border-gray-100 px-4 py-3 text-sm text-[#1d1d1f]">
+                        <td className="border-b border-border px-4 py-3 text-sm text-foreground">
                           {isEditing ? (
                             <input
-                              className="w-full rounded-lg border border-[#e5e5e5] px-2 py-1.5 text-sm"
+                              className="w-full rounded-lg border border-border px-2 py-1.5 text-sm"
                               value={editName}
                               onChange={(e) => setEditName(e.target.value)}
                             />
@@ -394,10 +394,10 @@ export default function RosterSettingsPage() {
                             row.name
                           )}
                         </td>
-                        <td className="border-b border-gray-100 px-4 py-3 text-sm text-[#6e6e73]">
+                        <td className="border-b border-border px-4 py-3 text-sm text-muted">
                           {isEditing ? (
                             <input
-                              className="w-full rounded-lg border border-[#e5e5e5] px-2 py-1.5 text-sm"
+                              className="w-full rounded-lg border border-border px-2 py-1.5 text-sm"
                               value={editEmail}
                               onChange={(e) => setEditEmail(e.target.value)}
                               placeholder="Email (optional)"
@@ -406,18 +406,18 @@ export default function RosterSettingsPage() {
                             row.email?.trim() || "—"
                           )}
                         </td>
-                        <td className="border-b border-gray-100 px-4 py-3 text-sm">
+                        <td className="border-b border-border px-4 py-3 text-sm">
                           <span
                             className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${
                               row.is_active
                                 ? "bg-[#f0fdf4] text-[#16a34a]"
-                                : "bg-[#f4f4f5] text-[#6e6e73]"
+                                : "bg-[#f4f4f5] text-muted"
                             }`}
                           >
                             {row.is_active ? "Active" : "Inactive"}
                           </span>
                         </td>
-                        <td className="border-b border-gray-100 px-4 py-3 text-right text-sm">
+                        <td className="border-b border-border px-4 py-3 text-right text-sm">
                           {canManageTeam ? (
                             <div className="inline-flex items-center gap-1">
                               {isEditing ? (
@@ -433,7 +433,7 @@ export default function RosterSettingsPage() {
                                   </button>
                                   <button
                                     type="button"
-                                    className="rounded-lg p-1.5 text-[#6e6e73] hover:bg-[#f4f4f5]"
+                                    className="rounded-lg p-1.5 text-muted hover:bg-[#f4f4f5]"
                                     title="Cancel edit"
                                     onClick={() => {
                                       setEditingId(null);
@@ -449,7 +449,7 @@ export default function RosterSettingsPage() {
                                   <button
                                     type="button"
                                     disabled={savingKey === `toggle:${row.id}`}
-                                    className="rounded-lg p-1.5 text-[#6e6e73] hover:bg-[#f5f5f7]"
+                                    className="rounded-lg p-1.5 text-muted hover:bg-background"
                                     title={row.is_active ? "Set inactive" : "Set active"}
                                     onClick={() => void toggleActive(row)}
                                   >
@@ -480,7 +480,7 @@ export default function RosterSettingsPage() {
                               )}
                             </div>
                           ) : (
-                            <span className="text-xs text-[#aeaeb2]">—</span>
+                            <span className="text-xs text-muted/80">—</span>
                           )}
                         </td>
                       </tr>

@@ -37,7 +37,7 @@ export function ProjectCandidateDetailModal({
   const demo = candidate.demo_link?.trim();
 
   return (
-    <div className="fixed inset-0 z-[80] flex min-h-0 items-center justify-center bg-[#1d1d1f]/60 p-0 backdrop-blur-sm sm:p-4">
+    <div className="fixed inset-0 z-[80] flex min-h-0 items-center justify-center bg-foreground/60 p-0 backdrop-blur-sm sm:p-4">
       <button
         type="button"
         className="absolute inset-0"
@@ -50,78 +50,78 @@ export function ProjectCandidateDetailModal({
         className={`${modalPanelClass} shadow-[0_8px_32px_rgba(0,0,0,0.12)]`}
       >
         <div className="flex items-start justify-between border-b border-[#f5f5f5] px-6 py-4">
-          <h2 className="pr-8 text-lg font-semibold text-[#1d1d1f]">
+          <h2 className="pr-8 text-lg font-semibold text-foreground">
             {dialogTitle(candidate)}
           </h2>
           <button
             type="button"
-            className="rounded-lg p-2 text-[#aeaeb2] transition-colors hover:bg-[#f5f5f7] hover:text-[#1d1d1f]"
+            className="rounded-lg p-2 text-muted/80 transition-colors hover:bg-background hover:text-foreground"
             aria-label="Close"
             onClick={onClose}
           >
             <X className="h-5 w-5" strokeWidth={2} />
           </button>
         </div>
-        <div className="space-y-4 px-6 py-5 text-sm text-[#1d1d1f]">
+        <div className="space-y-4 px-6 py-5 text-sm text-foreground">
           <div>
-            <p className="text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
+            <p className="text-xs font-medium uppercase tracking-widest text-muted/80">
               Name
             </p>
             <p className="mt-1">{nameFromEmailPrefix(candidate)}</p>
           </div>
           <div>
-            <p className="text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
+            <p className="text-xs font-medium uppercase tracking-widest text-muted/80">
               Phone
             </p>
             <p className="mt-1">
               {candidate.whatsapp_number?.trim() || (
-                <span className="text-[#6e6e73]">—</span>
+                <span className="text-muted">—</span>
               )}
             </p>
           </div>
           <div>
-            <p className="text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
+            <p className="text-xs font-medium uppercase tracking-widest text-muted/80">
               Email
             </p>
             <p className="mt-1 break-all">{candidate.email}</p>
           </div>
           <div>
-            <p className="text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
+            <p className="text-xs font-medium uppercase tracking-widest text-muted/80">
               Project title
             </p>
             <p className="mt-1 whitespace-pre-wrap">
               {candidate.project_title?.trim() || (
-                <span className="text-[#6e6e73]">—</span>
+                <span className="text-muted">—</span>
               )}
             </p>
           </div>
           <div>
-            <p className="text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
+            <p className="text-xs font-medium uppercase tracking-widest text-muted/80">
               Problem statement
             </p>
             <p className="mt-1 whitespace-pre-wrap">
               {candidate.problem_statement?.trim() || (
-                <span className="text-[#6e6e73]">—</span>
+                <span className="text-muted">—</span>
               )}
             </p>
           </div>
           <div>
-            <p className="text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
+            <p className="text-xs font-medium uppercase tracking-widest text-muted/80">
               Target user
             </p>
             <p className="mt-1 whitespace-pre-wrap">
               {candidate.target_user?.trim() || (
-                <span className="text-[#6e6e73]">—</span>
+                <span className="text-muted">—</span>
               )}
             </p>
           </div>
           <div>
-            <p className="text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
+            <p className="text-xs font-medium uppercase tracking-widest text-muted/80">
               AI usage
             </p>
             <p className="mt-1 whitespace-pre-wrap">
               {candidate.ai_usage?.trim() || (
-                <span className="text-[#6e6e73]">—</span>
+                <span className="text-muted">—</span>
               )}
             </p>
           </div>
@@ -130,12 +130,12 @@ export function ProjectCandidateDetailModal({
               href={demo}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex rounded-xl bg-[#1d1d1f] px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[#2d2d2f]"
+              className="inline-flex rounded-xl bg-foreground px-4 py-2.5 text-sm font-medium text-background transition-colors hover:opacity-90"
             >
               View Demo
             </a>
           ) : (
-            <p className="text-xs text-[#6e6e73]">No demo link provided</p>
+            <p className="text-xs text-muted">No demo link provided</p>
           )}
         </div>
       </div>

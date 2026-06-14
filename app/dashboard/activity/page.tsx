@@ -37,7 +37,7 @@ type ActivityLogRow = {
 };
 
 const cardChrome =
-  "rounded-2xl bg-white shadow-[0_4px_16px_rgba(0,0,0,0.08)] border border-[#f0f0f0]";
+  "rounded-2xl bg-elevated shadow-card border border-border-subtle";
 
 function initialsFromName(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -218,7 +218,7 @@ export default function ActivityPage() {
 
   if (!supabase) {
     return (
-      <div className="mx-auto max-w-lg px-8 py-16 text-center text-sm text-[#6e6e73]">
+      <div className="mx-auto max-w-lg px-8 py-16 text-center text-sm text-muted">
         Cannot connect to Supabase.
       </div>
     );
@@ -226,16 +226,16 @@ export default function ActivityPage() {
 
   return (
     <>
-      <header className="sticky top-14 z-30 bg-[#f5f5f7]/90 px-4 py-4 backdrop-blur-md sm:px-6 sm:py-5 lg:top-0 lg:px-8 lg:py-6">
-        <h1 className="text-xl font-semibold tracking-tight text-[#1d1d1f] sm:text-2xl">
+      <header className="sticky top-14 z-30 bg-background/90 px-4 py-4 backdrop-blur-md sm:px-6 sm:py-5 lg:top-0 lg:px-8 lg:py-6">
+        <h1 className="text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
           Activity log
         </h1>
-        <p className="mt-1 text-sm text-[#6e6e73]">
+        <p className="mt-1 text-sm text-muted">
           Track all changes made by your team
         </p>
       </header>
 
-      <main className="mx-auto max-w-[1400px] px-4 pb-10 pt-2 text-sm text-[#1d1d1f] sm:px-6 lg:px-8 lg:pb-12">
+      <main className="mx-auto max-w-[1400px] px-4 pb-10 pt-2 text-sm text-foreground sm:px-6 lg:px-8 lg:pb-12">
         {error ? (
           <div className={`mb-4 px-4 py-3 ${cardChrome}`}>
             <p className="text-[#dc2626]">{error}</p>
@@ -246,7 +246,7 @@ export default function ActivityPage() {
           className={`mb-6 flex flex-col gap-4 p-4 sm:flex-row sm:flex-wrap sm:items-end ${cardChrome}`}
         >
           <label className="block min-w-[160px] flex-1">
-            <span className="text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
+            <span className="text-xs font-medium uppercase tracking-widest text-muted/80">
               Search candidate
             </span>
             <input
@@ -254,17 +254,17 @@ export default function ActivityPage() {
               value={candidateSearch}
               onChange={(e) => setCandidateSearch(e.target.value)}
               placeholder="Name…"
-              className="mt-1 w-full rounded-xl border border-[#e5e5e5] px-3 py-2 text-sm focus:border-[#3b82f6] focus:outline-none"
+              className="mt-1 w-full rounded-xl border border-border px-3 py-2 text-sm focus:border-[#3b82f6] focus:outline-none"
             />
           </label>
           <label className="block min-w-[160px] flex-1">
-            <span className="text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
+            <span className="text-xs font-medium uppercase tracking-widest text-muted/80">
               User
             </span>
             <select
               value={userFilter}
               onChange={(e) => setUserFilter(e.target.value)}
-              className="mt-1 w-full rounded-xl border border-[#e5e5e5] px-3 py-2 text-sm focus:border-[#3b82f6] focus:outline-none"
+              className="mt-1 w-full rounded-xl border border-border px-3 py-2 text-sm focus:border-[#3b82f6] focus:outline-none"
             >
               <option value="all">All</option>
               {teamUsers.map((u) => (
@@ -275,7 +275,7 @@ export default function ActivityPage() {
             </select>
           </label>
           <label className="block min-w-[160px] flex-1">
-            <span className="text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
+            <span className="text-xs font-medium uppercase tracking-widest text-muted/80">
               Action type
             </span>
             <select
@@ -283,7 +283,7 @@ export default function ActivityPage() {
               onChange={(e) =>
                 setCategoryFilter(e.target.value as ActivityCategory | "all")
               }
-              className="mt-1 w-full rounded-xl border border-[#e5e5e5] px-3 py-2 text-sm focus:border-[#3b82f6] focus:outline-none"
+              className="mt-1 w-full rounded-xl border border-border px-3 py-2 text-sm focus:border-[#3b82f6] focus:outline-none"
             >
               {CATEGORIES.map((c) => (
                 <option key={c.value} value={c.value}>
@@ -293,31 +293,31 @@ export default function ActivityPage() {
             </select>
           </label>
           <label className="block min-w-[140px]">
-            <span className="text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
+            <span className="text-xs font-medium uppercase tracking-widest text-muted/80">
               From
             </span>
             <input
               type="date"
               value={dateFrom}
               onChange={(e) => setDateFrom(e.target.value)}
-              className="mt-1 w-full rounded-xl border border-[#e5e5e5] px-3 py-2 text-sm focus:border-[#3b82f6] focus:outline-none"
+              className="mt-1 w-full rounded-xl border border-border px-3 py-2 text-sm focus:border-[#3b82f6] focus:outline-none"
             />
           </label>
           <label className="block min-w-[140px]">
-            <span className="text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
+            <span className="text-xs font-medium uppercase tracking-widest text-muted/80">
               To
             </span>
             <input
               type="date"
               value={dateTo}
               onChange={(e) => setDateTo(e.target.value)}
-              className="mt-1 w-full rounded-xl border border-[#e5e5e5] px-3 py-2 text-sm focus:border-[#3b82f6] focus:outline-none"
+              className="mt-1 w-full rounded-xl border border-border px-3 py-2 text-sm focus:border-[#3b82f6] focus:outline-none"
             />
           </label>
           <button
             type="button"
             onClick={clearFilters}
-            className="rounded-xl border border-[#e5e5e5] bg-white px-4 py-2 text-sm font-medium text-[#1d1d1f] hover:bg-[#f5f5f7]"
+            className="rounded-xl border border-border bg-elevated px-4 py-2 text-sm font-medium text-foreground hover:bg-background"
           >
             Clear filters
           </button>
@@ -327,20 +327,20 @@ export default function ActivityPage() {
           <div className="overflow-x-auto">
             <table className="w-full min-w-[900px] table-auto border-collapse text-left">
               <thead>
-                <tr className="border-b border-[#f0f0f0] bg-[#fafafa]">
-                  <th className="px-4 py-3 text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
+                <tr className="border-b border-border-subtle bg-background/80">
+                  <th className="px-4 py-3 text-xs font-medium uppercase tracking-widest text-muted/80">
                     Time
                   </th>
-                  <th className="px-4 py-3 text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
+                  <th className="px-4 py-3 text-xs font-medium uppercase tracking-widest text-muted/80">
                     User
                   </th>
-                  <th className="px-4 py-3 text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
+                  <th className="px-4 py-3 text-xs font-medium uppercase tracking-widest text-muted/80">
                     Action
                   </th>
-                  <th className="px-4 py-3 text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
+                  <th className="px-4 py-3 text-xs font-medium uppercase tracking-widest text-muted/80">
                     Candidate
                   </th>
-                  <th className="px-4 py-3 text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
+                  <th className="px-4 py-3 text-xs font-medium uppercase tracking-widest text-muted/80">
                     Details
                   </th>
                 </tr>
@@ -350,7 +350,7 @@ export default function ActivityPage() {
                   <tr>
                     <td
                       colSpan={5}
-                      className="px-4 py-12 text-center text-[#6e6e73]"
+                      className="px-4 py-12 text-center text-muted"
                     >
                       Loading…
                     </td>
@@ -359,7 +359,7 @@ export default function ActivityPage() {
                   <tr>
                     <td
                       colSpan={5}
-                      className="px-4 py-12 text-center text-[#6e6e73]"
+                      className="px-4 py-12 text-center text-muted"
                     >
                       No activity yet
                     </td>
@@ -373,7 +373,7 @@ export default function ActivityPage() {
                         key={r.id}
                         className="border-b border-[#f5f5f5] last:border-0"
                       >
-                        <td className="whitespace-nowrap px-4 py-3 align-top text-[#1d1d1f]">
+                        <td className="whitespace-nowrap px-4 py-3 align-top text-foreground">
                           <span
                             title={format(created, "PPpp")}
                             className="cursor-default border-b border-dotted border-[#aeaeb2]"
@@ -389,7 +389,7 @@ export default function ActivityPage() {
                             >
                               {initialsFromName(uname)}
                             </div>
-                            <span className="font-medium text-[#1d1d1f]">
+                            <span className="font-medium text-foreground">
                               {uname}
                             </span>
                           </div>
@@ -401,16 +401,16 @@ export default function ActivityPage() {
                             {categoryLabel(r.action_type)}
                           </span>
                         </td>
-                        <td className="max-w-[180px] px-4 py-3 align-top text-[#1d1d1f]">
+                        <td className="max-w-[180px] px-4 py-3 align-top text-foreground">
                           {r.candidate_name?.trim() ? (
                             <span className="line-clamp-2">
                               {r.candidate_name}
                             </span>
                           ) : (
-                            <span className="text-[#6e6e73]">—</span>
+                            <span className="text-muted">—</span>
                           )}
                         </td>
-                        <td className="max-w-[480px] px-4 py-3 align-top text-[#1d1d1f]">
+                        <td className="max-w-[480px] px-4 py-3 align-top text-foreground">
                           <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">
                             {r.description}
                           </p>
@@ -423,7 +423,7 @@ export default function ActivityPage() {
             </table>
           </div>
           {!loading && totalCount > 0 ? (
-            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#f0f0f0] bg-[#fafafa] px-4 py-3 text-xs text-[#6e6e73]">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border-subtle bg-background/80 px-4 py-3 text-xs text-muted">
               <span>
                 Showing {page * PAGE_SIZE + 1}–
                 {Math.min((page + 1) * PAGE_SIZE, totalCount)} of {totalCount}
@@ -432,7 +432,7 @@ export default function ActivityPage() {
                 <button
                   type="button"
                   disabled={page <= 0}
-                  className="rounded-lg border border-[#e5e5e5] bg-white px-3 py-1.5 font-medium text-[#1d1d1f] hover:bg-[#f5f5f7] disabled:cursor-not-allowed disabled:opacity-40"
+                  className="rounded-lg border border-border bg-elevated px-3 py-1.5 font-medium text-foreground hover:bg-background disabled:cursor-not-allowed disabled:opacity-40"
                   onClick={() => setPage((p) => Math.max(0, p - 1))}
                 >
                   Previous
@@ -440,7 +440,7 @@ export default function ActivityPage() {
                 <button
                   type="button"
                   disabled={page >= totalPages - 1}
-                  className="rounded-lg border border-[#e5e5e5] bg-white px-3 py-1.5 font-medium text-[#1d1d1f] hover:bg-[#f5f5f7] disabled:cursor-not-allowed disabled:opacity-40"
+                  className="rounded-lg border border-border bg-elevated px-3 py-1.5 font-medium text-foreground hover:bg-background disabled:cursor-not-allowed disabled:opacity-40"
                   onClick={() =>
                     setPage((p) => Math.min(totalPages - 1, p + 1))
                   }

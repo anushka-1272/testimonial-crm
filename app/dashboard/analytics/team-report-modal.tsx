@@ -450,7 +450,7 @@ export function TeamReportModal({ open, supabase, onClose }: TeamReportModalProp
     : "All time";
 
   const th =
-    "bg-gray-50 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-600 first:rounded-tl-xl last:rounded-tr-xl";
+    "bg-background/80 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted first:rounded-tl-xl last:rounded-tr-xl";
   const td = "px-4 py-2.5 text-sm text-gray-900";
   const tdNum = "px-4 py-2.5 text-right text-sm font-semibold tabular-nums text-gray-900";
 
@@ -468,12 +468,12 @@ export function TeamReportModal({ open, supabase, onClose }: TeamReportModalProp
         aria-modal="true"
         aria-labelledby="team-report-title"
       >
-        <div className="flex flex-col gap-4 border-b border-gray-100 pb-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex flex-col gap-4 border-b border-border pb-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h2 id="team-report-title" className="text-lg font-semibold text-gray-900">
               Team report
             </h2>
-            <p className="mt-1 text-sm text-gray-500">{rangeLabel}</p>
+            <p className="mt-1 text-sm text-muted">{rangeLabel}</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             {PERIOD_ORDER.map((p) => (
@@ -485,7 +485,7 @@ export function TeamReportModal({ open, supabase, onClose }: TeamReportModalProp
                 className={`rounded-full px-3 py-1.5 text-sm font-medium transition-colors ${
                   period === p
                     ? "bg-[#1d4ed8] text-white"
-                    : "border border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
+                    : "border border-border bg-elevated text-foreground/80 hover:bg-background/80"
                 }`}
               >
                 {PERIOD_LABELS[p]}
@@ -494,21 +494,21 @@ export function TeamReportModal({ open, supabase, onClose }: TeamReportModalProp
             <button
               type="button"
               onClick={onClose}
-              className="rounded-full border border-gray-200 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              className="rounded-full border border-border px-3 py-1.5 text-sm font-medium text-foreground/80 hover:bg-background/80"
             >
               Close
             </button>
           </div>
         </div>
 
-        <div className="mt-4 flex gap-1 rounded-lg border border-gray-200 bg-gray-50 p-1">
+        <div className="mt-4 flex gap-1 rounded-lg border border-border bg-background/80 p-1">
           <button
             type="button"
             onClick={() => setTab("metrics")}
             className={`flex-1 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
               tab === "metrics"
-                ? "bg-white text-gray-900 shadow-sm"
-                : "text-gray-600 hover:text-gray-900"
+                ? "bg-elevated text-gray-900 shadow-sm"
+                : "text-muted hover:text-gray-900"
             }`}
           >
             Metrics
@@ -518,8 +518,8 @@ export function TeamReportModal({ open, supabase, onClose }: TeamReportModalProp
             onClick={() => setTab("ratings")}
             className={`flex-1 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
               tab === "ratings"
-                ? "bg-white text-gray-900 shadow-sm"
-                : "text-gray-600 hover:text-gray-900"
+                ? "bg-elevated text-gray-900 shadow-sm"
+                : "text-muted hover:text-gray-900"
             }`}
           >
             Ratings
@@ -541,15 +541,15 @@ export function TeamReportModal({ open, supabase, onClose }: TeamReportModalProp
             />
           </div>
         ) : loading ? (
-          <p className="mt-8 text-sm text-gray-500">Loading numbers…</p>
+          <p className="mt-8 text-sm text-muted">Loading numbers…</p>
         ) : (
           <div className="mt-6 space-y-10">
             <section>
               <h3 className="text-base font-semibold text-gray-900">Total calls</h3>
               {followupByActor.length === 0 ? (
-                <p className="mt-4 text-sm text-gray-500">No calls in this period.</p>
+                <p className="mt-4 text-sm text-muted">No calls in this period.</p>
               ) : (
-                <div className="mt-4 overflow-hidden rounded-xl border border-gray-200 shadow-sm">
+                <div className="mt-4 overflow-hidden rounded-xl border border-border shadow-sm">
                   <table className="min-w-full border-collapse text-left">
                     <thead>
                       <tr>
@@ -557,9 +557,9 @@ export function TeamReportModal({ open, supabase, onClose }: TeamReportModalProp
                         <th className={`${th} text-right`}>Total calls</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-100 bg-white">
+                    <tbody className="divide-y divide-gray-100 bg-elevated">
                       {followupByActor.map((row) => (
-                        <tr key={row.key} className="hover:bg-gray-50/80">
+                        <tr key={row.key} className="hover:bg-background/80/80">
                           <td className={td}>{row.label}</td>
                           <td className={tdNum}>{row.count}</td>
                         </tr>
@@ -573,9 +573,9 @@ export function TeamReportModal({ open, supabase, onClose }: TeamReportModalProp
             <section>
               <h3 className="text-base font-semibold text-gray-900">Testimonial interviews</h3>
               {testimonialIvByPerson.length === 0 ? (
-                <p className="mt-4 text-sm text-gray-500">None in this period.</p>
+                <p className="mt-4 text-sm text-muted">None in this period.</p>
               ) : (
-                <div className="mt-4 overflow-hidden rounded-xl border border-gray-200 shadow-sm">
+                <div className="mt-4 overflow-hidden rounded-xl border border-border shadow-sm">
                   <table className="min-w-full border-collapse text-left">
                     <thead>
                       <tr>
@@ -584,9 +584,9 @@ export function TeamReportModal({ open, supabase, onClose }: TeamReportModalProp
                         <th className={`${th} text-right`}>Completed</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-100 bg-white">
+                    <tbody className="divide-y divide-gray-100 bg-elevated">
                       {testimonialIvByPerson.map((row) => (
-                        <tr key={`t-${row.label}`} className="hover:bg-gray-50/80">
+                        <tr key={`t-${row.label}`} className="hover:bg-background/80/80">
                           <td className={td}>{row.label}</td>
                           <td className={tdNum}>{row.assigned}</td>
                           <td className={tdNum}>{row.completed}</td>
@@ -601,9 +601,9 @@ export function TeamReportModal({ open, supabase, onClose }: TeamReportModalProp
             <section>
               <h3 className="text-base font-semibold text-gray-900">Project interviews</h3>
               {projectIvByPerson.length === 0 ? (
-                <p className="mt-4 text-sm text-gray-500">None in this period.</p>
+                <p className="mt-4 text-sm text-muted">None in this period.</p>
               ) : (
-                <div className="mt-4 overflow-hidden rounded-xl border border-gray-200 shadow-sm">
+                <div className="mt-4 overflow-hidden rounded-xl border border-border shadow-sm">
                   <table className="min-w-full border-collapse text-left">
                     <thead>
                       <tr>
@@ -612,9 +612,9 @@ export function TeamReportModal({ open, supabase, onClose }: TeamReportModalProp
                         <th className={`${th} text-right`}>Completed</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-100 bg-white">
+                    <tbody className="divide-y divide-gray-100 bg-elevated">
                       {projectIvByPerson.map((row) => (
-                        <tr key={`p-${row.label}`} className="hover:bg-gray-50/80">
+                        <tr key={`p-${row.label}`} className="hover:bg-background/80/80">
                           <td className={td}>{row.label}</td>
                           <td className={tdNum}>{row.assigned}</td>
                           <td className={tdNum}>{row.completed}</td>
@@ -626,35 +626,35 @@ export function TeamReportModal({ open, supabase, onClose }: TeamReportModalProp
               )}
             </section>
 
-            <section className="rounded-xl border border-gray-200 bg-gradient-to-b from-gray-50 to-white p-5 shadow-sm">
+            <section className="rounded-xl border border-border bg-gradient-to-b from-gray-50 to-white p-5 shadow-sm">
               <h3 className="text-base font-semibold text-gray-900">Period summary</h3>
               <dl className="mt-4 divide-y divide-gray-200">
                 <div className="flex items-baseline justify-between gap-4 py-2.5 first:pt-0">
-                  <dt className="text-sm text-gray-600">Total calls (testimonial pipeline)</dt>
+                  <dt className="text-sm text-muted">Total calls (testimonial pipeline)</dt>
                   <dd className="text-sm font-semibold tabular-nums text-gray-900">
                     {totals.followupTestimonialPipeline}
                   </dd>
                 </div>
                 <div className="flex items-baseline justify-between gap-4 py-2.5">
-                  <dt className="text-sm text-gray-600">Total calls (project pipeline)</dt>
+                  <dt className="text-sm text-muted">Total calls (project pipeline)</dt>
                   <dd className="text-sm font-semibold tabular-nums text-gray-900">
                     {totals.followupProjectPipeline}
                   </dd>
                 </div>
                 <div className="flex items-baseline justify-between gap-4 py-2.5">
-                  <dt className="text-sm text-gray-600">Interested</dt>
+                  <dt className="text-sm text-muted">Interested</dt>
                   <dd className="text-sm font-semibold tabular-nums text-gray-900">
                     {totals.followupInterested}
                   </dd>
                 </div>
                 <div className="flex items-baseline justify-between gap-4 py-2.5">
-                  <dt className="text-sm text-gray-600">Callback requested</dt>
+                  <dt className="text-sm text-muted">Callback requested</dt>
                   <dd className="text-sm font-semibold tabular-nums text-gray-900">
                     {totals.followupCallback}
                   </dd>
                 </div>
                 <div className="flex items-baseline justify-between gap-4 py-2.5">
-                  <dt className="text-sm text-gray-600">
+                  <dt className="text-sm text-muted">
                     Testimonial interviews with a slot in this date range
                   </dt>
                   <dd className="text-sm font-semibold tabular-nums text-gray-900">
@@ -662,7 +662,7 @@ export function TeamReportModal({ open, supabase, onClose }: TeamReportModalProp
                   </dd>
                 </div>
                 <div className="flex items-baseline justify-between gap-4 py-2.5">
-                  <dt className="text-sm text-gray-600">
+                  <dt className="text-sm text-muted">
                     Project interviews with a slot in this date range
                   </dt>
                   <dd className="text-sm font-semibold tabular-nums text-gray-900">
@@ -670,7 +670,7 @@ export function TeamReportModal({ open, supabase, onClose }: TeamReportModalProp
                   </dd>
                 </div>
                 <div className="flex items-baseline justify-between gap-4 py-2.5">
-                  <dt className="text-sm text-gray-600">
+                  <dt className="text-sm text-muted">
                     Testimonial interviews finished in this date range
                   </dt>
                   <dd className="text-sm font-semibold tabular-nums text-gray-900">
@@ -678,7 +678,7 @@ export function TeamReportModal({ open, supabase, onClose }: TeamReportModalProp
                   </dd>
                 </div>
                 <div className="flex items-baseline justify-between gap-4 py-2.5">
-                  <dt className="text-sm text-gray-600">
+                  <dt className="text-sm text-muted">
                     Project interviews finished in this date range
                   </dt>
                   <dd className="text-sm font-semibold tabular-nums text-gray-900">
@@ -686,7 +686,7 @@ export function TeamReportModal({ open, supabase, onClose }: TeamReportModalProp
                   </dd>
                 </div>
                 <div className="flex items-baseline justify-between gap-4 py-2.5 last:pb-0">
-                  <dt className="text-sm text-gray-600">Dispatches logged in this date range</dt>
+                  <dt className="text-sm text-muted">Dispatches logged in this date range</dt>
                   <dd className="text-sm font-semibold tabular-nums text-gray-900">
                     {totals.dispatches}
                   </dd>

@@ -35,3 +35,9 @@ export const tabActive =
 
 export const tabInactive =
   "rounded-full px-3 py-2 text-sm font-medium text-muted transition-colors hover:text-foreground sm:px-4";
+
+export const pageHeader =
+  "sticky top-14 z-30 bg-background/90 px-4 py-4 backdrop-blur-md sm:px-6 sm:py-5 lg:top-0 lg:px-8 lg:py-6";
+
+export const pageMain =
+  "mx-auto max-w-[1600px] px-4 pb-10 pt-2 text-sm text-foreground sm:px-6 lg:px-8 lg:pb-12";

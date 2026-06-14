@@ -51,10 +51,10 @@ function Field({
 }) {
   return (
     <div className={className}>
-      <p className="text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
+      <p className="text-xs font-medium uppercase tracking-widest text-muted/80">
         {label}
       </p>
-      <div className="mt-1 text-sm text-[#1d1d1f]">{children}</div>
+      <div className="mt-1 text-sm text-foreground">{children}</div>
     </div>
   );
 }
@@ -64,7 +64,7 @@ function textOrDash(value: string | null | undefined) {
   return t ? (
     <span className="whitespace-pre-wrap break-words">{t}</span>
   ) : (
-    <span className="text-[#6e6e73]">—</span>
+    <span className="text-muted">—</span>
   );
 }
 
@@ -130,21 +130,21 @@ export function CandidateDetailModal({
         onClick={onClose}
       />
       <div
-        className={`${modalPanelClass} shadow-[0_4px_16px_rgba(0,0,0,0.08)]`}
+        className={`${modalPanelClass} shadow-card`}
         role="dialog"
         aria-modal="true"
         aria-labelledby="candidate-detail-title"
       >
-        <div className="sticky top-0 z-10 flex items-start justify-between border-b border-[#f5f5f5] bg-white px-6 py-4">
+        <div className="sticky top-0 z-10 flex items-start justify-between border-b border-[#f5f5f5] bg-elevated px-6 py-4">
           <h2
             id="candidate-detail-title"
-            className="pr-8 text-lg font-semibold text-[#1d1d1f]"
+            className="pr-8 text-lg font-semibold text-foreground"
           >
             Candidate details
           </h2>
           <button
             type="button"
-            className="rounded-xl p-2 text-[#aeaeb2] transition-all hover:bg-[#f5f5f7] hover:text-[#1d1d1f]"
+            className="rounded-xl p-2 text-muted/80 transition-all hover:bg-background hover:text-foreground"
             aria-label="Close"
             onClick={onClose}
           >
@@ -154,10 +154,10 @@ export function CandidateDetailModal({
 
         <div className="space-y-6 px-6 py-5 text-sm">
           {loading && (
-            <p className="text-center text-[#6e6e73]">Loading…</p>
+            <p className="text-center text-muted">Loading…</p>
           )}
           {fetchError && (
-            <p className="rounded-xl border border-[#f0f0f0] bg-[#f5f5f7] px-3 py-2 text-sm text-[#1d1d1f]">
+            <p className="rounded-xl border border-border-subtle bg-background px-3 py-2 text-sm text-foreground">
               {fetchError}
             </p>
           )}
@@ -193,7 +193,7 @@ export function CandidateDetailModal({
               </Field>
 
               <div>
-                <p className="text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
+                <p className="text-xs font-medium uppercase tracking-widest text-muted/80">
                   Proof
                 </p>
                 <div className="mt-2">
@@ -202,12 +202,12 @@ export function CandidateDetailModal({
                       href={data.proof_document_url.trim()}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex rounded-xl bg-[#1d1d1f] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#2d2d2f]"
+                      className="inline-flex rounded-xl bg-foreground px-4 py-2 text-sm font-medium text-background transition-colors hover:opacity-90"
                     >
                       View Proof
                     </a>
                   ) : (
-                    <span className="text-[#6e6e73]">—</span>
+                    <span className="text-muted">—</span>
                   )}
                 </div>
               </div>
@@ -248,7 +248,7 @@ export function CandidateDetailModal({
                       {data.ai_eligibility_score}
                     </span>
                   ) : (
-                    <span className="text-[#6e6e73]">—</span>
+                    <span className="text-muted">—</span>
                   )}
                 </Field>
                 <Field
@@ -261,7 +261,7 @@ export function CandidateDetailModal({
             </>
           )}
           {!loading && !fetchError && !data && candidateId && (
-            <p className="text-center text-[#6e6e73]">Candidate not found.</p>
+            <p className="text-center text-muted">Candidate not found.</p>
           )}
         </div>
       </div>

@@ -174,21 +174,21 @@ export function AddContentLinkModal({
         role="dialog"
         aria-labelledby="gwc-content-link-title"
       >
-        <div className="flex shrink-0 items-start justify-between border-b border-[#f0f0f0] px-6 py-4">
+        <div className="flex shrink-0 items-start justify-between border-b border-border-subtle px-6 py-4">
           <div>
             <h2
               id="gwc-content-link-title"
-              className="text-lg font-semibold text-[#1d1d1f]"
+              className="text-lg font-semibold text-foreground"
             >
               {title}
             </h2>
-            <p className="mt-1 text-sm text-[#6e6e73]">
+            <p className="mt-1 text-sm text-muted">
               {display} · {channelLabel(channel)}
             </p>
           </div>
           <button
             type="button"
-            className="rounded-xl p-2 text-[#aeaeb2] transition-colors hover:bg-[#f5f5f7] hover:text-[#1d1d1f]"
+            className="rounded-xl p-2 text-muted/80 transition-colors hover:bg-background hover:text-foreground"
             aria-label="Close dialog"
             onClick={onClose}
           >
@@ -207,12 +207,12 @@ export function AddContentLinkModal({
               </p>
             ) : null}
             <div>
-              <label className="text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
+              <label className="text-xs font-medium uppercase tracking-widest text-muted/80">
                 Content link
               </label>
               <input
                 type="url"
-                className="mt-1 w-full rounded-xl border border-[#e5e5e5] px-3 py-2.5 text-sm text-[#1d1d1f] focus:border-[#3b82f6] focus:outline-none focus:ring-0"
+                className="mt-1 w-full rounded-xl border border-border px-3 py-2.5 text-sm text-foreground focus:border-[#3b82f6] focus:outline-none focus:ring-0"
                 value={link}
                 onChange={(e) => setLink(e.target.value)}
                 placeholder="https://"
@@ -221,10 +221,10 @@ export function AddContentLinkModal({
             </div>
           </div>
 
-          <div className="flex shrink-0 justify-end gap-2 border-t border-[#f0f0f0] bg-white px-6 py-4">
+          <div className="flex shrink-0 justify-end gap-2 border-t border-border-subtle bg-elevated px-6 py-4">
             <button
               type="button"
-              className="rounded-xl px-4 py-2.5 text-sm font-medium text-[#6e6e73] transition-colors hover:bg-[#f5f5f5]"
+              className="rounded-xl px-4 py-2.5 text-sm font-medium text-muted transition-colors hover:bg-[#f5f5f5]"
               onClick={onClose}
             >
               Cancel
@@ -232,7 +232,7 @@ export function AddContentLinkModal({
             <button
               type="submit"
               disabled={submitting}
-              className="rounded-xl bg-[#1d1d1f] px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[#2d2d2f] disabled:opacity-50"
+              className="rounded-xl bg-foreground px-4 py-2.5 text-sm font-medium text-background transition-colors hover:opacity-90 disabled:opacity-50"
             >
               {submitLabel}
             </button>

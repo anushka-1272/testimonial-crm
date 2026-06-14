@@ -630,7 +630,7 @@ export function PostInterviewDrawer({
   };
 
   const inp =
-    "mt-1 w-full rounded-xl border border-[#e5e5e5] px-3 py-2.5 text-sm text-[#1d1d1f] focus:border-[#3b82f6] focus:outline-none focus:ring-0";
+    "mt-1 w-full rounded-xl border border-border px-3 py-2.5 text-sm text-foreground focus:border-[#3b82f6] focus:outline-none focus:ring-0";
 
   const categorySearchLower = categorySearch.trim().toLowerCase();
   const filteredCategories = CATEGORIES.filter(
@@ -648,23 +648,23 @@ export function PostInterviewDrawer({
     <div className="fixed inset-0 z-[70] flex justify-end">
       <button
         type="button"
-        className="absolute inset-0 bg-[#1d1d1f]/25 backdrop-blur-[1px]"
+        className="absolute inset-0 bg-foreground/25 backdrop-blur-[1px]"
         aria-label="Close"
         onClick={onClose}
       />
-      <aside className="relative flex h-full w-full max-w-none flex-col border-l border-[#f0f0f0] bg-white shadow-[0_4px_16px_rgba(0,0,0,0.08)] sm:max-w-md">
+      <aside className="relative flex h-full w-full max-w-none flex-col border-l border-border-subtle bg-elevated shadow-card sm:max-w-md">
         <div className="flex items-start justify-between border-b border-[#f5f5f5] px-5 py-4">
           <div>
-            <h2 className="text-lg font-semibold text-[#1d1d1f]">
+            <h2 className="text-lg font-semibold text-foreground">
               {isEditMode ? "Edit post-interview details" : "Complete interview"}
             </h2>
-            <p className="text-sm text-[#6e6e73]">
+            <p className="text-sm text-muted">
               {name ?? "Candidate"} · Post-interview details
             </p>
           </div>
           <button
             type="button"
-            className="rounded-xl p-2 text-[#aeaeb2] transition-all hover:bg-[#f5f5f7] hover:text-[#1d1d1f]"
+            className="rounded-xl p-2 text-muted/80 transition-all hover:bg-background hover:text-foreground"
             onClick={onClose}
           >
             ✕
@@ -673,17 +673,17 @@ export function PostInterviewDrawer({
 
         <form
           onSubmit={(e) => void handleSubmit(e)}
-          className="flex flex-1 flex-col overflow-hidden text-sm text-[#1d1d1f]"
+          className="flex flex-1 flex-col overflow-hidden text-sm text-foreground"
         >
           <div className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
             {error && (
-              <p className="rounded-xl border border-[#f0f0f0] bg-[#f5f5f7] px-3 py-2 text-sm text-[#1d1d1f]">
+              <p className="rounded-xl border border-border-subtle bg-background px-3 py-2 text-sm text-foreground">
                 {error}
               </p>
             )}
 
             <fieldset>
-              <legend className="text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
+              <legend className="text-xs font-medium uppercase tracking-widest text-muted/80">
                 Post-interview eligible?
               </legend>
               <div className="mt-2 flex gap-4">
@@ -710,7 +710,7 @@ export function PostInterviewDrawer({
 
             {!isProject ? (
               <div className="block text-sm" ref={categoryRootRef}>
-                <span className="text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
+                <span className="text-xs font-medium uppercase tracking-widest text-muted/80">
                   Category
                   {eligible === true ? (
                     <span className="ml-1 font-normal normal-case text-[#dc2626]">
@@ -735,15 +735,15 @@ export function PostInterviewDrawer({
                     <span
                       className={
                         selectedCategories.length
-                          ? "text-[#1d1d1f]"
-                          : "text-[#aeaeb2]"
+                          ? "text-foreground"
+                          : "text-muted/80"
                       }
                     >
                       {selectedCategories.length
                         ? `${selectedCategories.length} selected`
                         : "Search and select categories…"}
                     </span>
-                    <span className="text-[#aeaeb2]" aria-hidden>
+                    <span className="text-muted/80" aria-hidden>
                       ▾
                     </span>
                   </button>
@@ -752,14 +752,14 @@ export function PostInterviewDrawer({
                       {selectedCategories.map((c) => (
                         <li
                           key={c}
-                          className="inline-flex max-w-full items-center gap-1 rounded-lg bg-[#f5f5f7] px-2 py-1 text-xs text-[#1d1d1f]"
+                          className="inline-flex max-w-full items-center gap-1 rounded-lg bg-background px-2 py-1 text-xs text-foreground"
                         >
                           <span className="truncate" title={c}>
                             {c}
                           </span>
                           <button
                             type="button"
-                            className="shrink-0 rounded p-0.5 text-[#6e6e73] hover:bg-[#e5e5e5] hover:text-[#1d1d1f]"
+                            className="shrink-0 rounded p-0.5 text-muted hover:bg-border hover:text-foreground"
                             aria-label={`Remove ${c}`}
                             onClick={() =>
                               setSelectedCategories((prev) =>
@@ -774,10 +774,10 @@ export function PostInterviewDrawer({
                     </ul>
                   ) : null}
                   {categoryMenuOpen ? (
-                    <div className="absolute left-0 right-0 top-full z-10 mt-1 max-h-64 overflow-hidden rounded-xl border border-[#e5e5e5] bg-white shadow-[0_8px_24px_rgba(0,0,0,0.1)]">
+                    <div className="absolute left-0 right-0 top-full z-10 mt-1 max-h-64 overflow-hidden rounded-xl border border-border bg-elevated shadow-[0_8px_24px_rgba(0,0,0,0.1)]">
                       <input
                         type="search"
-                        className="w-full border-b border-[#f0f0f0] px-3 py-2.5 text-sm text-[#1d1d1f] placeholder:text-[#aeaeb2] focus:outline-none focus:ring-0"
+                        className="w-full border-b border-border-subtle px-3 py-2.5 text-sm text-foreground placeholder:text-muted/80 focus:outline-none focus:ring-0"
                         placeholder="Search categories…"
                         value={categorySearch}
                         onChange={(e) => setCategorySearch(e.target.value)}
@@ -789,7 +789,7 @@ export function PostInterviewDrawer({
                         aria-multiselectable="true"
                       >
                         {filteredCategories.length === 0 ? (
-                          <li className="px-3 py-2 text-sm text-[#6e6e73]">
+                          <li className="px-3 py-2 text-sm text-muted">
                             No matches
                           </li>
                         ) : (
@@ -797,7 +797,7 @@ export function PostInterviewDrawer({
                             const checked = selectedCategories.includes(c);
                             return (
                               <li key={c} role="option" aria-selected={checked}>
-                                <label className="flex cursor-pointer items-start gap-2 px-3 py-2 text-sm hover:bg-[#f5f5f7]">
+                                <label className="flex cursor-pointer items-start gap-2 px-3 py-2 text-sm hover:bg-background">
                                   <input
                                     type="checkbox"
                                     className="mt-0.5 shrink-0"
@@ -818,7 +818,7 @@ export function PostInterviewDrawer({
             ) : null}
 
             <label className="block text-sm">
-              <span className="text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
+              <span className="text-xs font-medium uppercase tracking-widest text-muted/80">
                 Funnel
                 {eligible === true ? (
                   <span className="ml-1 font-normal normal-case text-[#dc2626]">
@@ -841,7 +841,7 @@ export function PostInterviewDrawer({
             </label>
 
             <label className="block text-sm">
-              <span className="text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
+              <span className="text-xs font-medium uppercase tracking-widest text-muted/80">
                 Comments
               </span>
               <textarea
@@ -853,7 +853,7 @@ export function PostInterviewDrawer({
             </label>
 
             <div>
-              <span className="text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
+              <span className="text-xs font-medium uppercase tracking-widest text-muted/80">
                 Reward item
                 {eligible === true ? (
                   <span className="ml-1 font-normal normal-case text-[#dc2626]">
@@ -878,8 +878,8 @@ export function PostInterviewDrawer({
                       className={`flex flex-col items-center justify-center rounded-xl border p-3 text-center transition-colors ${
                         selected
                           ? "border-black bg-black text-white"
-                          : "border-gray-200 bg-white text-gray-700 hover:border-gray-300"
-                      } disabled:cursor-not-allowed disabled:border-gray-200 disabled:bg-gray-100 disabled:text-gray-400`}
+                          : "border-border bg-elevated text-foreground/80 hover:border-gray-300"
+                      } disabled:cursor-not-allowed disabled:border-border disabled:opacity-40 disabled:text-muted`}
                     >
                       <span className="text-lg leading-none" aria-hidden>
                         {icon}
@@ -891,7 +891,7 @@ export function PostInterviewDrawer({
                   );
                 })}
               </div>
-              <p className="mt-2 text-xs text-gray-500">
+              <p className="mt-2 text-xs text-muted">
                 Auto-selected based on interview type. You can change this.
               </p>
               {rewardChoice === "other" && eligible === true ? (
@@ -906,7 +906,7 @@ export function PostInterviewDrawer({
             </div>
 
             <label className="block text-sm">
-              <span className="text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
+              <span className="text-xs font-medium uppercase tracking-widest text-muted/80">
                 Shipping address
                 {eligible === true && shippingRequired(rewardChoice) ? (
                   <span className="ml-1 font-normal normal-case text-[#dc2626]">
@@ -933,7 +933,7 @@ export function PostInterviewDrawer({
             <div className="flex gap-2">
               <button
                 type="button"
-                className="flex-1 rounded-xl border border-[#f0f0f0] bg-white py-2.5 text-sm font-medium text-[#1d1d1f] transition-all hover:bg-[#fafafa]"
+                className="flex-1 rounded-xl border border-border-subtle bg-elevated py-2.5 text-sm font-medium text-foreground transition-all hover:bg-background/80"
                 onClick={onClose}
               >
                 Cancel
@@ -941,7 +941,7 @@ export function PostInterviewDrawer({
               <button
                 type="submit"
                 disabled={submitDisabled}
-                className="flex-1 rounded-xl bg-[#1d1d1f] py-2.5 text-sm font-medium text-white transition-all hover:bg-[#2d2d2f] disabled:cursor-not-allowed disabled:opacity-50"
+                className="flex-1 rounded-xl bg-foreground py-2.5 text-sm font-medium text-background transition-all hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {submitting ? "Saving…" : "Save & mark completed"}
               </button>

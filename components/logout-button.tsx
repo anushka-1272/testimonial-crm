@@ -11,7 +11,7 @@ type LogoutButtonProps = {
 };
 
 const defaultClassName =
-  "rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50";
+  "rounded-lg border border-border bg-elevated px-3 py-2 text-sm font-medium text-foreground/80 shadow-sm hover:bg-background/80";
 
 export function LogoutButton({
   className,

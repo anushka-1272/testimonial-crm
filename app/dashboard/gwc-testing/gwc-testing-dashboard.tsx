@@ -69,10 +69,10 @@ function sanitizeInterestedInPointers(
 }
 
 const cardChrome =
-  "rounded-2xl bg-white shadow-[0_4px_16px_rgba(0,0,0,0.08)] border border-[#f0f0f0]";
+  "rounded-2xl bg-elevated shadow-card border border-border-subtle";
 
 const nameLinkBtn =
-  "max-w-full min-w-0 cursor-pointer truncate text-left font-medium text-[#1d1d1f] transition-colors hover:text-[#3b82f6] hover:underline focus:outline-none focus:ring-2 focus:ring-[#3b82f6]/25 rounded-sm";
+  "max-w-full min-w-0 cursor-pointer truncate text-left font-medium text-foreground transition-colors hover:text-[#3b82f6] hover:underline focus:outline-none focus:ring-2 focus:ring-[#3b82f6]/25 rounded-sm";
 
 const PROJECT_CANDIDATE_DETAIL_SELECT =
   "id, created_at, email, full_name, whatsapp_number, project_title, problem_statement, target_user, ai_usage, demo_link, status, poc_assigned, poc_assigned_at";
@@ -616,17 +616,17 @@ export function GwcTestingDashboard() {
   }
 
   return (
-    <main className="min-h-screen bg-[#f5f5f7] px-4 py-6 sm:px-6 lg:px-8">
+    <main className="min-h-screen bg-background px-4 py-6 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-[1400px]">
         <header className="mb-6">
-          <h1 className="text-2xl font-semibold tracking-tight text-[#1d1d1f]">
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">
             GWC Testing
           </h1>
-          <p className="mt-1 text-sm text-[#6e6e73]">
+          <p className="mt-1 text-sm text-muted">
             Manage GWC candidates, content channels, verification, and dispatch
           </p>
           {showViewOnlyBadge ? (
-            <p className="mt-2 text-xs font-medium text-[#6e6e73]">
+            <p className="mt-2 text-xs font-medium text-muted">
               View only — you cannot edit this section
             </p>
           ) : null}
@@ -639,7 +639,7 @@ export function GwcTestingDashboard() {
         ) : null}
 
         <div className="mb-3 flex flex-wrap items-center gap-2">
-          <span className="text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
+          <span className="text-xs font-medium uppercase tracking-widest text-muted/80">
             Track
           </span>
           {(
@@ -655,8 +655,8 @@ export function GwcTestingDashboard() {
               onClick={() => setTrackFilter(f.id)}
               className={`rounded-full px-3 py-1.5 text-sm font-medium transition-colors ${
                 trackFilter === f.id
-                  ? "bg-[#1d1d1f] text-white"
-                  : "bg-white text-[#6e6e73] shadow-sm hover:text-[#1d1d1f]"
+                  ? "bg-foreground text-background"
+                  : "bg-elevated text-muted shadow-sm hover:text-foreground"
               }`}
             >
               {f.label}
@@ -675,8 +675,8 @@ export function GwcTestingDashboard() {
               onClick={() => setTab(t.id)}
               className={`rounded-full px-4 py-2 text-sm font-medium transition-colors ${
                 tab === t.id
-                  ? "bg-[#1d1d1f] text-white"
-                  : "bg-white text-[#6e6e73] shadow-sm hover:text-[#1d1d1f]"
+                  ? "bg-foreground text-background"
+                  : "bg-elevated text-muted shadow-sm hover:text-foreground"
               }`}
             >
               {t.label}
@@ -686,17 +686,17 @@ export function GwcTestingDashboard() {
         </div>
 
         <div className={cardChrome}>
-          <div className="flex flex-wrap items-end gap-3 border-b border-[#f0f0f0] px-4 py-3">
+          <div className="flex flex-wrap items-end gap-3 border-b border-border-subtle px-4 py-3">
               <div className="min-w-[200px] flex-1">
                 <label
                   htmlFor="gwc-search"
-                  className="text-xs font-medium uppercase tracking-widest text-[#aeaeb2]"
+                  className="text-xs font-medium uppercase tracking-widest text-muted/80"
                 >
                   Search candidates
                 </label>
                 <div className="relative mt-1">
                   <Search
-                    className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#aeaeb2]"
+                    className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted/80"
                     aria-hidden
                   />
                   <input
@@ -705,14 +705,14 @@ export function GwcTestingDashboard() {
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="Name, email, project, phone…"
-                    className="w-full rounded-xl border border-[#e5e5e5] bg-white py-2.5 pl-9 pr-3 text-sm text-[#1d1d1f] placeholder:text-[#aeaeb2] focus:border-[#3b82f6] focus:outline-none"
+                    className="w-full rounded-xl border border-border bg-elevated py-2.5 pl-9 pr-3 text-sm text-foreground placeholder:text-muted/80 focus:border-[#3b82f6] focus:outline-none"
                   />
                 </div>
               </div>
               <div className="min-w-[160px]">
                 <label
                   htmlFor="gwc-poc-filter"
-                  className="text-xs font-medium uppercase tracking-widest text-[#aeaeb2]"
+                  className="text-xs font-medium uppercase tracking-widest text-muted/80"
                 >
                   POC filter
                 </label>
@@ -720,7 +720,7 @@ export function GwcTestingDashboard() {
                   id="gwc-poc-filter"
                   value={pocFilter}
                   onChange={(e) => setPocFilter(e.target.value)}
-                  className="mt-1 w-full rounded-xl border border-[#e5e5e5] bg-white px-3 py-2.5 text-sm text-[#1d1d1f] focus:border-[#3b82f6] focus:outline-none"
+                  className="mt-1 w-full rounded-xl border border-border bg-elevated px-3 py-2.5 text-sm text-foreground focus:border-[#3b82f6] focus:outline-none"
                 >
                   <option value="all">All POCs</option>
                   <option value={GWC_POC_FILTER_UNASSIGNED}>Unassigned</option>
@@ -734,7 +734,7 @@ export function GwcTestingDashboard() {
               {hasActiveFilters ? (
                 <button
                   type="button"
-                  className="rounded-xl px-3 py-2.5 text-sm font-medium text-[#6e6e73] hover:bg-[#f5f5f5]"
+                  className="rounded-xl px-3 py-2.5 text-sm font-medium text-muted hover:bg-[#f5f5f5]"
                   onClick={() => {
                     setSearchQuery("");
                     setPocFilter("all");
@@ -746,12 +746,12 @@ export function GwcTestingDashboard() {
           </div>
 
           {loading ? (
-            <div className="flex items-center justify-center gap-2 px-4 py-16 text-[#6e6e73]">
+            <div className="flex items-center justify-center gap-2 px-4 py-16 text-muted">
               <Loader2 className="h-5 w-5 animate-spin" />
               Loading…
             </div>
           ) : filteredRows.length === 0 ? (
-            <p className="px-4 py-16 text-center text-sm text-[#6e6e73]">
+            <p className="px-4 py-16 text-center text-sm text-muted">
               {hasActiveFilters
                 ? "No candidates match your search or POC filter."
                 : "No entries in this section."}
@@ -760,7 +760,7 @@ export function GwcTestingDashboard() {
             <div className="overflow-x-auto">
               <table className="w-full min-w-[980px] text-left text-sm">
                 <thead>
-                  <tr className="border-b border-[#f0f0f0] text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
+                  <tr className="border-b border-border-subtle text-xs font-medium uppercase tracking-widest text-muted/80">
                     <th className="px-4 py-3">Candidate</th>
                     <th className="px-4 py-3">Track</th>
                     {tab === "queue" ? (
@@ -810,11 +810,11 @@ export function GwcTestingDashboard() {
                           >
                             {display}
                           </button>
-                          <p className="text-xs text-[#6e6e73]">
+                          <p className="text-xs text-muted">
                             {email ?? "—"}
                             {row.source_type === "project" &&
                             row.project_candidates?.project_title ? (
-                              <span className="block text-[#aeaeb2]">
+                              <span className="block text-muted/80">
                                 {row.project_candidates.project_title}
                               </span>
                             ) : null}
@@ -831,7 +831,7 @@ export function GwcTestingDashboard() {
                                 disabled={
                                   !canEditCurrentPage || busyId === row.id
                                 }
-                                className="rounded-lg border border-[#e5e5e5] px-2 py-1.5 text-sm disabled:opacity-50"
+                                className="rounded-lg border border-border px-2 py-1.5 text-sm disabled:opacity-50"
                                 value={row.poc ?? ""}
                                 onChange={(e) =>
                                   void updatePoc(row, e.target.value)
@@ -845,17 +845,17 @@ export function GwcTestingDashboard() {
                                 ))}
                               </select>
                             </td>
-                            <td className="whitespace-nowrap px-4 py-3 align-top text-xs text-[#6e6e73]">
+                            <td className="whitespace-nowrap px-4 py-3 align-top text-xs text-muted">
                               {formatGwcDateTime(row.poc_assigned_at)}
                             </td>
-                            <td className="px-4 py-3 align-top text-xs text-[#6e6e73]">
+                            <td className="px-4 py-3 align-top text-xs text-muted">
                               {row.last_call_at ? (
                                 <>
-                                  <span className="block text-[#1d1d1f]">
+                                  <span className="block text-foreground">
                                     {formatGwcDateTime(row.last_call_at)}
                                   </span>
                                   {row.last_call_outcome ? (
-                                    <span className="mt-0.5 block text-[#aeaeb2]">
+                                    <span className="mt-0.5 block text-muted/80">
                                       {gwcCallOutcomeLabel(row.last_call_outcome)}
                                     </span>
                                   ) : null}
@@ -870,7 +870,7 @@ export function GwcTestingDashboard() {
                                   {row.interested_in.map((v) => (
                                     <span
                                       key={v}
-                                      className="rounded-full bg-[#f0f0f0] px-2 py-0.5 text-xs font-medium text-[#1d1d1f]"
+                                      className="rounded-full bg-border/50 px-2 py-0.5 text-xs font-medium text-foreground"
                                       title={
                                         row.interested_in_pointers[v] ??
                                         undefined
@@ -881,7 +881,7 @@ export function GwcTestingDashboard() {
                                   ))}
                                 </div>
                               ) : (
-                                <span className="text-xs text-[#aeaeb2]">
+                                <span className="text-xs text-muted/80">
                                   None selected
                                 </span>
                               )}
@@ -901,7 +901,7 @@ export function GwcTestingDashboard() {
                               <button
                                 type="button"
                                 disabled={!canEditCurrentPage}
-                                className="inline-flex items-center gap-1.5 rounded-lg border border-[#e5e5e5] px-3 py-1.5 text-sm font-medium text-[#1d1d1f] hover:bg-[#fafafa] disabled:opacity-50"
+                                className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-sm font-medium text-foreground hover:bg-background/80 disabled:opacity-50"
                                 onClick={() => setLogCallRow(row)}
                               >
                                 <Phone className="h-4 w-4" />
@@ -930,7 +930,7 @@ export function GwcTestingDashboard() {
                                   View link
                                 </a>
                               ) : (
-                                <span className="text-[#6e6e73]">—</span>
+                                <span className="text-muted">—</span>
                               )}
                             </td>
                             <td className="px-4 py-3">
@@ -941,7 +941,7 @@ export function GwcTestingDashboard() {
                                   Verified
                                 </span>
                               ) : (
-                                <span className="rounded-full bg-[#fafafa] px-2.5 py-1 text-xs font-medium text-[#6e6e73]">
+                                <span className="rounded-full bg-background/80 px-2.5 py-1 text-xs font-medium text-muted">
                                   Pending
                                 </span>
                               )}
@@ -951,7 +951,7 @@ export function GwcTestingDashboard() {
                                 <button
                                   type="button"
                                   disabled={!canEditCurrentPage}
-                                  className="rounded-lg border border-[#e5e5e5] px-3 py-1.5 text-sm font-medium hover:bg-[#fafafa] disabled:opacity-50"
+                                  className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium hover:bg-background/80 disabled:opacity-50"
                                   onClick={() =>
                                     setLinkModal({
                                       row,
@@ -1001,7 +1001,7 @@ export function GwcTestingDashboard() {
                                 .map((ch) => (
                                   <span
                                     key={ch}
-                                    className="rounded-full bg-[#f5f5f5] px-2 py-0.5 text-xs text-[#6e6e73]"
+                                    className="rounded-full bg-[#f5f5f5] px-2 py-0.5 text-xs text-muted"
                                   >
                                     {channelLabel(ch)}
                                   </span>

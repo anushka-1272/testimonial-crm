@@ -22,6 +22,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { AccessControlProvider } from "@/components/access-control-context";
 import { LogoOnDark } from "@/components/brand-logo";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { canEditScope, type AccessScope, type TeamRole } from "@/lib/access-control";
 import { getUserSafe } from "@/lib/supabase-auth";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
@@ -319,7 +320,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
                 {userLabel || "…"}
               </p>
               {userEmail ? (
-                <p className="truncate text-xs text-[#6b7280]">{userEmail}</p>
+                <p className="truncate text-xs text-muted">{userEmail}</p>
               ) : null}
             </div>
             <button
@@ -344,9 +345,15 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           >
             <Menu className="h-5 w-5" strokeWidth={2} />
           </button>
-          <span className="truncate text-sm font-semibold text-foreground">
+          <span className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground">
             Testimonial CRM
           </span>
+          <ThemeToggle />
+        </div>
+        <div className="pointer-events-none fixed right-4 top-4 z-[45] hidden lg:block">
+          <div className="pointer-events-auto">
+            <ThemeToggle />
+          </div>
         </div>
         <div className="min-h-0 flex-1 pt-14 lg:pt-0">{children}</div>
       </div>

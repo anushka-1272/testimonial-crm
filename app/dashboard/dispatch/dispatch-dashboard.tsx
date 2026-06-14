@@ -57,7 +57,7 @@ function normalizeRow(
 }
 
 const cardChrome =
-  "rounded-2xl bg-white shadow-[0_4px_16px_rgba(0,0,0,0.08)] border border-[#f0f0f0]";
+  "rounded-2xl bg-elevated shadow-card border border-border-subtle";
 
 const REWARD_AIRPODS = "AirPods";
 const REWARD_JBL = "JBL Clip 5";
@@ -65,11 +65,11 @@ const REWARD_JBL = "JBL Clip 5";
 function rewardItemBadge(reward: string | null | undefined) {
   const v = reward?.trim();
   if (!v) {
-    return <span className="text-[#6e6e73]">—</span>;
+    return <span className="text-muted">—</span>;
   }
   if (v === REWARD_AIRPODS) {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-[#f3f4f6] px-2.5 py-1 text-xs font-medium text-[#374151]">
+      <span className="inline-flex items-center gap-1 rounded-full bg-border/40 px-2.5 py-1 text-xs font-medium text-[#374151]">
         <span aria-hidden>🎧</span> AirPods
       </span>
     );
@@ -95,7 +95,7 @@ function rewardItemBadge(reward: string | null | undefined) {
 function rewardItemPlainText(reward: string | null | undefined) {
   const v = reward?.trim();
   if (!v) {
-    return <span className="text-[#6e6e73]">—</span>;
+    return <span className="text-muted">—</span>;
   }
   if (v === REWARD_AIRPODS) {
     return (
@@ -254,14 +254,14 @@ function RewardItemCell({
     menuOpen && menuPos && mounted ? (
       <div
         ref={menuRef}
-        className="fixed z-[200] w-56 rounded-xl border border-[#e5e5e5] bg-white py-1 shadow-[0_8px_24px_rgba(0,0,0,0.12)]"
+        className="fixed z-[200] w-56 rounded-xl border border-border bg-elevated py-1 shadow-[0_8px_24px_rgba(0,0,0,0.12)]"
         style={{ top: menuPos.top, left: menuPos.left }}
         role="listbox"
       >
         <button
           type="button"
           disabled={saving}
-          className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-[#1d1d1f] hover:bg-[#f5f5f7] disabled:opacity-50"
+          className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-foreground hover:bg-background disabled:opacity-50"
           onClick={() => void saveReward(REWARD_AIRPODS)}
         >
           <span aria-hidden>🎧</span> AirPods
@@ -269,7 +269,7 @@ function RewardItemCell({
         <button
           type="button"
           disabled={saving}
-          className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-[#1d1d1f] hover:bg-[#f5f5f7] disabled:opacity-50"
+          className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-foreground hover:bg-background disabled:opacity-50"
           onClick={() => void saveReward(REWARD_JBL)}
         >
           <span aria-hidden>🔊</span> JBL Clip 5
@@ -278,16 +278,16 @@ function RewardItemCell({
           <button
             type="button"
             disabled={saving}
-            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-[#1d1d1f] hover:bg-[#f5f5f7] disabled:opacity-50"
+            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-foreground hover:bg-background disabled:opacity-50"
             onClick={() => setOtherMode(true)}
           >
             <span aria-hidden>✏️</span> Other
           </button>
         ) : (
-          <div className="border-t border-[#f0f0f0] px-3 py-2">
+          <div className="border-t border-border-subtle px-3 py-2">
             <input
               type="text"
-              className="w-full rounded-lg border border-[#e5e5e5] px-2 py-1.5 text-sm text-[#1d1d1f] focus:border-[#3b82f6] focus:outline-none"
+              className="w-full rounded-lg border border-border px-2 py-1.5 text-sm text-foreground focus:border-[#3b82f6] focus:outline-none"
               placeholder="Specify item..."
               value={otherText}
               onChange={(e) => setOtherText(e.target.value)}
@@ -301,7 +301,7 @@ function RewardItemCell({
             <button
               type="button"
               disabled={saving || !otherText.trim()}
-              className="mt-2 w-full rounded-lg bg-[#1d1d1f] py-1.5 text-xs font-medium text-white hover:bg-[#2d2d2f] disabled:cursor-not-allowed disabled:opacity-50"
+              className="mt-2 w-full rounded-lg bg-foreground py-1.5 text-xs font-medium text-background hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
               onClick={() => void saveReward(otherText.trim())}
             >
               Save
@@ -329,7 +329,7 @@ function RewardItemCell({
             {rewardItemBadge(row.reward_item)}
             <button
               type="button"
-              className="shrink-0 rounded p-0.5 text-[#6e6e73] opacity-0 transition-opacity hover:bg-[#f0f0f0] hover:text-[#1d1d1f] group-hover:opacity-100 focus:opacity-100"
+              className="shrink-0 rounded p-0.5 text-muted opacity-0 transition-opacity hover:bg-background hover:text-foreground group-hover:opacity-100 focus:opacity-100"
               aria-label="Edit reward item"
               onClick={(e) => {
                 e.stopPropagation();
@@ -369,13 +369,13 @@ function RewardItemCell({
 function statusBadgeClass(s: DispatchStatus): string {
   switch (s) {
     case "pending":
-      return "bg-[#fafafa] text-[#6e6e73]";
+      return "bg-background/80 text-muted";
     case "dispatched":
       return "bg-[#eff6ff] text-[#3b82f6]";
     case "delivered":
       return "bg-[#f0fdf4] text-[#16a34a]";
     default:
-      return "bg-[#fafafa] text-[#6e6e73]";
+      return "bg-background/80 text-muted";
   }
 }
 
@@ -627,19 +627,19 @@ function UpdateDispatchModal({
         aria-label="Close"
         onClick={onClose}
       />
-      <div className={`${modalPanelMdClass} p-6 shadow-[0_4px_16px_rgba(0,0,0,0.08)]`}>
+      <div className={`${modalPanelMdClass} p-6 shadow-card`}>
         <div className="mb-4 flex items-start justify-between">
           <div>
-            <h2 className="text-lg font-semibold text-[#1d1d1f]">
+            <h2 className="text-lg font-semibold text-foreground">
               Update dispatch
             </h2>
-            <p className="text-sm text-[#6e6e73]">
+            <p className="text-sm text-muted">
               {name ?? "Candidate"} · {email}
             </p>
           </div>
           <button
             type="button"
-            className="rounded-xl p-2 text-[#aeaeb2] transition-all hover:bg-[#f5f5f7] hover:text-[#1d1d1f]"
+            className="rounded-xl p-2 text-muted/80 transition-all hover:bg-background hover:text-foreground"
             onClick={onClose}
           >
             ✕
@@ -648,69 +648,69 @@ function UpdateDispatchModal({
 
         <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4 text-sm">
           {error && (
-            <p className="rounded-xl border border-[#f0f0f0] bg-[#f5f5f7] px-3 py-2 text-sm text-[#1d1d1f]">
+            <p className="rounded-xl border border-border-subtle bg-background px-3 py-2 text-sm text-foreground">
               {error}
             </p>
           )}
 
           <label className="block text-sm">
-            <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+            <span className="text-xs uppercase tracking-widest text-muted/80">
               Tracking ID
             </span>
             <input
               required
-              className="mt-1 w-full rounded-xl border border-[#e5e5e5] px-3 py-2.5 text-sm text-[#1d1d1f] focus:border-[#3b82f6] focus:outline-none focus:ring-0"
+              className="mt-1 w-full rounded-xl border border-border px-3 py-2.5 text-sm text-foreground focus:border-[#3b82f6] focus:outline-none focus:ring-0"
               value={trackingId}
               onChange={(e) => setTrackingId(e.target.value)}
             />
           </label>
 
           <label className="block text-sm">
-            <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+            <span className="text-xs uppercase tracking-widest text-muted/80">
               Dispatch date
             </span>
             <input
               type="date"
-              className="mt-1 w-full rounded-xl border border-[#e5e5e5] px-3 py-2.5 text-sm text-[#1d1d1f] focus:border-[#3b82f6] focus:outline-none focus:ring-0"
+              className="mt-1 w-full rounded-xl border border-border px-3 py-2.5 text-sm text-foreground focus:border-[#3b82f6] focus:outline-none focus:ring-0"
               value={dispatchDate}
               onChange={(e) => setDispatchDate(e.target.value)}
             />
           </label>
 
           <label className="block text-sm">
-            <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+            <span className="text-xs uppercase tracking-widest text-muted/80">
               Expected delivery date
             </span>
             <input
               required
               type="date"
-              className="mt-1 w-full rounded-xl border border-[#e5e5e5] px-3 py-2.5 text-sm text-[#1d1d1f] focus:border-[#3b82f6] focus:outline-none focus:ring-0"
+              className="mt-1 w-full rounded-xl border border-border px-3 py-2.5 text-sm text-foreground focus:border-[#3b82f6] focus:outline-none focus:ring-0"
               value={expectedDate}
               onChange={(e) => setExpectedDate(e.target.value)}
             />
           </label>
 
           <label className="block text-sm">
-            <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+            <span className="text-xs uppercase tracking-widest text-muted/80">
               Special comments
             </span>
             <textarea
               rows={3}
-              className="mt-1 w-full rounded-xl border border-[#e5e5e5] px-3 py-2.5 text-sm text-[#1d1d1f] focus:border-[#3b82f6] focus:outline-none focus:ring-0"
+              className="mt-1 w-full rounded-xl border border-border px-3 py-2.5 text-sm text-foreground focus:border-[#3b82f6] focus:outline-none focus:ring-0"
               value={comments}
               onChange={(e) => setComments(e.target.value)}
             />
           </label>
 
-          <p className="text-xs text-[#6e6e73]">
-            Saving sets status to <strong className="font-medium text-[#1d1d1f]">dispatched</strong> (unless already
+          <p className="text-xs text-muted">
+            Saving sets status to <strong className="font-medium text-foreground">dispatched</strong> (unless already
             delivered) and emails the candidate the dispatch confirmation.
           </p>
 
           <div className="flex justify-end gap-2 pt-2">
             <button
               type="button"
-              className="rounded-xl border border-[#f0f0f0] bg-white px-4 py-2 text-sm font-medium text-[#1d1d1f] transition-all hover:bg-[#fafafa]"
+              className="rounded-xl border border-border-subtle bg-elevated px-4 py-2 text-sm font-medium text-foreground transition-all hover:bg-background/80"
               onClick={onClose}
             >
               Cancel
@@ -718,7 +718,7 @@ function UpdateDispatchModal({
             <button
               type="submit"
               disabled={submitting}
-              className="rounded-xl bg-[#1d1d1f] px-4 py-2 text-sm font-medium text-white transition-all hover:bg-[#2d2d2f] disabled:opacity-50"
+              className="rounded-xl bg-foreground px-4 py-2 text-sm font-medium text-background transition-all hover:opacity-90 disabled:opacity-50"
             >
               {submitting ? "Saving…" : "Save & notify"}
             </button>
@@ -937,7 +937,7 @@ export function DispatchDashboard() {
 
   if (!supabase) {
     return (
-      <div className="mx-auto max-w-lg px-8 py-16 text-center text-sm text-[#6e6e73]">
+      <div className="mx-auto max-w-lg px-8 py-16 text-center text-sm text-muted">
         {error ?? "Cannot connect to Supabase."}
       </div>
     );
@@ -954,24 +954,24 @@ export function DispatchDashboard() {
     <>
       {toastMessage ? (
         <div
-          className="fixed bottom-6 left-1/2 z-[70] max-w-md -translate-x-1/2 rounded-xl border border-[#e5e5e5] bg-[#1d1d1f] px-4 py-3 text-center text-sm font-medium text-white shadow-lg"
+          className="fixed bottom-6 left-1/2 z-[70] max-w-md -translate-x-1/2 rounded-xl border border-border bg-foreground px-4 py-3 text-center text-sm font-medium text-background shadow-lg"
           role="status"
         >
           {toastMessage}
         </div>
       ) : null}
 
-      <header className="sticky top-14 z-30 bg-[#f5f5f7]/90 px-4 py-4 backdrop-blur-md sm:px-6 sm:py-5 lg:top-0 lg:px-8 lg:py-6">
+      <header className="sticky top-14 z-30 bg-background/90 px-4 py-4 backdrop-blur-md sm:px-6 sm:py-5 lg:top-0 lg:px-8 lg:py-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <h1 className="text-xl font-semibold tracking-tight text-[#1d1d1f] sm:text-2xl">
+            <h1 className="text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
               Dispatch
             </h1>
-            <p className="mt-1 text-sm text-[#6e6e73]">
+            <p className="mt-1 text-sm text-muted">
               Track shipments and delivery status
             </p>
             {showViewOnlyBadge ? (
-              <span className="mt-2 inline-flex rounded-full bg-[#f3f4f6] px-3 py-1 text-xs font-medium text-[#6b7280]">
+              <span className="mt-2 inline-flex rounded-full bg-border/40 px-3 py-1 text-xs font-medium text-muted">
                 View only
               </span>
             ) : null}
@@ -981,7 +981,7 @@ export function DispatchDashboard() {
               type="button"
               disabled={dispatchSlackBusy || loading}
               onClick={() => void notifyDispatchTeamSlack()}
-              className="shrink-0 rounded-xl border border-[#e5e5e5] bg-white px-4 py-2.5 text-sm font-medium text-[#1d1d1f] shadow-sm transition-colors hover:bg-[#fafafa] disabled:cursor-not-allowed disabled:opacity-50"
+              className="shrink-0 rounded-xl border border-border bg-elevated px-4 py-2.5 text-sm font-medium text-foreground shadow-sm transition-colors hover:bg-background/80 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {dispatchSlackBusy
                 ? "Sending…"
@@ -991,9 +991,9 @@ export function DispatchDashboard() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-7xl px-4 pb-10 pt-2 text-sm text-[#1d1d1f] sm:px-6 lg:px-8 lg:pb-12">
+      <main className="mx-auto max-w-7xl px-4 pb-10 pt-2 text-sm text-foreground sm:px-6 lg:px-8 lg:pb-12">
         {error && (
-          <div className="mb-6 rounded-2xl border border-[#f0f0f0] bg-white px-4 py-3 text-sm text-[#1d1d1f] shadow-[0_4px_16px_rgba(0,0,0,0.08)]">
+          <div className="mb-6 rounded-2xl border border-border-subtle bg-elevated px-4 py-3 text-sm text-foreground shadow-card">
             {error}
             <button
               type="button"
@@ -1007,39 +1007,39 @@ export function DispatchDashboard() {
 
         <section className="mb-8 grid grid-cols-1 gap-4 lg:grid-cols-3">
           <div className={`p-4 sm:p-6 ${cardChrome}`}>
-            <p className="mb-3 text-xs font-medium text-[#6e6e73]">
+            <p className="mb-3 text-xs font-medium text-muted">
               Total pending dispatches
             </p>
-            <p className="text-4xl font-bold tabular-nums tracking-tight text-[#1d1d1f]">
+            <p className="text-4xl font-bold tabular-nums tracking-tight text-foreground">
               {loading ? "…" : (stats?.pending ?? "—")}
             </p>
             <div className="mt-4 h-0.5 w-8 rounded-full bg-[#3b82f6]" />
           </div>
           <div className={`p-4 sm:p-6 ${cardChrome}`}>
-            <p className="mb-3 text-xs font-medium text-[#6e6e73]">
+            <p className="mb-3 text-xs font-medium text-muted">
               Dispatched this week
             </p>
-            <p className="text-4xl font-bold tabular-nums tracking-tight text-[#1d1d1f]">
+            <p className="text-4xl font-bold tabular-nums tracking-tight text-foreground">
               {loading ? "…" : (stats?.dispatchedWeek ?? "—")}
             </p>
-            <p className="mt-1 text-sm text-[#6e6e73]">Mon–Sun · dispatch date</p>
+            <p className="mt-1 text-sm text-muted">Mon–Sun · dispatch date</p>
             <div className="mt-4 h-0.5 w-8 rounded-full bg-[#3b82f6]" />
           </div>
           <div className={`p-4 sm:p-6 ${cardChrome}`}>
-            <p className="mb-3 text-xs font-medium text-[#6e6e73]">
+            <p className="mb-3 text-xs font-medium text-muted">
               Delivered this week
             </p>
-            <p className="text-4xl font-bold tabular-nums tracking-tight text-[#1d1d1f]">
+            <p className="text-4xl font-bold tabular-nums tracking-tight text-foreground">
               {loading ? "…" : (stats?.deliveredWeek ?? "—")}
             </p>
-            <p className="mt-1 text-sm text-[#6e6e73]">Mon–Sun · actual delivery</p>
+            <p className="mt-1 text-sm text-muted">Mon–Sun · actual delivery</p>
             <div className="mt-4 h-0.5 w-8 rounded-full bg-[#3b82f6]" />
           </div>
         </section>
 
         <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div className="-mx-1 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] md:mx-0 md:overflow-visible [&::-webkit-scrollbar]:hidden">
-            <div className="inline-flex min-w-min rounded-full bg-white p-1 shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
+            <div className="inline-flex min-w-min rounded-full bg-elevated p-1 shadow-segment">
               {tabs.map((t) => (
                 <button
                   key={t.id}
@@ -1047,8 +1047,8 @@ export function DispatchDashboard() {
                   onClick={() => setFilter(t.id)}
                   className={`shrink-0 rounded-full px-3 py-1.5 text-sm font-medium transition-all duration-200 ease-in-out sm:px-4 ${
                     filter === t.id
-                      ? "bg-[#1d1d1f] text-white"
-                      : "text-[#6e6e73] hover:text-[#1d1d1f]"
+                      ? "bg-foreground text-background"
+                      : "text-muted hover:text-foreground"
                   }`}
                 >
                   {t.label}
@@ -1071,37 +1071,37 @@ export function DispatchDashboard() {
             <table className="min-w-[960px] text-left text-sm">
               <thead>
                 <tr className="border-b border-[#f5f5f5]">
-                  <th className="px-3 py-3 text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
+                  <th className="px-3 py-3 text-xs font-medium uppercase tracking-widest text-muted/80">
                     Name
                   </th>
-                  <th className="px-3 py-3 text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
+                  <th className="px-3 py-3 text-xs font-medium uppercase tracking-widest text-muted/80">
                     Email
                   </th>
-                  <th className="px-3 py-3 text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
+                  <th className="px-3 py-3 text-xs font-medium uppercase tracking-widest text-muted/80">
                     Phone
                   </th>
-                  <th className="min-w-[160px] px-3 py-3 text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
+                  <th className="min-w-[160px] px-3 py-3 text-xs font-medium uppercase tracking-widest text-muted/80">
                     Shipping address
                   </th>
-                  <th className="px-3 py-3 text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
+                  <th className="px-3 py-3 text-xs font-medium uppercase tracking-widest text-muted/80">
                     Reward item
                   </th>
-                  <th className="px-3 py-3 text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
+                  <th className="px-3 py-3 text-xs font-medium uppercase tracking-widest text-muted/80">
                     Status
                   </th>
-                  <th className="px-3 py-3 text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
+                  <th className="px-3 py-3 text-xs font-medium uppercase tracking-widest text-muted/80">
                     Dispatch date
                   </th>
-                  <th className="px-3 py-3 text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
+                  <th className="px-3 py-3 text-xs font-medium uppercase tracking-widest text-muted/80">
                     Tracking ID
                   </th>
-                  <th className="px-3 py-3 text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
+                  <th className="px-3 py-3 text-xs font-medium uppercase tracking-widest text-muted/80">
                     Expected delivery
                   </th>
-                  <th className="min-w-[160px] px-3 py-3 text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
+                  <th className="min-w-[160px] px-3 py-3 text-xs font-medium uppercase tracking-widest text-muted/80">
                     Special comments
                   </th>
-                  <th className="px-3 py-3 text-xs font-medium uppercase tracking-widest text-[#aeaeb2]">
+                  <th className="px-3 py-3 text-xs font-medium uppercase tracking-widest text-muted/80">
                     Actions
                   </th>
                 </tr>
@@ -1111,7 +1111,7 @@ export function DispatchDashboard() {
                   <tr>
                     <td
                       colSpan={11}
-                      className="px-4 py-12 text-center text-sm text-[#6e6e73]"
+                      className="px-4 py-12 text-center text-sm text-muted"
                     >
                       Loading…
                     </td>
@@ -1120,7 +1120,7 @@ export function DispatchDashboard() {
                   <tr>
                     <td
                       colSpan={11}
-                      className="px-4 py-12 text-center text-sm text-[#6e6e73]"
+                      className="px-4 py-12 text-center text-sm text-muted"
                     >
                       No dispatch records for this filter.
                     </td>
@@ -1137,7 +1137,7 @@ export function DispatchDashboard() {
                     return (
                       <tr
                         key={r.id}
-                        className="border-b border-[#f5f5f5] last:border-b-0 hover:bg-[#fafafa]"
+                        className="border-b border-[#f5f5f5] last:border-b-0 hover:bg-background/80"
                       >
                         <td className="max-w-[140px] px-3 py-3">
                           <button
@@ -1148,13 +1148,13 @@ export function DispatchDashboard() {
                             {c?.full_name?.trim() || "—"}
                           </button>
                         </td>
-                        <td className="max-w-[160px] truncate px-3 py-3 text-[#6e6e73]">
+                        <td className="max-w-[160px] truncate px-3 py-3 text-muted">
                           {c?.email ?? "—"}
                         </td>
-                        <td className="max-w-[100px] truncate px-3 py-3 text-[#6e6e73]">
+                        <td className="max-w-[100px] truncate px-3 py-3 text-muted">
                           {c?.whatsapp_number ?? "—"}
                         </td>
-                        <td className="max-w-[200px] whitespace-pre-wrap break-words px-3 py-3 text-[#6e6e73]">
+                        <td className="max-w-[200px] whitespace-pre-wrap break-words px-3 py-3 text-muted">
                           {r.shipping_address ?? "—"}
                         </td>
                         <td className="max-w-[160px] px-3 py-3">
@@ -1172,13 +1172,13 @@ export function DispatchDashboard() {
                             {r.dispatch_status}
                           </span>
                         </td>
-                        <td className="whitespace-nowrap px-3 py-3 text-[#6e6e73]">
+                        <td className="whitespace-nowrap px-3 py-3 text-muted">
                           {formatDisplayDateTime(r.dispatch_date)}
                         </td>
-                        <td className="max-w-[120px] truncate px-3 py-3 font-mono text-xs text-[#1d1d1f]">
+                        <td className="max-w-[120px] truncate px-3 py-3 font-mono text-xs text-foreground">
                           {r.tracking_id ?? "—"}
                         </td>
-                        <td className="whitespace-nowrap px-3 py-3 text-[#6e6e73]">
+                        <td className="whitespace-nowrap px-3 py-3 text-muted">
                           {formatDisplayDate(r.expected_delivery_date)}
                         </td>
                         <td className="px-3 py-3 align-top">

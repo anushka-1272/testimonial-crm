@@ -491,7 +491,7 @@ function zoomStatusColumn(
           <button
             type="button"
             disabled
-            className="inline-flex cursor-not-allowed rounded-lg border border-[#d1d5db] bg-[#f9fafb] px-2.5 py-1 text-xs font-medium text-[#9ca3af]"
+            className="inline-flex cursor-not-allowed rounded-lg border border-border bg-[#f9fafb] px-2.5 py-1 text-xs font-medium text-muted"
           >
             Join
           </button>

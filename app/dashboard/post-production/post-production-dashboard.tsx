@@ -434,7 +434,7 @@ function rowCandidateDisplayName(row: PostProductionRow): string | null {
 }
 
 const cardChrome =
-  "rounded-2xl bg-white shadow-[0_4px_16px_rgba(0,0,0,0.08)] border border-[#f0f0f0]";
+  "rounded-2xl bg-elevated shadow-card border border-border-subtle";
 
 type TestimonialPick = {
   interview_id: string;
@@ -1520,7 +1520,7 @@ export function PostProductionDashboard() {
         <div className="flex min-w-0 flex-col gap-1.5">
           <textarea
             rows={4}
-            className="w-full resize-y rounded-lg border border-[#e5e5e5] px-2 py-1.5 text-xs text-[#1d1d1f] focus:border-[#3b82f6] focus:outline-none disabled:opacity-50"
+            className="w-full resize-y rounded-lg border border-border px-2 py-1.5 text-xs text-foreground focus:border-[#3b82f6] focus:outline-none disabled:opacity-50"
             value={editorCommentsEdit.value}
             onChange={(e) =>
               setEditorCommentsEdit({ rowId: row.id, value: e.target.value })
@@ -1533,7 +1533,7 @@ export function PostProductionDashboard() {
             <button
               type="button"
               disabled={busy}
-              className="rounded-lg bg-[#1d1d1f] px-2.5 py-1 text-[11px] font-medium text-white disabled:opacity-50"
+              className="rounded-lg bg-foreground px-2.5 py-1 text-[11px] font-medium text-background disabled:opacity-50"
               onClick={() => void saveEditorComments(row)}
             >
               Save
@@ -1541,7 +1541,7 @@ export function PostProductionDashboard() {
             <button
               type="button"
               disabled={busy}
-              className="rounded-lg border border-[#e5e5e5] px-2.5 py-1 text-[11px] font-medium text-[#6e6e73] disabled:opacity-50"
+              className="rounded-lg border border-border px-2.5 py-1 text-[11px] font-medium text-muted disabled:opacity-50"
               onClick={() => setEditorCommentsEdit(null)}
             >
               Cancel
@@ -1556,7 +1556,7 @@ export function PostProductionDashboard() {
         {stored ? (
           <CommentTableCell value={stored} />
         ) : (
-          <span className="text-xs text-[#aeaeb2]">No notes yet</span>
+          <span className="text-xs text-muted/80">No notes yet</span>
         )}
         <button
           type="button"
@@ -1582,7 +1582,7 @@ export function PostProductionDashboard() {
         <div className="flex w-full min-w-0 max-w-full flex-col gap-1">
           <input
             type="url"
-            className="w-full rounded-lg border border-[#e5e5e5] px-2 py-1 text-xs"
+            className="w-full rounded-lg border border-border px-2 py-1 text-xs"
             placeholder="https://..."
             value={linkEdit.value}
             onChange={(e) =>
@@ -1596,14 +1596,14 @@ export function PostProductionDashboard() {
             <button
               type="button"
               disabled={busy}
-              className="rounded bg-[#1d1d1f] px-2 py-0.5 text-[11px] text-white disabled:opacity-50"
+              className="rounded bg-foreground px-2 py-0.5 text-[11px] text-background disabled:opacity-50"
               onClick={() => void saveLink(row, field)}
             >
               Save
             </button>
             <button
               type="button"
-              className="text-[11px] text-[#6e6e73] underline"
+              className="text-[11px] text-muted underline"
               onClick={() => setLinkEdit(null)}
             >
               Cancel
@@ -1618,7 +1618,7 @@ export function PostProductionDashboard() {
         <button
           type="button"
           disabled={busy}
-          className="rounded border border-[#e5e5e5] bg-[#fafafa] px-2 py-1 text-xs font-medium text-[#6e6e73] hover:bg-[#f0f0f0] disabled:opacity-50"
+          className="rounded border border-border bg-background/80 px-2 py-1 text-xs font-medium text-muted hover:bg-background disabled:opacity-50"
           onClick={() =>
             setLinkEdit({ rowId: row.id, field, value: "" })
           }
@@ -1634,7 +1634,7 @@ export function PostProductionDashboard() {
           href={raw}
           target="_blank"
           rel="noopener noreferrer"
-          className="rounded bg-[#1d1d1f] px-2 py-1 text-xs font-medium text-white hover:bg-[#2d2d2f]"
+          className="rounded bg-foreground px-2 py-1 text-xs font-medium text-background hover:opacity-90"
         >
           View
         </a>
@@ -1674,7 +1674,7 @@ export function PostProductionDashboard() {
             ✓ Done
           </span>
           {by ? (
-            <p className="text-[11px] text-[#6e6e73]">by {by}</p>
+            <p className="text-[11px] text-muted">by {by}</p>
           ) : null}
         </div>
       );
@@ -1699,10 +1699,10 @@ export function PostProductionDashboard() {
           </button>
         </div>
         {open ? (
-          <div className="absolute left-0 top-full z-50 mt-1 w-56 rounded-xl border border-[#f0f0f0] bg-white p-3 shadow-lg">
-            <p className="text-xs font-medium text-[#1d1d1f]">Done by</p>
+          <div className="absolute left-0 top-full z-50 mt-1 w-56 rounded-xl border border-border-subtle bg-elevated p-3 shadow-lg">
+            <p className="text-xs font-medium text-foreground">Done by</p>
             <select
-              className="mt-2 w-full rounded-lg border border-[#e5e5e5] px-2 py-1.5 text-xs"
+              className="mt-2 w-full rounded-lg border border-border px-2 py-1.5 text-xs"
               value={reviewBy}
               onChange={(e) => setReviewBy(e.target.value)}
             >
@@ -1719,14 +1719,14 @@ export function PostProductionDashboard() {
             <div className="mt-2 flex justify-end gap-2">
               <button
                 type="button"
-                className="text-xs text-[#6e6e73]"
+                className="text-xs text-muted"
                 onClick={() => setReviewPopover(null)}
               >
                 Cancel
               </button>
               <button
                 type="button"
-                className="rounded-lg bg-[#1d1d1f] px-3 py-1 text-xs text-white"
+                className="rounded-lg bg-foreground px-3 py-1 text-xs text-background"
                 onClick={() => void confirmReviewDone()}
               >
                 Confirm
@@ -1739,9 +1739,9 @@ export function PostProductionDashboard() {
   };
 
   const th =
-    "border-b border-gray-100 bg-[#fafafa] py-2 px-2 text-left text-xs font-semibold tracking-wider text-gray-400";
+    "border-b border-border bg-background/80 py-2 px-2 text-left text-xs font-semibold tracking-wider text-muted";
   const td =
-    "border-b border-gray-100 px-2 py-2 text-sm align-top text-[#1d1d1f]";
+    "border-b border-border px-2 py-2 text-sm align-top text-foreground";
   const ppCol = {
     name: "w-[140px] max-w-[140px]",
     source: "w-[110px] max-w-[110px]",
@@ -1772,7 +1772,7 @@ export function PostProductionDashboard() {
 
   if (!supabase) {
     return (
-      <div className="px-8 py-16 text-center text-sm text-[#6e6e73]">
+      <div className="px-8 py-16 text-center text-sm text-muted">
         {error ?? "Cannot connect to Supabase."}
       </div>
     );
@@ -1782,24 +1782,24 @@ export function PostProductionDashboard() {
     <>
       {toastMessage ? (
         <div
-          className="fixed bottom-6 left-1/2 z-[90] max-w-md -translate-x-1/2 rounded-xl border border-[#e5e5e5] bg-[#1d1d1f] px-4 py-3 text-center text-sm font-medium text-white shadow-lg"
+          className="fixed bottom-6 left-1/2 z-[90] max-w-md -translate-x-1/2 rounded-xl border border-border bg-foreground px-4 py-3 text-center text-sm font-medium text-background shadow-lg"
           role="status"
         >
           {toastMessage}
         </div>
       ) : null}
 
-      <header className="sticky top-14 z-30 bg-[#f5f5f7]/90 px-4 py-4 backdrop-blur-md sm:px-6 sm:py-5 lg:top-0 lg:px-8 lg:py-6">
+      <header className="sticky top-14 z-30 bg-background/90 px-4 py-4 backdrop-blur-md sm:px-6 sm:py-5 lg:top-0 lg:px-8 lg:py-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <h1 className="text-xl font-semibold tracking-tight text-[#1d1d1f] sm:text-2xl">
+            <h1 className="text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
               Post Production
             </h1>
-            <p className="mt-1 text-sm text-[#6e6e73]">
+            <p className="mt-1 text-sm text-muted">
               Manage interview video editing and publishing pipeline
             </p>
             {showViewOnlyBadge ? (
-              <span className="mt-2 inline-flex rounded-full bg-[#f3f4f6] px-3 py-1 text-xs font-medium text-[#6b7280]">
+              <span className="mt-2 inline-flex rounded-full bg-border/40 px-3 py-1 text-xs font-medium text-muted">
                 View only
               </span>
             ) : null}
@@ -1817,7 +1817,7 @@ export function PostProductionDashboard() {
               <button
                 type="button"
                 onClick={() => void openAddModal()}
-                className="inline-flex w-full shrink-0 items-center justify-center gap-2 rounded-xl bg-[#1d1d1f] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#2d2d2f] sm:w-auto"
+                className="inline-flex w-full shrink-0 items-center justify-center gap-2 rounded-xl bg-foreground px-4 py-2.5 text-sm font-medium text-background hover:opacity-90 sm:w-auto"
               >
                 <Plus className="h-4 w-4" />
                 Add to Post Production
@@ -1838,7 +1838,7 @@ export function PostProductionDashboard() {
 
       <main className="mx-auto max-w-[1800px] px-4 pb-12 pt-2 sm:px-6 lg:px-8 lg:pb-16">
         {error ? (
-          <div className="mb-4 rounded-2xl border border-[#f0f0f0] bg-white px-4 py-3 text-sm shadow-sm">
+          <div className="mb-4 rounded-2xl border border-border-subtle bg-elevated px-4 py-3 text-sm shadow-sm">
             {error}
             <button
               type="button"
@@ -1851,7 +1851,7 @@ export function PostProductionDashboard() {
         ) : null}
 
         {loading ? (
-          <p className="text-sm text-[#6e6e73]">Loading…</p>
+          <p className="text-sm text-muted">Loading…</p>
         ) : (
           <>
             <section className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -1864,36 +1864,36 @@ export function PostProductionDashboard() {
                 ] as const
               ).map(([label, value]) => (
                 <div key={label} className={`p-6 ${cardChrome}`}>
-                  <p className="mb-2 text-xs font-medium text-[#6e6e73]">
+                  <p className="mb-2 text-xs font-medium text-muted">
                     {label}
                   </p>
-                  <p className="text-3xl font-bold tabular-nums text-[#1d1d1f]">
+                  <p className="text-3xl font-bold tabular-nums text-foreground">
                     {value}
                   </p>
                 </div>
               ))}
             </section>
 
-            <div className="mb-4 flex flex-col gap-4 rounded-2xl border border-[#f0f0f0] bg-white p-4 shadow-sm">
+            <div className="mb-4 flex flex-col gap-4 rounded-2xl border border-border-subtle bg-elevated p-4 shadow-sm">
               <div className="flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-end">
                 <label className="flex min-w-[160px] flex-1 flex-col gap-1">
-                  <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+                  <span className="text-xs uppercase tracking-widest text-muted/80">
                     Search
                   </span>
                   <input
                     type="search"
                     placeholder="Candidate name"
-                    className="rounded-xl border border-[#e5e5e5] px-3 py-2 text-sm"
+                    className="rounded-xl border border-border px-3 py-2 text-sm"
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                   />
                 </label>
                 <label className="flex w-full flex-col gap-1 sm:w-40">
-                  <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+                  <span className="text-xs uppercase tracking-widest text-muted/80">
                     YouTube status
                   </span>
                   <select
-                    className="rounded-xl border border-[#e5e5e5] px-3 py-2 text-sm"
+                    className="rounded-xl border border-border px-3 py-2 text-sm"
                     value={ytFilter}
                     onChange={(e) =>
                       setYtFilter(e.target.value as YoutubeStatusFilter)
@@ -1907,11 +1907,11 @@ export function PostProductionDashboard() {
                   </select>
                 </label>
                 <label className="flex w-full flex-col gap-1 sm:w-44">
-                  <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+                  <span className="text-xs uppercase tracking-widest text-muted/80">
                     Pre-edit review
                   </span>
                   <select
-                    className="rounded-xl border border-[#e5e5e5] px-3 py-2 text-sm"
+                    className="rounded-xl border border-border px-3 py-2 text-sm"
                     value={preFilter}
                     onChange={(e) =>
                       setPreFilter(e.target.value as ReviewState | "all")
@@ -1923,11 +1923,11 @@ export function PostProductionDashboard() {
                   </select>
                 </label>
                 <label className="flex w-full flex-col gap-1 sm:w-44">
-                  <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+                  <span className="text-xs uppercase tracking-widest text-muted/80">
                     Post-edit review
                   </span>
                   <select
-                    className="rounded-xl border border-[#e5e5e5] px-3 py-2 text-sm"
+                    className="rounded-xl border border-border px-3 py-2 text-sm"
                     value={postFilter}
                     onChange={(e) =>
                       setPostFilter(e.target.value as ReviewState | "all")
@@ -1940,7 +1940,7 @@ export function PostProductionDashboard() {
                 </label>
                 <button
                   type="button"
-                  className="rounded-xl border border-[#e5e5e5] bg-white px-4 py-2 text-sm font-medium text-[#1d1d1f] hover:bg-[#fafafa] lg:mb-0.5"
+                  className="rounded-xl border border-border bg-elevated px-4 py-2 text-sm font-medium text-foreground hover:bg-background/80 lg:mb-0.5"
                   onClick={() => {
                     setSearch("");
                     setSourceFilter("all");
@@ -1955,17 +1955,17 @@ export function PostProductionDashboard() {
                   Clear filters
                 </button>
               </div>
-              <div className="border-t border-[#f0f0f0] pt-3">
-                <p className="mb-2 text-[11px] text-[#aeaeb2]">
+              <div className="border-t border-border-subtle pt-3">
+                <p className="mb-2 text-[11px] text-muted/80">
                   Domain, job role, and interview language apply to testimonial rows only.
                 </p>
                 <div className="flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-end">
                   <label className="flex w-full flex-col gap-1 sm:w-36">
-                    <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+                    <span className="text-xs uppercase tracking-widest text-muted/80">
                       Source
                     </span>
                     <select
-                      className="rounded-xl border border-[#e5e5e5] px-3 py-2 text-sm"
+                      className="rounded-xl border border-border px-3 py-2 text-sm"
                       value={sourceFilter}
                       onChange={(e) =>
                         setSourceFilter(e.target.value as SourceType | "all")
@@ -1977,11 +1977,11 @@ export function PostProductionDashboard() {
                     </select>
                   </label>
                   <label className="flex w-full min-w-[220px] flex-col gap-1 sm:min-w-[260px] sm:flex-1">
-                    <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+                    <span className="text-xs uppercase tracking-widest text-muted/80">
                       Domain
                     </span>
                     <select
-                      className="rounded-xl border border-[#e5e5e5] px-3 py-2 text-sm"
+                      className="rounded-xl border border-border px-3 py-2 text-sm"
                       value={domainFilter}
                       onChange={(e) =>
                         setDomainFilter(e.target.value as DomainFilterValue)
@@ -1996,11 +1996,11 @@ export function PostProductionDashboard() {
                     </select>
                   </label>
                   <label className="flex w-full min-w-[160px] flex-col gap-1 sm:w-52">
-                    <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+                    <span className="text-xs uppercase tracking-widest text-muted/80">
                       Job role
                     </span>
                     <select
-                      className="rounded-xl border border-[#e5e5e5] px-3 py-2 text-sm"
+                      className="rounded-xl border border-border px-3 py-2 text-sm"
                       value={jobRoleFilter}
                       onChange={(e) => setJobRoleFilter(e.target.value)}
                     >
@@ -2013,11 +2013,11 @@ export function PostProductionDashboard() {
                     </select>
                   </label>
                   <label className="flex w-full min-w-[160px] flex-col gap-1 sm:w-48">
-                    <span className="text-xs uppercase tracking-widest text-[#aeaeb2]">
+                    <span className="text-xs uppercase tracking-widest text-muted/80">
                       Interview language
                     </span>
                     <select
-                      className="rounded-xl border border-[#e5e5e5] px-3 py-2 text-sm"
+                      className="rounded-xl border border-border px-3 py-2 text-sm"
                       value={interviewLanguageFilter}
                       onChange={(e) =>
                         setInterviewLanguageFilter(
@@ -2038,7 +2038,7 @@ export function PostProductionDashboard() {
               </div>
             </div>
 
-            <div className="overflow-hidden rounded-2xl border border-[#f0f0f0] bg-white shadow-sm">
+            <div className="overflow-hidden rounded-2xl border border-border-subtle bg-elevated shadow-sm">
               <div className="w-full min-w-0 max-w-full overflow-x-auto">
                 <table className="w-full min-w-[1480px] table-fixed border-collapse text-sm">
                   <thead>
@@ -2067,7 +2067,7 @@ export function PostProductionDashboard() {
                     {filtered.length === 0 ? (
                       <tr>
                         <td
-                          className={`${td} py-16 text-center text-[#aeaeb2]`}
+                          className={`${td} py-16 text-center text-muted/80`}
                           colSpan={12}
                         >
                           {rows.length === 0
@@ -2116,7 +2116,7 @@ export function PostProductionDashboard() {
                             <td className={`${td} ${ppCol.editedBy}`}>
                               <select
                                 disabled={busy}
-                                className="max-w-[112px] rounded-lg border border-[#e5e5e5] px-2 py-1 text-xs disabled:opacity-50"
+                                className="max-w-[112px] rounded-lg border border-border px-2 py-1 text-xs disabled:opacity-50"
                                 value={
                                   row.edited_by?.trim()
                                     ? mergeRosterWithCurrent(
@@ -2162,7 +2162,7 @@ export function PostProductionDashboard() {
                             <td className={`${td} ${ppCol.status}`}>
                               <select
                                 disabled={busy}
-                                className="max-w-[100px] rounded-lg border border-[#e5e5e5] px-2 py-1 text-xs disabled:opacity-50"
+                                className="max-w-[100px] rounded-lg border border-border px-2 py-1 text-xs disabled:opacity-50"
                                 value={row.youtube_status}
                                 onChange={(e) =>
                                   void onYoutubeStatusChange(
@@ -2179,7 +2179,7 @@ export function PostProductionDashboard() {
                             <td className={`${td} ${ppCol.summary}`}>
                               <div className="max-w-[90px] space-y-1">
                                 {!row.summary?.trim() ? (
-                                  <span className="text-[#aeaeb2]">—</span>
+                                  <span className="text-muted/80">—</span>
                                 ) : (
                                   <button
                                     type="button"
@@ -2196,7 +2196,7 @@ export function PostProductionDashboard() {
                                     <button
                                       type="button"
                                       disabled={busy}
-                                      className="text-xs font-medium text-[#1d1d1f] underline decoration-[#d1d5db] disabled:opacity-50"
+                                      className="text-xs font-medium text-foreground underline decoration-[#d1d5db] disabled:opacity-50"
                                       onClick={() => void generateSummary(row)}
                                     >
                                       Generate
@@ -2213,7 +2213,7 @@ export function PostProductionDashboard() {
                                     disabled={busy || row.cx_mail_sent}
                                     className={`rounded-lg px-3 py-1.5 text-xs font-medium ${
                                       row.cx_mail_sent
-                                        ? "cursor-default bg-[#f4f4f5] text-[#6e6e73]"
+                                        ? "cursor-default bg-[#f4f4f5] text-muted"
                                         : "bg-[#3b82f6] text-white hover:bg-[#2563eb]"
                                     } disabled:opacity-50`}
                                     onClick={() => void sendCxMail(row)}
@@ -2232,7 +2232,7 @@ export function PostProductionDashboard() {
                                   ) : null}
                                 </div>
                               ) : (
-                                <span className="text-[#aeaeb2]">—</span>
+                                <span className="text-muted/80">—</span>
                               )}
                             </td>
                           </tr>
@@ -2262,17 +2262,17 @@ export function PostProductionDashboard() {
           >
             <div className="mb-4 flex items-start justify-between gap-4">
               <div>
-                <h2 className="text-xl font-semibold text-[#1d1d1f]">
+                <h2 className="text-xl font-semibold text-foreground">
                   {modalDetails?.name?.trim() || modalRow.candidate_name?.trim() || "—"}
                 </h2>
-                <p className="mt-1 text-sm text-[#6e6e73]">
+                <p className="mt-1 text-sm text-muted">
                   {modalRow.source_type === "project" ? "Project" : "Testimonial"}
                 </p>
               </div>
               <button
                 type="button"
                 onClick={closeDetailModal}
-                className="rounded-lg px-2 py-1 text-sm font-medium text-[#6e6e73] hover:bg-[#f5f5f7] hover:text-[#1d1d1f]"
+                className="rounded-lg px-2 py-1 text-sm font-medium text-muted hover:bg-background hover:text-foreground"
               >
                 Close
               </button>
@@ -2280,8 +2280,8 @@ export function PostProductionDashboard() {
 
             {modalDetails ? (
               <div className="space-y-3 text-sm">
-                <section className="rounded-lg border border-[#e5e7eb] bg-white p-3">
-                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[#6b7280]">
+                <section className="rounded-lg border border-[#e5e7eb] bg-elevated p-3">
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">
                     Interview Details
                   </p>
                   <p>
@@ -2298,8 +2298,8 @@ export function PostProductionDashboard() {
                   </p>
                 </section>
 
-                <section className="rounded-lg border border-[#e5e7eb] bg-white p-3">
-                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[#6b7280]">
+                <section className="rounded-lg border border-[#e5e7eb] bg-elevated p-3">
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">
                     Candidate Details
                   </p>
                   <p>
@@ -2385,8 +2385,8 @@ export function PostProductionDashboard() {
                   )}
                 </section>
 
-                <section className="rounded-lg border border-[#e5e7eb] bg-white p-3">
-                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[#6b7280]">
+                <section className="rounded-lg border border-[#e5e7eb] bg-elevated p-3">
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">
                     Notes for editor
                   </p>
                   <StoredCommentText
@@ -2396,7 +2396,7 @@ export function PostProductionDashboard() {
                 </section>
               </div>
             ) : (
-              <p className="text-sm text-[#6e6e73]">Loading details...</p>
+              <p className="text-sm text-muted">Loading details...</p>
             )}
           </div>
         </div>
@@ -2426,8 +2426,8 @@ export function PostProductionDashboard() {
           <div
             className={`${modalPanelClass} max-h-[85vh] p-6 shadow-xl`}
           >
-            <h2 className="text-lg font-semibold text-[#1d1d1f]">Summary</h2>
-            <p className="mt-4 whitespace-pre-wrap text-sm text-[#1d1d1f]">
+            <h2 className="text-lg font-semibold text-foreground">Summary</h2>
+            <p className="mt-4 whitespace-pre-wrap text-sm text-foreground">
               {summaryModalText}
             </p>
             <button
@@ -2452,19 +2452,19 @@ export function PostProductionDashboard() {
           <div
             className={`${modalPanelClass} max-h-[min(90vh,100dvh-2rem)] p-6 shadow-xl`}
           >
-            <h2 className="text-lg font-semibold text-[#1d1d1f]">
+            <h2 className="text-lg font-semibold text-foreground">
               Add to Post Production
             </h2>
-            <p className="mt-1 text-sm text-[#6e6e73]">
+            <p className="mt-1 text-sm text-muted">
               Completed interviews only. Already-added candidates are hidden.
             </p>
-            <div className="mt-4 flex gap-1 rounded-xl bg-[#f5f5f7] p-1">
+            <div className="mt-4 flex gap-1 rounded-xl bg-background p-1">
               <button
                 type="button"
                 className={`flex-1 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
                   addTab === "testimonial"
-                    ? "bg-white text-[#1d1d1f] shadow-sm"
-                    : "text-[#6e6e73] hover:text-[#1d1d1f]"
+                    ? "bg-elevated text-foreground shadow-sm"
+                    : "text-muted hover:text-foreground"
                 }`}
                 onClick={() => {
                   setAddTab("testimonial");
@@ -2477,8 +2477,8 @@ export function PostProductionDashboard() {
                 type="button"
                 className={`flex-1 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
                   addTab === "project"
-                    ? "bg-white text-[#1d1d1f] shadow-sm"
-                    : "text-[#6e6e73] hover:text-[#1d1d1f]"
+                    ? "bg-elevated text-foreground shadow-sm"
+                    : "text-muted hover:text-foreground"
                 }`}
                 onClick={() => {
                   setAddTab("project");
@@ -2489,7 +2489,7 @@ export function PostProductionDashboard() {
               </button>
             </div>
             {addLoading ? (
-              <p className="mt-4 flex items-center gap-2 text-sm text-[#6e6e73]">
+              <p className="mt-4 flex items-center gap-2 text-sm text-muted">
                 <Loader2 className="h-4 w-4 animate-spin" />
                 Loading…
               </p>
@@ -2497,7 +2497,7 @@ export function PostProductionDashboard() {
               <>
                 <input
                   type="search"
-                  className="mt-4 w-full rounded-xl border border-[#e5e5e5] px-3 py-2 text-sm"
+                  className="mt-4 w-full rounded-xl border border-border px-3 py-2 text-sm"
                   placeholder={
                     addTab === "testimonial"
                       ? "Search name, email, or interviewer"
@@ -2507,9 +2507,9 @@ export function PostProductionDashboard() {
                   onChange={(e) => setAddSearch(e.target.value)}
                 />
                 {addTab === "testimonial" ? (
-                  <ul className="mt-3 max-h-64 overflow-y-auto rounded-xl border border-[#f0f0f0]">
+                  <ul className="mt-3 max-h-64 overflow-y-auto rounded-xl border border-border-subtle">
                     {addFilteredTestimonial.length === 0 ? (
-                      <li className="px-3 py-8 text-center text-sm text-[#aeaeb2]">
+                      <li className="px-3 py-8 text-center text-sm text-muted/80">
                         No completed testimonial interviews to add
                       </li>
                     ) : (
@@ -2521,17 +2521,17 @@ export function PostProductionDashboard() {
                               selectedAdd?.kind === "testimonial" &&
                               selectedAdd.pick.candidate_id === p.candidate_id
                                 ? "bg-[#eff6ff]"
-                                : "hover:bg-[#fafafa]"
+                                : "hover:bg-background/80"
                             }`}
                             onClick={() => {
                               setAddTab("testimonial");
                               setSelectedAdd({ kind: "testimonial", pick: p });
                             }}
                           >
-                            <span className="font-medium text-[#1d1d1f]">
+                            <span className="font-medium text-foreground">
                               {p.full_name?.trim() || p.email}
                             </span>
-                            <span className="mt-0.5 block text-xs text-[#6e6e73]">
+                            <span className="mt-0.5 block text-xs text-muted">
                               {formatInterviewDateLabel(p.interview_date)} ·{" "}
                               {p.interviewer}
                             </span>
@@ -2541,9 +2541,9 @@ export function PostProductionDashboard() {
                     )}
                   </ul>
                 ) : (
-                  <ul className="mt-3 max-h-64 overflow-y-auto rounded-xl border border-[#f0f0f0]">
+                  <ul className="mt-3 max-h-64 overflow-y-auto rounded-xl border border-border-subtle">
                     {addFilteredProject.length === 0 ? (
-                      <li className="px-3 py-8 text-center text-sm text-[#aeaeb2]">
+                      <li className="px-3 py-8 text-center text-sm text-muted/80">
                         No completed project interviews to add
                       </li>
                     ) : (
@@ -2556,18 +2556,18 @@ export function PostProductionDashboard() {
                               selectedAdd.pick.project_candidate_id ===
                                 p.project_candidate_id
                                 ? "bg-[#eff6ff]"
-                                : "hover:bg-[#fafafa]"
+                                : "hover:bg-background/80"
                             }`}
                             onClick={() => {
                               setAddTab("project");
                               setSelectedAdd({ kind: "project", pick: p });
                             }}
                           >
-                            <span className="block font-medium text-[#1d1d1f]">
+                            <span className="block font-medium text-foreground">
                               {(p.project_title ?? "").trim() ||
                                 "Untitled project"}
                             </span>
-                            <span className="mt-0.5 block text-xs text-[#6e6e73]">
+                            <span className="mt-0.5 block text-xs text-muted">
                               {p.display_name} · Interview{" "}
                               {formatInterviewDateLabel(p.interview_date)}
                             </span>
@@ -2580,7 +2580,7 @@ export function PostProductionDashboard() {
                 <div className="mt-4 flex justify-end gap-2">
                   <button
                     type="button"
-                    className="rounded-xl border border-[#e5e5e5] px-4 py-2 text-sm"
+                    className="rounded-xl border border-border px-4 py-2 text-sm"
                     onClick={() => setAddOpen(false)}
                   >
                     Cancel
@@ -2600,7 +2600,7 @@ export function PostProductionDashboard() {
                           ? "Not eligible for post production"
                           : undefined
                     }
-                    className="rounded-xl bg-[#1d1d1f] px-4 py-2 text-sm text-white disabled:opacity-50"
+                    className="rounded-xl bg-foreground px-4 py-2 text-sm text-background disabled:opacity-50"
                     onClick={() => void confirmAdd()}
                   >
                     {addSubmitting ? "Adding…" : "Confirm"}

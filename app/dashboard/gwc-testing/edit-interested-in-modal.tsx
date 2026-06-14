@@ -13,9 +13,9 @@ import {
 import { modalOverlayClass, modalPanelClass } from "@/lib/modal-responsive";
 
 const fieldLabelClass =
-  "text-xs font-medium uppercase tracking-widest text-[#aeaeb2]";
+  "text-xs font-medium uppercase tracking-widest text-muted/80";
 const pointerInputClass =
-  "mt-1.5 w-full resize-y rounded-xl border border-[#e5e5e5] px-3 py-2.5 text-sm text-[#1d1d1f] placeholder:text-[#aeaeb2] focus:border-[#3b82f6] focus:outline-none disabled:opacity-50";
+  "mt-1.5 w-full resize-y rounded-xl border border-border px-3 py-2.5 text-sm text-foreground placeholder:text-muted/80 focus:border-[#3b82f6] focus:outline-none disabled:opacity-50";
 
 type Props = {
   open: boolean;
@@ -88,15 +88,15 @@ export function EditInterestedInModal({
         role="dialog"
         aria-labelledby="gwc-interested-in-title"
       >
-        <div className="border-b border-[#f0f0f0] px-6 py-4">
+        <div className="border-b border-border-subtle px-6 py-4">
           <h2
             id="gwc-interested-in-title"
-            className="text-lg font-semibold text-[#1d1d1f]"
+            className="text-lg font-semibold text-foreground"
           >
             Interested in
           </h2>
-          <p className="mt-1 text-sm text-[#6e6e73]">{display}</p>
-          <p className="mt-2 text-xs text-[#aeaeb2]">
+          <p className="mt-1 text-sm text-muted">{display}</p>
+          <p className="mt-2 text-xs text-muted/80">
             Select all channels that apply. Add POC pointers for each selected
             option.
           </p>
@@ -113,18 +113,18 @@ export function EditInterestedInModal({
                     key={opt.value}
                     className={`flex cursor-pointer items-center gap-2.5 rounded-xl border px-3 py-2.5 transition-colors ${
                       isOn
-                        ? "border-[#1d1d1f] bg-[#fafafa]"
-                        : "border-[#e5e5e5] bg-white hover:border-[#d1d5db]"
+                        ? "border-foreground bg-background/80"
+                        : "border-border bg-elevated hover:border-border"
                     } ${!canEdit || saving ? "cursor-not-allowed opacity-60" : ""}`}
                   >
                     <input
                       type="checkbox"
-                      className="h-4 w-4 rounded border-[#d1d5db] text-[#1d1d1f] focus:ring-[#3b82f6]"
+                      className="h-4 w-4 rounded border-border text-foreground focus:ring-[#3b82f6]"
                       checked={isOn}
                       disabled={!canEdit || saving}
                       onChange={() => toggle(opt.value)}
                     />
-                    <span className="text-sm font-medium text-[#1d1d1f]">
+                    <span className="text-sm font-medium text-foreground">
                       {opt.label}
                     </span>
                   </label>
@@ -134,13 +134,13 @@ export function EditInterestedInModal({
           </div>
 
           {selected.length > 0 ? (
-            <div className="space-y-3 border-t border-[#f0f0f0] pt-4">
+            <div className="space-y-3 border-t border-border-subtle pt-4">
               <p className={fieldLabelClass}>POC pointers</p>
               {selected.map((value) => (
                 <div key={value}>
                   <label
                     htmlFor={`pointer-${row.id}-${value}`}
-                    className="text-sm font-medium text-[#1d1d1f]"
+                    className="text-sm font-medium text-foreground"
                   >
                     {interestedInLabel(value)}
                   </label>
@@ -157,16 +157,16 @@ export function EditInterestedInModal({
               ))}
             </div>
           ) : (
-            <p className="rounded-xl bg-[#f5f5f7] px-3 py-2 text-sm text-[#6e6e73]">
+            <p className="rounded-xl bg-background px-3 py-2 text-sm text-muted">
               Select at least one channel to add pointers.
             </p>
           )}
         </div>
 
-        <div className="flex justify-end gap-2 border-t border-[#f0f0f0] px-6 py-4">
+        <div className="flex justify-end gap-2 border-t border-border-subtle px-6 py-4">
           <button
             type="button"
-            className="rounded-xl px-4 py-2.5 text-sm font-medium text-[#6e6e73] hover:bg-[#f5f5f5]"
+            className="rounded-xl px-4 py-2.5 text-sm font-medium text-muted hover:bg-[#f5f5f5]"
             onClick={onClose}
           >
             Cancel
@@ -174,7 +174,7 @@ export function EditInterestedInModal({
           <button
             type="button"
             disabled={!canEdit || saving}
-            className="rounded-xl bg-[#1d1d1f] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#2d2d2f] disabled:opacity-50"
+            className="rounded-xl bg-foreground px-4 py-2.5 text-sm font-medium text-background hover:opacity-90 disabled:opacity-50"
             onClick={() => void onSave(selected, pointers)}
           >
             {saving ? "Saving…" : "Save"}
