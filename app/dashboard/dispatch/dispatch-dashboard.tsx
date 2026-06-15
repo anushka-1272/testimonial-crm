@@ -56,6 +56,23 @@ function normalizeRow(
   return { ...row, candidates: candidate } as DispatchRow;
 }
 
+/** Partial match on name, email (case-insensitive), or phone digits. */
+function matchesDispatchContactSearch(
+  fullName: string | null | undefined,
+  email: string | null | undefined,
+  whatsapp: string | null | undefined,
+  rawQuery: string,
+): boolean {
+  const q = rawQuery.trim().toLowerCase();
+  if (!q) return true;
+  if ((fullName ?? "").toLowerCase().includes(q)) return true;
+  if ((email ?? "").toLowerCase().includes(q)) return true;
+  const phoneDigits = (whatsapp ?? "").replace(/\D/g, "");
+  const qDigits = q.replace(/\D/g, "");
+  if (qDigits.length > 0 && phoneDigits.includes(qDigits)) return true;
+  return false;
+}
+
 const cardChrome =
   "rounded-2xl bg-elevated shadow-card border border-border-subtle";
 
@@ -733,6 +750,7 @@ export function DispatchDashboard() {
   const { canEditCurrentPage, showViewOnlyBadge, role } = useAccessControl();
   const [rows, setRows] = useState<DispatchRow[]>([]);
   const [filter, setFilter] = useState<DispatchStatus | "all">("all");
+  const [contactSearch, setContactSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -855,9 +873,17 @@ export function DispatchDashboard() {
   }, [toastMessage]);
 
   const filtered = useMemo(() => {
-    if (filter === "all") return rows;
-    return rows.filter((r) => r.dispatch_status === filter);
-  }, [rows, filter]);
+    return rows.filter((r) => {
+      if (filter !== "all" && r.dispatch_status !== filter) return false;
+      const c = r.candidates;
+      return matchesDispatchContactSearch(
+        c?.full_name,
+        c?.email,
+        c?.whatsapp_number,
+        contactSearch,
+      );
+    });
+  }, [rows, filter, contactSearch]);
 
   const notifyDispatchTeamSlack = useCallback(async () => {
     if (!supabase || role !== "admin") return;
@@ -1037,7 +1063,22 @@ export function DispatchDashboard() {
           </div>
         </section>
 
-        <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div className="mb-6 flex flex-col gap-4">
+          <label className="flex w-full min-w-0 flex-col gap-1 text-sm md:max-w-md">
+            <span className="text-xs uppercase tracking-widest text-muted/80">
+              Search
+            </span>
+            <input
+              type="search"
+              enterKeyHint="search"
+              autoComplete="off"
+              placeholder="Name, email, or phone number…"
+              className="w-full rounded-xl border border-border bg-elevated px-3 py-2 text-sm text-foreground placeholder:text-muted/80 focus:border-[#3b82f6] focus:outline-none focus:ring-0"
+              value={contactSearch}
+              onChange={(e) => setContactSearch(e.target.value)}
+            />
+          </label>
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div className="-mx-1 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] md:mx-0 md:overflow-visible [&::-webkit-scrollbar]:hidden">
             <div className="inline-flex min-w-min rounded-full bg-elevated p-1 shadow-segment">
               {tabs.map((t) => (
@@ -1064,6 +1105,7 @@ export function DispatchDashboard() {
           >
             Export CSV ({filtered.length} rows)
           </button>
+          </div>
         </div>
 
         <div className={`overflow-hidden ${cardChrome}`}>
@@ -1122,7 +1164,7 @@ export function DispatchDashboard() {
                       colSpan={11}
                       className="px-4 py-12 text-center text-sm text-muted"
                     >
-                      No dispatch records for this filter.
+                      No dispatch records match the current filters.
                     </td>
                   </tr>
                 ) : (
