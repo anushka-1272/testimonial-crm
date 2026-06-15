@@ -62,6 +62,13 @@ function normalizeFormPayload(raw: Record<string, unknown>): {
     "phone",
     "Phone",
   ]);
+  const city = firstString(raw, [
+    "city",
+    "current_city_of_residence",
+    "currentCityOfResidence",
+    "Current City of Residence:",
+    "current city of residence",
+  ]);
   const role_before_program = firstString(raw, [
     "role_before_program",
     "roleBeforeProgram",
@@ -154,6 +161,7 @@ function normalizeFormPayload(raw: Record<string, unknown>): {
     email,
     full_name,
     whatsapp_number,
+    city,
     role_before_program,
     salary_before_program,
     primary_goal,

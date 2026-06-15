@@ -31,6 +31,7 @@ export type CandidateRow = {
   email: string;
   full_name: string | null;
   whatsapp_number: string | null;
+  city: string | null;
   role_before_program: string | null;
   salary_before_program: string | null;
   primary_goal: string | null;
@@ -63,7 +64,7 @@ type DashboardStats = {
 };
 
 const SELECT_COLUMNS =
-  "id, created_at, form_filled_date, email, full_name, whatsapp_number, role_before_program, salary_before_program, primary_goal, achievement_type, achievement_title, achieved_on_date, program_joined_date, quantified_result, skills_modules_helped, how_program_helped, proof_document_url, proof_description, linkedin_url, instagram_url, declaration_accepted, ai_eligibility_score, ai_eligibility_reason, eligibility_status, human_reviewed_by, human_reviewed_at, congratulation_call_pending, interview_type";
+  "id, created_at, form_filled_date, email, full_name, whatsapp_number, city, role_before_program, salary_before_program, primary_goal, achievement_type, achievement_title, achieved_on_date, program_joined_date, quantified_result, skills_modules_helped, how_program_helped, proof_document_url, proof_description, linkedin_url, instagram_url, declaration_accepted, ai_eligibility_score, ai_eligibility_reason, eligibility_status, human_reviewed_by, human_reviewed_at, congratulation_call_pending, interview_type";
 
 const cardChrome =
   "rounded-2xl bg-elevated shadow-card border border-border-subtle";
@@ -1024,7 +1025,7 @@ export function EligibilityDashboard() {
 
         <div className={`overflow-hidden ${cardChrome}`}>
           <div className="w-full min-w-0 max-w-full overflow-x-auto">
-            <table className="min-w-[920px] text-left text-sm">
+            <table className="min-w-[1000px] text-left text-sm">
               <thead>
                 <tr className="border-b border-[#f5f5f5]">
                   <th className="w-10 px-3 py-3">
@@ -1041,6 +1042,9 @@ export function EligibilityDashboard() {
                   </th>
                   <th className="px-3 py-3 text-xs font-medium uppercase tracking-widest text-muted/80">
                     Email
+                  </th>
+                  <th className="px-3 py-3 text-xs font-medium uppercase tracking-widest text-muted/80">
+                    City
                   </th>
                   <th className="px-3 py-3 text-xs font-medium uppercase tracking-widest text-muted/80">
                     Industry
@@ -1069,7 +1073,7 @@ export function EligibilityDashboard() {
                 {loading ? (
                   <tr>
                     <td
-                      colSpan={10}
+                      colSpan={11}
                       className="px-4 py-12 text-center text-sm text-muted"
                     >
                       Loading candidates…
@@ -1078,7 +1082,7 @@ export function EligibilityDashboard() {
                 ) : filteredRows.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={10}
+                      colSpan={11}
                       className="px-4 py-12 text-center text-sm text-muted"
                     >
                       No candidates match the current filters.
@@ -1110,6 +1114,9 @@ export function EligibilityDashboard() {
                         </td>
                         <td className="max-w-[180px] truncate px-3 py-3 text-muted">
                           {r.email}
+                        </td>
+                        <td className="max-w-[120px] truncate px-3 py-3 text-muted">
+                          {r.city ?? "—"}
                         </td>
                         <td className="max-w-[120px] truncate px-3 py-3 text-muted">
                           {r.role_before_program ?? "—"}
@@ -1283,6 +1290,9 @@ export function EligibilityDashboard() {
                   label="Phone"
                   value={detailCandidate.whatsapp_number}
                 />
+                {detailCandidate.eligibility_status === "eligible" ? (
+                  <DetailField label="City" value={detailCandidate.city} />
+                ) : null}
                 <DetailField
                   label="Role"
                   value={detailCandidate.role_before_program}

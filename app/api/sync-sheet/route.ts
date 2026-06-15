@@ -135,33 +135,142 @@ function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-/**
- * Column order from sheet "Responses 8-4" (0-based):
- * 0 Timestamp, 1 Email, 2 Full Name, 3 WhatsApp, 4 Domain, 5 Job Role,
- * 6 Achievement Type, 7 Title, 8 Summary, 9 Quantified Result, 10 Proof,
- * 11 LinkedIn, 12 Instagram, 13 Declaration
- */
-function rowFromSheetCells(c: GvizCell[], emailNormalized: string) {
-  const ts = cellToIsoTimestamp(c[0] ?? null);
-  const jobRole = cellToString(c[5] ?? null) || null;
-  const declaration = declarationFromCell(c[13] ?? null);
+type SheetColumnKey =
+  | "timestamp"
+  | "email"
+  | "full_name"
+  | "whatsapp"
+  | "city"
+  | "domain"
+  | "job_role"
+  | "achievement_type"
+  | "achievement_title"
+  | "achievement_summary"
+  | "quantified_result"
+  | "proof"
+  | "linkedin"
+  | "instagram"
+  | "declaration";
+
+type SheetColumnMap = Record<SheetColumnKey, number>;
+
+const HEADER_RANGE = `${TAB_NAME}!A1:AA1`;
+const HEADER_GVIZ_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&range=${encodeURIComponent(HEADER_RANGE)}`;
+
+/** Legacy fixed indices before optional "Current City of Residence" column. */
+const LEGACY_COLUMN_MAP: SheetColumnMap = {
+  timestamp: 0,
+  email: 1,
+  full_name: 2,
+  whatsapp: 3,
+  city: -1,
+  domain: 4,
+  job_role: 5,
+  achievement_type: 6,
+  achievement_title: 7,
+  achievement_summary: 8,
+  quantified_result: 9,
+  proof: 10,
+  linkedin: 11,
+  instagram: 12,
+  declaration: 13,
+};
+
+const COLUMN_HEADER_MATCHERS: Record<SheetColumnKey, string[]> = {
+  timestamp: ["timestamp"],
+  email: ["email address", "email"],
+  full_name: ["full name"],
+  whatsapp: ["whatsapp"],
+  city: ["current city of residence"],
+  domain: ["select your domain", "domain"],
+  job_role: ["current job role"],
+  achievement_type: ["select your achievement type", "achievement type"],
+  achievement_title: ["enter achievement title", "achievement title"],
+  achievement_summary: ["enter achievement summary", "achievement summary"],
+  quantified_result: ["mention quantified result", "quantified result"],
+  proof: ["upload proof document", "proof document"],
+  linkedin: ["linkedin profile", "linkedin"],
+  instagram: ["instagram profile", "instagram"],
+  declaration: ["declaration"],
+};
+
+function normalizeHeaderLabel(label: string): string {
+  return label
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .replace(/:$/, "");
+}
+
+function findColumnIndex(headers: string[], matchers: string[]): number {
+  const normalizedHeaders = headers.map((h) => normalizeHeaderLabel(h));
+  for (const matcher of matchers) {
+    const m = normalizeHeaderLabel(matcher);
+    const idx = normalizedHeaders.findIndex(
+      (h) => h === m || h.startsWith(m) || m.startsWith(h) || h.includes(m),
+    );
+    if (idx >= 0) return idx;
+  }
+  return -1;
+}
+
+function buildColumnMap(headers: string[]): SheetColumnMap {
+  const map = { ...LEGACY_COLUMN_MAP };
+  for (const key of Object.keys(COLUMN_HEADER_MATCHERS) as SheetColumnKey[]) {
+    const idx = findColumnIndex(headers, COLUMN_HEADER_MATCHERS[key]);
+    if (idx >= 0) map[key] = idx;
+  }
+  return map;
+}
+
+function cellAt(c: GvizCell[], map: SheetColumnMap, key: SheetColumnKey): GvizCell {
+  const idx = map[key];
+  if (idx < 0) return null;
+  return c[idx] ?? null;
+}
+
+async function fetchSheetColumnMap(): Promise<SheetColumnMap> {
+  try {
+    const res = await fetch(HEADER_GVIZ_URL, { next: { revalidate: 0 } });
+    if (!res.ok) return LEGACY_COLUMN_MAP;
+    const parsed = extractGvizJson(await res.text());
+    const headerCells = parsed.table?.rows?.[0]?.c ?? [];
+    const headers = headerCells.map((cell) => cellToString(cell));
+    if (headers.length === 0) return LEGACY_COLUMN_MAP;
+    return buildColumnMap(headers);
+  } catch {
+    return LEGACY_COLUMN_MAP;
+  }
+}
+
+function rowFromSheetCells(
+  c: GvizCell[],
+  emailNormalized: string,
+  columns: SheetColumnMap,
+) {
+  const ts = cellToIsoTimestamp(cellAt(c, columns, "timestamp"));
+  const jobRole = cellToString(cellAt(c, columns, "job_role")) || null;
+  const declaration = declarationFromCell(cellAt(c, columns, "declaration"));
 
   return {
     email: emailNormalized,
     created_at: ts ?? undefined,
     form_filled_date: ts ?? new Date().toISOString(),
-    full_name: cellToString(c[2] ?? null) || null,
-    whatsapp_number: cellToString(c[3] ?? null) || null,
-    domain: cellToString(c[4] ?? null) || null,
+    full_name: cellToString(cellAt(c, columns, "full_name")) || null,
+    whatsapp_number: cellToString(cellAt(c, columns, "whatsapp")) || null,
+    city: cellToString(cellAt(c, columns, "city")) || null,
+    domain: cellToString(cellAt(c, columns, "domain")) || null,
     job_role: jobRole,
     role_before_program: jobRole,
-    achievement_type: cellToString(c[6] ?? null) || null,
-    achievement_title: cellToString(c[7] ?? null) || null,
-    achievement_summary: cellToString(c[8] ?? null) || null,
-    quantified_result: cellToString(c[9] ?? null) || null,
-    proof_document_url: cellToString(c[10] ?? null) || null,
-    linkedin_url: cellToString(c[11] ?? null) || null,
-    instagram_url: cellToString(c[12] ?? null) || null,
+    achievement_type: cellToString(cellAt(c, columns, "achievement_type")) || null,
+    achievement_title: cellToString(cellAt(c, columns, "achievement_title")) || null,
+    achievement_summary:
+      cellToString(cellAt(c, columns, "achievement_summary")) || null,
+    quantified_result:
+      cellToString(cellAt(c, columns, "quantified_result")) || null,
+    proof_document_url: cellToString(cellAt(c, columns, "proof")) || null,
+    linkedin_url: cellToString(cellAt(c, columns, "linkedin")) || null,
+    instagram_url: cellToString(cellAt(c, columns, "instagram")) || null,
     declaration,
     declaration_accepted: declaration,
   };
@@ -264,6 +373,7 @@ export async function POST(request: Request) {
     }
 
     const rows = parsed.table?.rows ?? [];
+    const columnMap = await fetchSheetColumnMap();
     if (rows.length === 0) {
       return NextResponse.json({
         total_rows: 0,
@@ -297,7 +407,7 @@ export async function POST(request: Request) {
       }
 
       const emailNormalized = emailRaw.toLowerCase();
-      const payload = rowFromSheetCells(c, emailNormalized);
+      const payload = rowFromSheetCells(c, emailNormalized, columnMap);
 
       const { data: existing } = await supabase
         .from("candidates")

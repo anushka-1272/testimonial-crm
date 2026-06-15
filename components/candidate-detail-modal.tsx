@@ -10,6 +10,7 @@ export type CandidateDetailRecord = {
   full_name: string | null;
   email: string;
   whatsapp_number: string | null;
+  city: string | null;
   role_before_program: string | null;
   salary_before_program: string | null;
   achievement_type: string | null;
@@ -27,6 +28,7 @@ const SELECT = [
   "full_name",
   "email",
   "whatsapp_number",
+  "city",
   "role_before_program",
   "salary_before_program",
   "achievement_type",
@@ -167,6 +169,7 @@ export function CandidateDetailModal({
                 <Field label="Name">{textOrDash(data.full_name)}</Field>
                 <Field label="Phone">{textOrDash(data.whatsapp_number)}</Field>
                 <Field label="Email">{textOrDash(data.email)}</Field>
+                <Field label="City">{textOrDash(data.city)}</Field>
                 <Field label="Role">{textOrDash(data.role_before_program)}</Field>
                 <Field
                   label="Salary"
