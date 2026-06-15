@@ -43,13 +43,15 @@ export type InterviewWithCandidate = {
   } | null;
 };
 
-/** LinkedIn track pipeline (candidates.linkedin_track_status). */
-export type LinkedInTrackStatus =
-  | "pending_post"
-  | "posted"
-  | "verified"
+/** Physical interview track pipeline (`physical_interview_status`). */
+export type PhysicalInterviewStatus =
+  | "pending"
+  | "completed"
   | "eligible"
   | "not_eligible";
+
+/** @deprecated Use PhysicalInterviewStatus */
+export type LinkedInTrackStatus = PhysicalInterviewStatus;
 
 /** Matches `candidates.followup_status` + log outcome values. */
 export type FollowupStatus =
@@ -95,8 +97,8 @@ export type EligibleCandidate = {
   poc_assigned: string | null;
   poc_assigned_at: string | null;
   assigned_at?: string | null;
-  linkedin_track: boolean;
-  linkedin_track_status: LinkedInTrackStatus | null;
+  physical_interview_track: boolean;
+  physical_interview_status: PhysicalInterviewStatus | null;
   followup_status: FollowupStatus;
   followup_count: number;
   callback_datetime: string | null;
@@ -127,6 +129,8 @@ export type ProjectCandidateRow = {
   callback_datetime?: string | null;
   not_interested_reason?: string | null;
   not_interested_at?: string | null;
+  physical_interview_track?: boolean;
+  physical_interview_status?: PhysicalInterviewStatus | null;
 };
 
 /** Row passed into `LogFollowupCallModal` for project pending tab */

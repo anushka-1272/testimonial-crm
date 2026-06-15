@@ -34,6 +34,13 @@ import { requestRevertInterview } from "@/lib/revert-interview-client";
 import { slackEmailForTeamMember } from "@/lib/slack-contacts";
 import { voidSlackNotify } from "@/lib/slack-client";
 import {
+  normalizePhysicalInterviewStatus,
+  PHYSICAL_INTERVIEW_DISPATCH_COMMENT,
+  PHYSICAL_INTERVIEW_REWARD_ITEM,
+  physicalInterviewStatusLabel,
+  type PhysicalInterviewStatus,
+} from "@/lib/physical-interview-track";
+import {
   canMoveToPostProduction,
   POST_PRODUCTION_ELIGIBILITY_TOOLTIP,
 } from "@/lib/post-production-eligibility";
@@ -72,7 +79,6 @@ import type {
   EligibleCandidate,
   FollowupStatus,
   InterviewWithCandidate,
-  LinkedInTrackStatus,
 } from "./types";
 
 const PAGE_SIZE = 20;
@@ -294,56 +300,32 @@ function truncateWithTooltip(text: string | null | undefined, maxLen: number) {
 }
 
 const REWARD_NO_DISPATCH = "No Dispatch";
-const REWARD_JBL_CLIP = "JBL Clip 5";
 
-const LINKEDIN_STATUSES: readonly LinkedInTrackStatus[] = [
-  "pending_post",
-  "posted",
-  "verified",
-  "eligible",
-  "not_eligible",
-] as const;
-
-function normalizeLinkedInTrackStatus(
-  raw: string | null | undefined,
-): LinkedInTrackStatus {
-  const s = raw?.trim() ?? "";
-  return (LINKEDIN_STATUSES as readonly string[]).includes(s)
-    ? (s as LinkedInTrackStatus)
-    : "pending_post";
-}
-
-function linkedInPipelineBadge(status: LinkedInTrackStatus | null) {
+function physicalInterviewPipelineBadge(status: PhysicalInterviewStatus | null) {
   if (!status) return <span className="text-muted">—</span>;
   switch (status) {
-    case "pending_post":
+    case "pending":
       return (
         <span className="inline-flex rounded-full bg-[#f3e8ff] px-2.5 py-1 text-xs font-medium text-[#7c3aed]">
-          Pending Post
+          {physicalInterviewStatusLabel(status)}
         </span>
       );
-    case "posted":
+    case "completed":
       return (
         <span className="inline-flex rounded-full bg-[#dbeafe] px-2.5 py-1 text-xs font-medium text-[#1d4ed8]">
-          Posted
-        </span>
-      );
-    case "verified":
-      return (
-        <span className="inline-flex rounded-full bg-[#ccfbf1] px-2.5 py-1 text-xs font-medium text-[#0f766e]">
-          Verified
+          {physicalInterviewStatusLabel(status)}
         </span>
       );
     case "eligible":
       return (
         <span className="inline-flex rounded-full bg-[#f0fdf4] px-2.5 py-1 text-xs font-medium text-[#16a34a]">
-          Eligible
+          {physicalInterviewStatusLabel(status)}
         </span>
       );
     case "not_eligible":
       return (
         <span className="inline-flex rounded-full bg-[#fef2f2] px-2.5 py-1 text-xs font-medium text-[#dc2626]">
-          Not Eligible
+          {physicalInterviewStatusLabel(status)}
         </span>
       );
     default:
@@ -351,10 +333,10 @@ function linkedInPipelineBadge(status: LinkedInTrackStatus | null) {
   }
 }
 
-function linkedInTrackColumnBadge() {
+function physicalInterviewTrackColumnBadge() {
   return (
     <span className="inline-flex rounded-full bg-[#f3e8ff] px-2.5 py-1 text-xs font-medium text-[#7c3aed]">
-      LinkedIn
+      Physical interview
     </span>
   );
 }
@@ -777,7 +759,7 @@ export function InterviewsBoard() {
   const [incompleteBusyId, setIncompleteBusyId] = useState<string | null>(null);
   const [revertBusyId, setRevertBusyId] = useState<string | null>(null);
   const [liBusyId, setLiBusyId] = useState<string | null>(null);
-  const [linkedInListPage, setLinkedInListPage] = useState(0);
+  const [physicalInterviewListPage, setPhysicalInterviewListPage] = useState(0);
   const [pocRoster, setPocRoster] = useState<string[]>([]);
   const [interviewerRoster, setInterviewerRoster] = useState<
     InterviewerSelectOption[]
@@ -796,7 +778,7 @@ export function InterviewsBoard() {
     const { data: elig, error: e1 } = await supabase
       .from("candidates")
       .select(
-        "id, created_at, full_name, email, whatsapp_number, interview_type, poc_assigned, poc_assigned_at, assigned_at, linkedin_track, linkedin_track_status, followup_status, followup_count, callback_datetime, not_interested_reason, not_interested_at",
+        "id, created_at, full_name, email, whatsapp_number, interview_type, poc_assigned, poc_assigned_at, assigned_at, physical_interview_track, physical_interview_status, followup_status, followup_count, callback_datetime, not_interested_reason, not_interested_at",
       )
       .eq("is_deleted", false)
       .eq("eligibility_status", "eligible")
@@ -867,7 +849,7 @@ export function InterviewsBoard() {
       )
       .map((row) => {
         const r = row as Record<string, unknown>;
-        const onTrack = Boolean(r.linkedin_track);
+        const onTrack = Boolean(r.physical_interview_track);
         return {
           id: r.id as string,
           created_at: r.created_at as string | undefined,
@@ -878,10 +860,10 @@ export function InterviewsBoard() {
           poc_assigned: r.poc_assigned as string | null,
           poc_assigned_at: r.poc_assigned_at as string | null,
           assigned_at: (r.assigned_at as string | null | undefined) ?? null,
-          linkedin_track: onTrack,
-          linkedin_track_status: onTrack
-            ? normalizeLinkedInTrackStatus(
-                r.linkedin_track_status as string | null,
+          physical_interview_track: onTrack,
+          physical_interview_status: onTrack
+            ? normalizePhysicalInterviewStatus(
+                r.physical_interview_status as string | null,
               )
             : null,
           followup_status: normalizeFollowupStatus(r.followup_status),
@@ -1186,7 +1168,7 @@ export function InterviewsBoard() {
     () =>
       eligibleFiltered.filter(
         (c) =>
-          !c.linkedin_track && c.followup_status !== "not_interested",
+          !c.physical_interview_track && c.followup_status !== "not_interested",
       ),
     [eligibleFiltered],
   );
@@ -1194,24 +1176,24 @@ export function InterviewsBoard() {
   const notInterestedEligibleFiltered = useMemo(
     () =>
       eligibleFiltered.filter(
-        (c) => !c.linkedin_track && c.followup_status === "not_interested",
+        (c) => !c.physical_interview_track && c.followup_status === "not_interested",
       ),
     [eligibleFiltered],
   );
 
-  const linkedInTrackFiltered = useMemo(
-    () => eligibleFiltered.filter((c) => c.linkedin_track),
+  const physicalInterviewTrackFiltered = useMemo(
+    () => eligibleFiltered.filter((c) => c.physical_interview_track),
     [eligibleFiltered],
   );
 
   useEffect(() => {
-    setLinkedInListPage(0);
+    setPhysicalInterviewListPage(0);
   }, [
     filters.eligible.search,
     filters.eligible.interviewType,
     filters.eligible.poc,
     filters.eligible.interviewer,
-    linkedInTrackFiltered.length,
+    physicalInterviewTrackFiltered.length,
   ]);
 
   const scheduledFiltered = useMemo(
@@ -1277,15 +1259,15 @@ export function InterviewsBoard() {
     [interviewEligibleFiltered, filters.eligible.page],
   );
 
-  const linkedInPageData = useMemo(() => {
-    const start = linkedInListPage * PAGE_SIZE;
-    const total = linkedInTrackFiltered.length;
+  const physicalInterviewPageData = useMemo(() => {
+    const start = physicalInterviewListPage * PAGE_SIZE;
+    const total = physicalInterviewTrackFiltered.length;
     return {
-      slice: linkedInTrackFiltered.slice(start, start + PAGE_SIZE),
+      slice: physicalInterviewTrackFiltered.slice(start, start + PAGE_SIZE),
       totalPages: Math.max(1, Math.ceil(total / PAGE_SIZE)),
       total,
     };
-  }, [linkedInTrackFiltered, linkedInListPage]);
+  }, [physicalInterviewTrackFiltered, physicalInterviewListPage]);
 
   const scheduledPage = useMemo(
     () => paginate(scheduledFiltered, filters.scheduled.page),
@@ -1602,18 +1584,18 @@ export function InterviewsBoard() {
     void loadData();
   };
 
-  const moveCandidateToLinkedInTrack = async (c: EligibleCandidate) => {
+  const moveCandidateToPhysicalInterviewTrack = async (c: EligibleCandidate) => {
     if (!supabase) return;
     const confirmed = window.confirm(
-      "Move this candidate to LinkedIn Track?\n\nThey will be removed from interview scheduling.",
+      "Move this candidate to the physical interview track?\n\nThey will be removed from Zoom interview scheduling.",
     );
     if (!confirmed) return;
     setLiBusyId(c.id);
     const { error: uErr } = await supabase
       .from("candidates")
       .update({
-        linkedin_track: true,
-        linkedin_track_status: "pending_post",
+        physical_interview_track: true,
+        physical_interview_status: "pending",
       })
       .eq("id", c.id)
       .eq("is_deleted", false);
@@ -1632,22 +1614,22 @@ export function InterviewsBoard() {
         entity_type: "candidate",
         entity_id: c.id,
         candidate_name: display,
-        description: `Moved ${display} to LinkedIn track (pending post)`,
+        description: `Moved ${display} to physical interview track (pending)`,
       });
     }
     void loadData();
   };
 
-  const setLinkedInPipelineStatus = async (
+  const setPhysicalInterviewPipelineStatus = async (
     c: EligibleCandidate,
-    next: LinkedInTrackStatus,
+    next: PhysicalInterviewStatus,
     logDescription: string,
   ) => {
     if (!supabase) return;
     setLiBusyId(c.id);
     const { error: uErr } = await supabase
       .from("candidates")
-      .update({ linkedin_track_status: next })
+      .update({ physical_interview_status: next })
       .eq("id", c.id)
       .eq("is_deleted", false);
     setLiBusyId(null);
@@ -1671,18 +1653,18 @@ export function InterviewsBoard() {
     void loadData();
   };
 
-  const revokeLinkedInTrack = async (c: EligibleCandidate) => {
+  const revokePhysicalInterviewTrack = async (c: EligibleCandidate) => {
     if (!supabase) return;
     const confirmed = window.confirm(
-      "Revoke LinkedIn track for this candidate?\n\nThey will move back to the interview scheduling queue.",
+      "Revoke physical interview track for this candidate?\n\nThey will move back to the Zoom interview scheduling queue.",
     );
     if (!confirmed) return;
     setLiBusyId(c.id);
     const { error: uErr } = await supabase
       .from("candidates")
       .update({
-        linkedin_track: false,
-        linkedin_track_status: "pending_post",
+        physical_interview_track: false,
+        physical_interview_status: "pending",
       })
       .eq("id", c.id)
       .eq("is_deleted", false);
@@ -1701,21 +1683,23 @@ export function InterviewsBoard() {
         entity_type: "candidate",
         entity_id: c.id,
         candidate_name: display,
-        description: `LinkedIn track: revoked ${display} back to interview queue`,
+        description: `Physical interview track: revoked ${display} back to interview queue`,
       });
     }
     void loadData();
   };
 
-  const markLinkedInEligibleWithDispatch = async (c: EligibleCandidate) => {
+  const markPhysicalInterviewEligibleWithDispatch = async (
+    c: EligibleCandidate,
+  ) => {
     if (!supabase) return;
-    if (c.linkedin_track_status === "eligible") return;
+    if (c.physical_interview_status === "eligible") return;
     setLiBusyId(c.id);
-    const prevStatus: LinkedInTrackStatus =
-      c.linkedin_track_status ?? "pending_post";
+    const prevStatus: PhysicalInterviewStatus =
+      c.physical_interview_status ?? "pending";
     const { error: uErr } = await supabase
       .from("candidates")
-      .update({ linkedin_track_status: "eligible" })
+      .update({ physical_interview_status: "eligible" })
       .eq("id", c.id)
       .eq("is_deleted", false);
     if (uErr) {
@@ -1727,14 +1711,13 @@ export function InterviewsBoard() {
       candidate_id: c.id,
       shipping_address: null,
       dispatch_status: "pending",
-      reward_item: REWARD_JBL_CLIP,
-      special_comments:
-        "LinkedIn track reward — collect shipping address before dispatch.",
+      reward_item: PHYSICAL_INTERVIEW_REWARD_ITEM,
+      special_comments: PHYSICAL_INTERVIEW_DISPATCH_COMMENT,
     });
     if (dErr) {
       await supabase
         .from("candidates")
-        .update({ linkedin_track_status: prevStatus })
+        .update({ physical_interview_status: prevStatus })
         .eq("id", c.id)
         .eq("is_deleted", false);
       setLiBusyId(null);
@@ -1751,7 +1734,7 @@ export function InterviewsBoard() {
         entity_type: "candidate",
         entity_id: c.id,
         candidate_name: display,
-        description: `LinkedIn track: marked ${display} eligible — ${REWARD_JBL_CLIP} dispatch created`,
+        description: `Physical interview track: marked ${display} eligible — ${PHYSICAL_INTERVIEW_REWARD_ITEM} dispatch created`,
       });
     }
     setLiBusyId(null);
@@ -1765,7 +1748,7 @@ export function InterviewsBoard() {
   const thInterviewType = `${thBase} min-w-[150px] text-center`;
   const thLanguage = `${thBase} min-w-[120px] text-center`;
   const thTrack = `${thBase} min-w-[130px] text-left`;
-  const thLinkedInStatus = `${thBase} min-w-[140px] text-left`;
+  const thPhysicalInterviewStatus = `${thBase} min-w-[160px] text-left`;
   const thPocAssigned = `${thBase} min-w-[160px] text-left`;
   const thAssignedOn = `${thBase} min-w-[140px] text-left`;
   const thFollowUp = `${thBase} min-w-[150px] text-left`;
@@ -1776,7 +1759,7 @@ export function InterviewsBoard() {
   const tdInterviewType = `${tdBase} min-w-[150px] text-center`;
   const tdLanguage = `${tdBase} min-w-[120px] text-center`;
   const tdTrack = `${tdBase} min-w-[130px] text-left align-top`;
-  const tdLinkedInStatus = `${tdBase} min-w-[140px] text-left align-top`;
+  const tdPhysicalInterviewStatus = `${tdBase} min-w-[160px] text-left align-top`;
   const tdPocAssigned = `${tdBase} min-w-[160px] text-left`;
   const tdAssignedOn = `${tdBase} min-w-[140px] text-left text-muted`;
   const tdFollowUp = `${tdBase} min-w-[150px] text-left align-top`;
@@ -2150,10 +2133,10 @@ export function InterviewsBoard() {
                                       disabled={liBusyId === c.id}
                                       className="w-fit text-left text-xs font-medium text-[#7c3aed] hover:underline disabled:cursor-not-allowed disabled:opacity-50"
                                       onClick={() =>
-                                        void moveCandidateToLinkedInTrack(c)
+                                        void moveCandidateToPhysicalInterviewTrack(c)
                                       }
                                     >
-                                      → LinkedIn
+                                      → Physical interview
                                     </button>
                                   </div>
                                 </td>
@@ -2352,16 +2335,16 @@ export function InterviewsBoard() {
                   </div>
                 ) : null}
 
-                {linkedInTrackFiltered.length > 0 ? (
+                {physicalInterviewTrackFiltered.length > 0 ? (
                   <div className="mt-10 space-y-3">
                     <div>
                       <h2 className="text-base font-semibold text-foreground">
-                        LinkedIn track
+                        Physical interview track
                       </h2>
                       <p className="mt-1 text-xs text-muted">
-                        These candidates are no longer in the interview
-                        scheduling queue. Update posting status and reward
-                        eligibility below.
+                        These candidates are no longer in the Zoom scheduling
+                        queue. Conduct the in-person interview, then mark
+                        completion and reward eligibility below.
                       </p>
                     </div>
                     <div className={tableWrap}>
@@ -2375,15 +2358,15 @@ export function InterviewsBoard() {
                                 Interview type
                               </th>
                               <th className={thTrack}>Track</th>
-                              <th className={thLinkedInStatus}>
-                                LinkedIn status
+                              <th className={thPhysicalInterviewStatus}>
+                                Interview status
                               </th>
                               <th className={thActions}>Actions</th>
                             </tr>
                           </thead>
                           <tbody>
-                            {linkedInPageData.slice.map((c) => {
-                              const st = c.linkedin_track_status;
+                            {physicalInterviewPageData.slice.map((c) => {
+                              const st = c.physical_interview_status;
                               const display =
                                 c.full_name?.trim() || c.email || "Candidate";
                               const busy = liBusyId === c.id;
@@ -2407,72 +2390,56 @@ export function InterviewsBoard() {
                                     </div>
                                   </td>
                                   <td className={tdTrack}>
-                                    {linkedInTrackColumnBadge()}
+                                    {physicalInterviewTrackColumnBadge()}
                                   </td>
-                                  <td className={tdLinkedInStatus}>
-                                    {linkedInPipelineBadge(st)}
+                                  <td className={tdPhysicalInterviewStatus}>
+                                    {physicalInterviewPipelineBadge(st)}
                                   </td>
                                   <td className={tdActions}>
                                     <div className="flex flex-wrap items-center justify-end gap-1.5">
-                                      {st === "pending_post" ? (
+                                      {st === "pending" ? (
                                         <button
                                           type="button"
                                           disabled={busy}
                                           className="rounded-lg border border-border bg-elevated px-2.5 py-1.5 text-xs font-medium text-foreground hover:bg-background disabled:opacity-50"
                                           onClick={() =>
-                                            void setLinkedInPipelineStatus(
+                                            void setPhysicalInterviewPipelineStatus(
                                               c,
-                                              "posted",
-                                              `LinkedIn track: marked ${display} as posted`,
+                                              "completed",
+                                              `Physical interview track: marked ${display} interview completed`,
                                             )
                                           }
                                         >
-                                          Mark Posted
+                                          Mark interview completed
                                         </button>
                                       ) : null}
-                                      {st === "posted" ? (
-                                        <button
-                                          type="button"
-                                          disabled={busy}
-                                          className="rounded-lg border border-border bg-elevated px-2.5 py-1.5 text-xs font-medium text-foreground hover:bg-background disabled:opacity-50"
-                                          onClick={() =>
-                                            void setLinkedInPipelineStatus(
-                                              c,
-                                              "verified",
-                                              `LinkedIn track: confirmed ${display} LinkedIn post (verified)`,
-                                            )
-                                          }
-                                        >
-                                          Mark Verified
-                                        </button>
-                                      ) : null}
-                                      {st === "posted" || st === "verified" ? (
+                                      {st === "completed" ? (
                                         <>
                                           <button
                                             type="button"
                                             disabled={busy}
                                             className="rounded-lg bg-[#16a34a] px-2.5 py-1.5 text-xs font-medium text-white hover:bg-[#15803d] disabled:opacity-50"
                                             onClick={() =>
-                                              void markLinkedInEligibleWithDispatch(
+                                              void markPhysicalInterviewEligibleWithDispatch(
                                                 c,
                                               )
                                             }
                                           >
-                                            Mark Eligible
+                                            Mark eligible & dispatch
                                           </button>
                                           <button
                                             type="button"
                                             disabled={busy}
                                             className="rounded-lg bg-[#dc2626] px-2.5 py-1.5 text-xs font-medium text-white hover:bg-[#b91c1c] disabled:opacity-50"
                                             onClick={() =>
-                                              void setLinkedInPipelineStatus(
+                                              void setPhysicalInterviewPipelineStatus(
                                                 c,
                                                 "not_eligible",
-                                                `LinkedIn track: marked ${display} not eligible`,
+                                                `Physical interview track: marked ${display} not eligible`,
                                               )
                                             }
                                           >
-                                            Mark Not Eligible
+                                            Mark not eligible
                                           </button>
                                         </>
                                       ) : null}
@@ -2487,7 +2454,7 @@ export function InterviewsBoard() {
                                         disabled={busy}
                                         className="rounded-lg border border-border bg-elevated px-2.5 py-1.5 text-xs font-medium text-muted hover:bg-background disabled:opacity-50"
                                         onClick={() =>
-                                          void revokeLinkedInTrack(c)
+                                          void revokePhysicalInterviewTrack(c)
                                         }
                                       >
                                         Revoke
@@ -2500,23 +2467,23 @@ export function InterviewsBoard() {
                           </tbody>
                         </table>
                       </div>
-                      {linkedInPageData.total > 0 ? (
+                      {physicalInterviewPageData.total > 0 ? (
                         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border-subtle bg-background/60 px-4 py-3 text-xs text-muted">
                           <span>
-                            Showing {linkedInListPage * PAGE_SIZE + 1}–
+                            Showing {physicalInterviewListPage * PAGE_SIZE + 1}–
                             {Math.min(
-                              (linkedInListPage + 1) * PAGE_SIZE,
-                              linkedInPageData.total,
+                              (physicalInterviewListPage + 1) * PAGE_SIZE,
+                              physicalInterviewPageData.total,
                             )}{" "}
-                            of {linkedInPageData.total}
+                            of {physicalInterviewPageData.total}
                           </span>
                           <div className="flex gap-2">
                             <button
                               type="button"
-                              disabled={linkedInListPage <= 0}
+                              disabled={physicalInterviewListPage <= 0}
                               className="rounded-lg border border-border bg-elevated px-3 py-1.5 font-medium text-foreground transition-colors hover:bg-background disabled:cursor-not-allowed disabled:opacity-40"
                               onClick={() =>
-                                setLinkedInListPage((p) => Math.max(0, p - 1))
+                                setPhysicalInterviewListPage((p) => Math.max(0, p - 1))
                               }
                             >
                               Previous
@@ -2524,12 +2491,12 @@ export function InterviewsBoard() {
                             <button
                               type="button"
                               disabled={
-                                linkedInListPage >=
-                                linkedInPageData.totalPages - 1
+                                physicalInterviewListPage >=
+                                physicalInterviewPageData.totalPages - 1
                               }
                               className="rounded-lg border border-border bg-elevated px-3 py-1.5 font-medium text-foreground transition-colors hover:bg-background disabled:cursor-not-allowed disabled:opacity-40"
                               onClick={() =>
-                                setLinkedInListPage((p) => p + 1)
+                                setPhysicalInterviewListPage((p) => p + 1)
                               }
                             >
                               Next

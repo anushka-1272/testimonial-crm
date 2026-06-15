@@ -1,5 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { isPhysicalInterviewDispatchComment } from "@/lib/physical-interview-track";
+
 import {
   attachIdentity,
   buildCandidateLookupCard,
@@ -64,10 +66,6 @@ export function digitsOnly(s: string): string {
   return s.replace(/\D/g, "");
 }
 
-function isLinkedInDispatch(d: DispatchRow): boolean {
-  return (d.special_comments ?? "").toLowerCase().includes("linkedin track");
-}
-
 function dispatchRecencyKey(d: DispatchRow): number {
   const iso =
     d.dispatch_date?.trim() ??
@@ -81,8 +79,10 @@ function dispatchRecencyKey(d: DispatchRow): number {
 /** Prefer testimonial reward rows when multiple `dispatch` rows exist. */
 export function pickTestimonialDispatch(rows: DispatchRow[]): DispatchRow | null {
   if (!rows.length) return null;
-  const nonLi = rows.filter((r) => !isLinkedInDispatch(r));
-  const pool = nonLi.length ? nonLi : rows;
+  const nonPhysical = rows.filter(
+    (r) => !isPhysicalInterviewDispatchComment(r.special_comments),
+  );
+  const pool = nonPhysical.length ? nonPhysical : rows;
   const withReward = pool.filter((r) => r.reward_item?.trim());
   const candidates = withReward.length ? withReward : pool;
   return [...candidates].sort(

@@ -11,6 +11,13 @@ import { useAccessControl } from "@/components/access-control-context";
 import { ProjectCandidateDetailModal } from "@/components/project-candidate-detail-modal";
 import { ZoomDetailsModal } from "@/components/ZoomDetailsModal";
 import { logActivity } from "@/lib/activity-logger";
+import {
+  normalizePhysicalInterviewStatus,
+  PHYSICAL_INTERVIEW_DISPATCH_COMMENT,
+  PHYSICAL_INTERVIEW_REWARD_ITEM,
+  physicalInterviewStatusLabel,
+  type PhysicalInterviewStatus,
+} from "@/lib/physical-interview-track";
 import { ensureGwcTestingForProjectCandidate } from "@/lib/gwc-testing-actions";
 import { requestRevertInterview } from "@/lib/revert-interview-client";
 import { displayNameFromUser, getUserSafe } from "@/lib/supabase-auth";
@@ -207,6 +214,12 @@ function normalizeProjectCandidateFromDb(
       (raw.not_interested_reason as string | null | undefined) ?? null,
     not_interested_at:
       (raw.not_interested_at as string | null | undefined) ?? null,
+    physical_interview_track: Boolean(raw.physical_interview_track),
+    physical_interview_status: raw.physical_interview_track
+      ? normalizePhysicalInterviewStatus(
+          raw.physical_interview_status as string | null | undefined,
+        )
+      : null,
   };
 }
 
@@ -467,6 +480,47 @@ function dedupeProjectInterviewRows(
 
 const REWARD_NO_DISPATCH = "No Dispatch";
 
+function physicalInterviewPipelineBadge(status: PhysicalInterviewStatus | null) {
+  if (!status) return <span className="text-muted">—</span>;
+  switch (status) {
+    case "pending":
+      return (
+        <span className="inline-flex rounded-full bg-[#f3e8ff] px-2.5 py-1 text-xs font-medium text-[#7c3aed]">
+          {physicalInterviewStatusLabel(status)}
+        </span>
+      );
+    case "completed":
+      return (
+        <span className="inline-flex rounded-full bg-[#dbeafe] px-2.5 py-1 text-xs font-medium text-[#1d4ed8]">
+          {physicalInterviewStatusLabel(status)}
+        </span>
+      );
+    case "eligible":
+      return (
+        <span className="inline-flex rounded-full bg-[#f0fdf4] px-2.5 py-1 text-xs font-medium text-[#16a34a]">
+          {physicalInterviewStatusLabel(status)}
+        </span>
+      );
+    case "not_eligible":
+      return (
+        <span className="inline-flex rounded-full bg-[#fef2f2] px-2.5 py-1 text-xs font-medium text-[#dc2626]">
+          {physicalInterviewStatusLabel(status)}
+        </span>
+      );
+    default:
+      return <span className="text-muted">—</span>;
+  }
+}
+
+function physicalInterviewTrackColumnBadge() {
+  return (
+    <span className="inline-flex rounded-full bg-[#f3e8ff] px-2.5 py-1 text-xs font-medium text-[#7c3aed]">
+      Physical interview
+    </span>
+  );
+}
+
+
 function postInterviewEligibleBadge(
   v: boolean | null,
   rewardItem: string | null | undefined,
@@ -608,6 +662,10 @@ export function ProjectInterviewsPanel({
   const [sheetSyncBusy, setSheetSyncBusy] = useState(false);
   const [deleteBusyId, setDeleteBusyId] = useState<string | null>(null);
   const [gwcBusyId, setGwcBusyId] = useState<string | null>(null);
+  const [physicalInterviewBusyId, setPhysicalInterviewBusyId] = useState<
+    string | null
+  >(null);
+  const [physicalInterviewListPage, setPhysicalInterviewListPage] = useState(0);
   const [revertBusyId, setRevertBusyId] = useState<string | null>(null);
   const [addZoomFor, setAddZoomFor] =
     useState<ProjectInterviewWithProjectCandidate | null>(null);
@@ -627,7 +685,7 @@ export function ProjectInterviewsPanel({
     const { data: pc, error: eCandidates } = await supabase
       .from("project_candidates")
       .select(
-        "id, created_at, email, full_name, whatsapp_number, project_title, problem_statement, target_user, ai_usage, demo_link, status, poc_assigned, poc_assigned_at, assigned_at, interview_type, followup_status, followup_count, callback_datetime, not_interested_reason, not_interested_at",
+        "id, created_at, email, full_name, whatsapp_number, project_title, problem_statement, target_user, ai_usage, demo_link, status, poc_assigned, poc_assigned_at, assigned_at, interview_type, followup_status, followup_count, callback_datetime, not_interested_reason, not_interested_at, physical_interview_track, physical_interview_status",
       )
       .eq("is_deleted", false)
       .order("created_at", { ascending: true });
@@ -1073,6 +1131,7 @@ export function ProjectInterviewsPanel({
     const pocF = filters.pending.poc;
     const rows = candidates.filter((c) => {
       if (isProjectGwcCandidate(c)) return false;
+      if (c.physical_interview_track) return false;
       if (activePipelineCandidateIds.has(c.id)) return false;
       if (completedCandidateIds.has(c.id)) return false;
       const statusNorm = (c.status ?? "pending").trim() || "pending";
@@ -1172,6 +1231,11 @@ export function ProjectInterviewsPanel({
     ],
   );
 
+  const physicalInterviewTrackFiltered = useMemo(
+    () => candidates.filter((c) => Boolean(c.physical_interview_track)),
+    [candidates],
+  );
+
   const paginate = <T,>(rows: T[], page: number) => {
     const start = page * PAGE_SIZE;
     return {
@@ -1184,6 +1248,10 @@ export function ProjectInterviewsPanel({
   const pendingPage = useMemo(
     () => paginate(pendingQueue, filters.pending.page),
     [pendingQueue, filters.pending.page],
+  );
+  const physicalInterviewPage = useMemo(
+    () => paginate(physicalInterviewTrackFiltered, physicalInterviewListPage),
+    [physicalInterviewTrackFiltered, physicalInterviewListPage],
   );
   const scheduledPage = useMemo(
     () => paginate(scheduledFiltered, filters.scheduled.page),
@@ -1337,6 +1405,178 @@ export function ProjectInterviewsPanel({
     onToast?.("Moved to GWC Testing");
   };
 
+  const moveProjectCandidateToPhysicalInterviewTrack = async (
+    pc: ProjectCandidateRow,
+  ) => {
+    if (!canEditScheduledTab) return;
+    const confirmed = window.confirm(
+      "Move this candidate to the physical interview track?\n\nThey will be removed from Zoom interview scheduling.",
+    );
+    if (!confirmed) return;
+    setPhysicalInterviewBusyId(pc.id);
+    const { error: uErr } = await supabase
+      .from("project_candidates")
+      .update({
+        physical_interview_track: true,
+        physical_interview_status: "pending",
+      })
+      .eq("id", pc.id)
+      .eq("is_deleted", false);
+    setPhysicalInterviewBusyId(null);
+    if (uErr) {
+      onError(uErr.message);
+      return;
+    }
+    onError(null);
+    const actor = await getUserSafe(supabase);
+    const display = projectDisplayName(pc);
+    const label = display === "—" ? pc.email : display;
+    if (actor) {
+      await logActivity({
+        supabase,
+        user: actor,
+        action_type: "interviews",
+        entity_type: "project_candidate",
+        entity_id: pc.id,
+        candidate_name: label,
+        description: `Moved ${label} to physical interview track (pending)`,
+      });
+    }
+    await loadProjectData();
+    onPipelineChanged();
+  };
+
+  const setProjectPhysicalInterviewStatus = async (
+    pc: ProjectCandidateRow,
+    next: PhysicalInterviewStatus,
+    logDescription: string,
+  ) => {
+    if (!canEditScheduledTab) return;
+    setPhysicalInterviewBusyId(pc.id);
+    const { error: uErr } = await supabase
+      .from("project_candidates")
+      .update({ physical_interview_status: next })
+      .eq("id", pc.id)
+      .eq("is_deleted", false);
+    setPhysicalInterviewBusyId(null);
+    if (uErr) {
+      onError(uErr.message);
+      return;
+    }
+    onError(null);
+    const actor = await getUserSafe(supabase);
+    const display = projectDisplayName(pc);
+    const label = display === "—" ? pc.email : display;
+    if (actor) {
+      await logActivity({
+        supabase,
+        user: actor,
+        action_type: "interviews",
+        entity_type: "project_candidate",
+        entity_id: pc.id,
+        candidate_name: label,
+        description: logDescription,
+      });
+    }
+    await loadProjectData();
+    onPipelineChanged();
+  };
+
+  const revokeProjectPhysicalInterviewTrack = async (pc: ProjectCandidateRow) => {
+    if (!canEditScheduledTab) return;
+    const confirmed = window.confirm(
+      "Revoke physical interview track for this candidate?\n\nThey will move back to the Zoom interview scheduling queue.",
+    );
+    if (!confirmed) return;
+    setPhysicalInterviewBusyId(pc.id);
+    const { error: uErr } = await supabase
+      .from("project_candidates")
+      .update({
+        physical_interview_track: false,
+        physical_interview_status: "pending",
+      })
+      .eq("id", pc.id)
+      .eq("is_deleted", false);
+    setPhysicalInterviewBusyId(null);
+    if (uErr) {
+      onError(uErr.message);
+      return;
+    }
+    onError(null);
+    const actor = await getUserSafe(supabase);
+    const display = projectDisplayName(pc);
+    const label = display === "—" ? pc.email : display;
+    if (actor) {
+      await logActivity({
+        supabase,
+        user: actor,
+        action_type: "interviews",
+        entity_type: "project_candidate",
+        entity_id: pc.id,
+        candidate_name: label,
+        description: `Physical interview track: revoked ${label} back to interview queue`,
+      });
+    }
+    await loadProjectData();
+    onPipelineChanged();
+  };
+
+  const markProjectPhysicalInterviewEligibleWithDispatch = async (
+    pc: ProjectCandidateRow,
+  ) => {
+    if (!canEditScheduledTab) return;
+    if (pc.physical_interview_status === "eligible") return;
+    setPhysicalInterviewBusyId(pc.id);
+    const prevStatus: PhysicalInterviewStatus =
+      pc.physical_interview_status ?? "pending";
+    const { error: uErr } = await supabase
+      .from("project_candidates")
+      .update({ physical_interview_status: "eligible" })
+      .eq("id", pc.id)
+      .eq("is_deleted", false);
+    if (uErr) {
+      setPhysicalInterviewBusyId(null);
+      onError(uErr.message);
+      return;
+    }
+    const { error: dErr } = await supabase.from("project_dispatch").insert({
+      project_candidate_id: pc.id,
+      shipping_address: null,
+      dispatch_status: "pending",
+      reward_item: PHYSICAL_INTERVIEW_REWARD_ITEM,
+      special_comments: PHYSICAL_INTERVIEW_DISPATCH_COMMENT,
+    });
+    if (dErr) {
+      await supabase
+        .from("project_candidates")
+        .update({ physical_interview_status: prevStatus })
+        .eq("id", pc.id)
+        .eq("is_deleted", false);
+      setPhysicalInterviewBusyId(null);
+      onError(dErr.message);
+      return;
+    }
+    onError(null);
+    const actor = await getUserSafe(supabase);
+    const display = projectDisplayName(pc);
+    const label = display === "—" ? pc.email : display;
+    if (actor) {
+      await logActivity({
+        supabase,
+        user: actor,
+        action_type: "interviews",
+        entity_type: "project_candidate",
+        entity_id: pc.id,
+        candidate_name: label,
+        description: `Physical interview track: marked ${label} eligible — ${PHYSICAL_INTERVIEW_REWARD_ITEM} dispatch created`,
+      });
+    }
+    setPhysicalInterviewBusyId(null);
+    await loadProjectData();
+    onPipelineChanged();
+    onToast?.("Dispatch created for physical interview reward");
+  };
+
   const handlePocChange = async (pc: ProjectCandidateRow, value: string) => {
     const name = value.trim() || null;
     setPocSavingId(pc.id);
@@ -1433,6 +1673,10 @@ export function ProjectInterviewsPanel({
   const tdEmail = `${tdBase} min-w-[220px] text-left text-muted`;
   const thProjTitle = `${thBase} min-w-[180px] text-left`;
   const tdProjTitle = `${tdBase} min-w-[180px] text-left text-muted`;
+  const thTrack = `${thBase} min-w-[130px] text-left`;
+  const tdTrack = `${tdBase} min-w-[130px] text-left align-top`;
+  const thPhysicalInterviewStatus = `${thBase} min-w-[160px] text-left`;
+  const tdPhysicalInterviewStatus = `${tdBase} min-w-[160px] text-left align-top`;
   const thPoc = `${thBase} min-w-[160px] text-left`;
   const thAssignedOn = `${thBase} min-w-[140px] text-left`;
   const tdPoc = `${tdBase} min-w-[160px] text-left`;
@@ -1615,12 +1859,13 @@ export function ProjectInterviewsPanel({
           </div>
           <div className={tableWrap}>
             <div className="w-full overflow-x-auto">
-              <table className="w-full min-w-[1040px] table-auto border-collapse">
+              <table className="w-full min-w-[1160px] table-auto border-collapse">
                 <thead>
                   <tr>
                     <th className={thName}>Name</th>
                     <th className={thEmail}>Email</th>
                     <th className={thProjTitle}>Project title</th>
+                    <th className={thTrack}>Track</th>
                     <th className={thPoc}>POC assigned</th>
                     <th className={thAssignedOn}>Assigned On</th>
                     <th className={thFollowUp}>Follow-up</th>
@@ -1630,7 +1875,7 @@ export function ProjectInterviewsPanel({
                 <tbody>
                   {pendingPage.slice.length === 0 ? (
                     <tr>
-                      <td className={tdBase} colSpan={7}>
+                      <td className={tdBase} colSpan={8}>
                         {emptyState}
                       </td>
                     </tr>
@@ -1657,6 +1902,23 @@ export function ProjectInterviewsPanel({
                           </td>
                           <td className={tdProjTitle}>
                             {c.project_title?.trim() || "—"}
+                          </td>
+                          <td className={tdTrack}>
+                            <button
+                              type="button"
+                              disabled={
+                                !canEditScheduledTab ||
+                                physicalInterviewBusyId === c.id
+                              }
+                              className="w-fit text-left text-xs font-medium text-[#7c3aed] hover:underline disabled:cursor-not-allowed disabled:opacity-50"
+                              onClick={() =>
+                                void moveProjectCandidateToPhysicalInterviewTrack(
+                                  c,
+                                )
+                              }
+                            >
+                              → Physical interview
+                            </button>
                           </td>
                           <td className={tdPoc}>
                             {showPocDropdown ? (
@@ -1819,6 +2081,174 @@ export function ProjectInterviewsPanel({
               pendingPage.total,
             )}
           </div>
+
+          {physicalInterviewTrackFiltered.length > 0 ? (
+            <div className="space-y-3">
+              <div>
+                <h2 className="text-base font-semibold text-foreground">
+                  Physical interview track
+                </h2>
+                <p className="mt-1 text-xs text-muted">
+                  These candidates are no longer in the Zoom scheduling queue.
+                  Conduct the in-person interview, then mark completion and
+                  reward eligibility below.
+                </p>
+              </div>
+              <div className={tableWrap}>
+                <div className="w-full overflow-x-auto">
+                  <table className="w-full min-w-[980px] table-auto border-collapse">
+                    <thead>
+                      <tr>
+                        <th className={thName}>Name</th>
+                        <th className={thEmail}>Email</th>
+                        <th className={thProjTitle}>Project title</th>
+                        <th className={thTrack}>Track</th>
+                        <th className={thPhysicalInterviewStatus}>
+                          Interview status
+                        </th>
+                        <th className={thActions}>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {physicalInterviewPage.slice.map((c) => {
+                        const st = c.physical_interview_status ?? "pending";
+                        const display = projectDisplayName(c);
+                        const label = display === "—" ? c.email : display;
+                        const busy = physicalInterviewBusyId === c.id;
+                        return (
+                          <tr key={c.id}>
+                            <td className={tdName}>
+                              <button
+                                type="button"
+                                className={nameLinkBtn}
+                                onClick={() => setDetail(c)}
+                              >
+                                {display}
+                              </button>
+                            </td>
+                            <td className={tdEmail}>{c.email}</td>
+                            <td className={tdProjTitle}>
+                              {c.project_title?.trim() || "—"}
+                            </td>
+                            <td className={tdTrack}>
+                              {physicalInterviewTrackColumnBadge()}
+                            </td>
+                            <td className={tdPhysicalInterviewStatus}>
+                              {physicalInterviewPipelineBadge(st)}
+                            </td>
+                            <td className={tdActions}>
+                              <div className="flex flex-wrap items-center justify-end gap-1.5">
+                                {st === "pending" ? (
+                                  <button
+                                    type="button"
+                                    disabled={busy || !canEditScheduledTab}
+                                    className="rounded-lg border border-border bg-elevated px-2.5 py-1.5 text-xs font-medium text-foreground hover:bg-background disabled:opacity-50"
+                                    onClick={() =>
+                                      void setProjectPhysicalInterviewStatus(
+                                        c,
+                                        "completed",
+                                        `Physical interview track: marked ${label} interview completed`,
+                                      )
+                                    }
+                                  >
+                                    Mark interview completed
+                                  </button>
+                                ) : null}
+                                {st === "completed" ? (
+                                  <>
+                                    <button
+                                      type="button"
+                                      disabled={busy || !canEditScheduledTab}
+                                      className="rounded-lg bg-[#16a34a] px-2.5 py-1.5 text-xs font-medium text-white hover:bg-[#15803d] disabled:opacity-50"
+                                      onClick={() =>
+                                        void markProjectPhysicalInterviewEligibleWithDispatch(
+                                          c,
+                                        )
+                                      }
+                                    >
+                                      Mark eligible & dispatch
+                                    </button>
+                                    <button
+                                      type="button"
+                                      disabled={busy || !canEditScheduledTab}
+                                      className="rounded-lg bg-[#dc2626] px-2.5 py-1.5 text-xs font-medium text-white hover:bg-[#b91c1c] disabled:opacity-50"
+                                      onClick={() =>
+                                        void setProjectPhysicalInterviewStatus(
+                                          c,
+                                          "not_eligible",
+                                          `Physical interview track: marked ${label} not eligible`,
+                                        )
+                                      }
+                                    >
+                                      Mark not eligible
+                                    </button>
+                                  </>
+                                ) : null}
+                                {st === "eligible" || st === "not_eligible" ? (
+                                  <span className="text-xs text-muted/80">
+                                    —
+                                  </span>
+                                ) : null}
+                                <button
+                                  type="button"
+                                  disabled={busy || !canEditScheduledTab}
+                                  className="rounded-lg border border-border bg-elevated px-2.5 py-1.5 text-xs font-medium text-muted hover:bg-background disabled:opacity-50"
+                                  onClick={() =>
+                                    void revokeProjectPhysicalInterviewTrack(c)
+                                  }
+                                >
+                                  Revoke
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                {physicalInterviewPage.total > 0 ? (
+                  <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border-subtle bg-background/60 px-4 py-3 text-xs text-muted">
+                    <span>
+                      Showing {physicalInterviewListPage * PAGE_SIZE + 1}–
+                      {Math.min(
+                        (physicalInterviewListPage + 1) * PAGE_SIZE,
+                        physicalInterviewPage.total,
+                      )}{" "}
+                      of {physicalInterviewPage.total}
+                    </span>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        disabled={physicalInterviewListPage <= 0}
+                        className="rounded-lg border border-border bg-elevated px-3 py-1.5 font-medium text-foreground transition-colors hover:bg-background disabled:cursor-not-allowed disabled:opacity-40"
+                        onClick={() =>
+                          setPhysicalInterviewListPage((p) =>
+                            Math.max(0, p - 1),
+                          )
+                        }
+                      >
+                        Previous
+                      </button>
+                      <button
+                        type="button"
+                        disabled={
+                          physicalInterviewListPage >=
+                          physicalInterviewPage.totalPages - 1
+                        }
+                        className="rounded-lg border border-border bg-elevated px-3 py-1.5 font-medium text-foreground transition-colors hover:bg-background disabled:cursor-not-allowed disabled:opacity-40"
+                        onClick={() =>
+                          setPhysicalInterviewListPage((p) => p + 1)
+                        }
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
         </section>
       )}
 
