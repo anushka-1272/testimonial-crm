@@ -38,6 +38,7 @@ import {
   PHYSICAL_INTERVIEW_DISPATCH_COMMENT,
   PHYSICAL_INTERVIEW_REWARD_ITEM,
   physicalInterviewStatusLabel,
+  type PhysicalInterviewCity,
   type PhysicalInterviewStatus,
 } from "@/lib/physical-interview-track";
 import {
@@ -70,6 +71,7 @@ import { EditInterviewDetailsModal } from "./edit-interview-details-modal";
 import { followupStatusBadgeFromSnapshot } from "./followup-status";
 import { FollowupHistoryModal } from "./followup-history-modal";
 import { LogFollowupCallModal } from "./log-followup-call-modal";
+import { PhysicalInterviewCityModal } from "./physical-interview-city-modal";
 import {
   ScheduleInterviewModal,
   type ScheduleCandidate,
@@ -333,11 +335,16 @@ function physicalInterviewPipelineBadge(status: PhysicalInterviewStatus | null) 
   }
 }
 
-function physicalInterviewTrackColumnBadge() {
+function physicalInterviewTrackColumnBadge(city: string | null | undefined) {
   return (
-    <span className="inline-flex rounded-full bg-[#f3e8ff] px-2.5 py-1 text-xs font-medium text-[#7c3aed]">
-      Physical interview
-    </span>
+    <div className="flex flex-col gap-1">
+      <span className="inline-flex w-fit rounded-full bg-[#f3e8ff] px-2.5 py-1 text-xs font-medium text-[#7c3aed]">
+        Physical interview
+      </span>
+      {city?.trim() ? (
+        <span className="text-xs text-muted">{city.trim()}</span>
+      ) : null}
+    </div>
   );
 }
 
@@ -759,6 +766,8 @@ export function InterviewsBoard() {
   const [incompleteBusyId, setIncompleteBusyId] = useState<string | null>(null);
   const [revertBusyId, setRevertBusyId] = useState<string | null>(null);
   const [liBusyId, setLiBusyId] = useState<string | null>(null);
+  const [physicalInterviewCityFor, setPhysicalInterviewCityFor] =
+    useState<EligibleCandidate | null>(null);
   const [physicalInterviewListPage, setPhysicalInterviewListPage] = useState(0);
   const [pocRoster, setPocRoster] = useState<string[]>([]);
   const [interviewerRoster, setInterviewerRoster] = useState<
@@ -778,7 +787,7 @@ export function InterviewsBoard() {
     const { data: elig, error: e1 } = await supabase
       .from("candidates")
       .select(
-        "id, created_at, full_name, email, whatsapp_number, interview_type, poc_assigned, poc_assigned_at, assigned_at, physical_interview_track, physical_interview_status, followup_status, followup_count, callback_datetime, not_interested_reason, not_interested_at",
+        "id, created_at, full_name, email, whatsapp_number, interview_type, poc_assigned, poc_assigned_at, assigned_at, physical_interview_track, physical_interview_status, physical_interview_city, followup_status, followup_count, callback_datetime, not_interested_reason, not_interested_at",
       )
       .eq("is_deleted", false)
       .eq("eligibility_status", "eligible")
@@ -866,6 +875,8 @@ export function InterviewsBoard() {
                 r.physical_interview_status as string | null,
               )
             : null,
+          physical_interview_city:
+            (r.physical_interview_city as string | null) ?? null,
           followup_status: normalizeFollowupStatus(r.followup_status),
           followup_count: Math.max(0, Number(r.followup_count ?? 0)),
           callback_datetime: (r.callback_datetime as string | null) ?? null,
@@ -1584,18 +1595,18 @@ export function InterviewsBoard() {
     void loadData();
   };
 
-  const moveCandidateToPhysicalInterviewTrack = async (c: EligibleCandidate) => {
+  const moveCandidateToPhysicalInterviewTrack = async (
+    c: EligibleCandidate,
+    city: PhysicalInterviewCity,
+  ) => {
     if (!supabase) return;
-    const confirmed = window.confirm(
-      "Move this candidate to the physical interview track?\n\nThey will be removed from Zoom interview scheduling.",
-    );
-    if (!confirmed) return;
     setLiBusyId(c.id);
     const { error: uErr } = await supabase
       .from("candidates")
       .update({
         physical_interview_track: true,
         physical_interview_status: "pending",
+        physical_interview_city: city,
       })
       .eq("id", c.id)
       .eq("is_deleted", false);
@@ -1614,9 +1625,10 @@ export function InterviewsBoard() {
         entity_type: "candidate",
         entity_id: c.id,
         candidate_name: display,
-        description: `Moved ${display} to physical interview track (pending)`,
+        description: `Moved ${display} to physical interview track in ${city} (pending)`,
       });
     }
+    setPhysicalInterviewCityFor(null);
     void loadData();
   };
 
@@ -1665,6 +1677,7 @@ export function InterviewsBoard() {
       .update({
         physical_interview_track: false,
         physical_interview_status: "pending",
+        physical_interview_city: null,
       })
       .eq("id", c.id)
       .eq("is_deleted", false);
@@ -1749,6 +1762,7 @@ export function InterviewsBoard() {
   const thLanguage = `${thBase} min-w-[120px] text-center`;
   const thTrack = `${thBase} min-w-[130px] text-left`;
   const thPhysicalInterviewStatus = `${thBase} min-w-[160px] text-left`;
+  const thCity = `${thBase} min-w-[100px] text-left`;
   const thPocAssigned = `${thBase} min-w-[160px] text-left`;
   const thAssignedOn = `${thBase} min-w-[140px] text-left`;
   const thFollowUp = `${thBase} min-w-[150px] text-left`;
@@ -1760,6 +1774,7 @@ export function InterviewsBoard() {
   const tdLanguage = `${tdBase} min-w-[120px] text-center`;
   const tdTrack = `${tdBase} min-w-[130px] text-left align-top`;
   const tdPhysicalInterviewStatus = `${tdBase} min-w-[160px] text-left align-top`;
+  const tdCity = `${tdBase} min-w-[100px] text-left text-muted`;
   const tdPocAssigned = `${tdBase} min-w-[160px] text-left`;
   const tdAssignedOn = `${tdBase} min-w-[140px] text-left text-muted`;
   const tdFollowUp = `${tdBase} min-w-[150px] text-left align-top`;
@@ -2133,7 +2148,7 @@ export function InterviewsBoard() {
                                       disabled={liBusyId === c.id}
                                       className="w-fit text-left text-xs font-medium text-[#7c3aed] hover:underline disabled:cursor-not-allowed disabled:opacity-50"
                                       onClick={() =>
-                                        void moveCandidateToPhysicalInterviewTrack(c)
+                                        setPhysicalInterviewCityFor(c)
                                       }
                                     >
                                       → Physical interview
@@ -2358,6 +2373,7 @@ export function InterviewsBoard() {
                                 Interview type
                               </th>
                               <th className={thTrack}>Track</th>
+                              <th className={thCity}>City</th>
                               <th className={thPhysicalInterviewStatus}>
                                 Interview status
                               </th>
@@ -2390,7 +2406,12 @@ export function InterviewsBoard() {
                                     </div>
                                   </td>
                                   <td className={tdTrack}>
-                                    {physicalInterviewTrackColumnBadge()}
+                                    {physicalInterviewTrackColumnBadge(
+                                      c.physical_interview_city,
+                                    )}
+                                  </td>
+                                  <td className={tdCity}>
+                                    {c.physical_interview_city?.trim() || "—"}
                                   </td>
                                   <td className={tdPhysicalInterviewStatus}>
                                     {physicalInterviewPipelineBadge(st)}
@@ -3692,6 +3713,29 @@ export function InterviewsBoard() {
         onClose={() => setEditInterviewFor(null)}
         onSaved={() => void loadData()}
         onToast={(msg) => setToastMessage(msg)}
+      />
+
+      <PhysicalInterviewCityModal
+        open={!!physicalInterviewCityFor}
+        candidateLabel={
+          physicalInterviewCityFor?.full_name?.trim() ||
+          physicalInterviewCityFor?.email ||
+          "Candidate"
+        }
+        busy={
+          physicalInterviewCityFor
+            ? liBusyId === physicalInterviewCityFor.id
+            : false
+        }
+        onClose={() => setPhysicalInterviewCityFor(null)}
+        onConfirm={(city) => {
+          if (physicalInterviewCityFor) {
+            void moveCandidateToPhysicalInterviewTrack(
+              physicalInterviewCityFor,
+              city,
+            );
+          }
+        }}
       />
 
       <CandidateDetailModal

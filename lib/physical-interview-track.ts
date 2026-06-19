@@ -1,3 +1,14 @@
+/** Interview city options for physical interview track. */
+export type PhysicalInterviewCity = "Delhi" | "Bengaluru";
+
+export const PHYSICAL_INTERVIEW_CITY_OPTIONS: readonly {
+  value: PhysicalInterviewCity;
+  label: string;
+}[] = [
+  { value: "Delhi", label: "Delhi" },
+  { value: "Bengaluru", label: "Bengaluru" },
+] as const;
+
 /** Pipeline state for in-person interview track (testimonial + project). */
 export type PhysicalInterviewStatus =
   | "pending"

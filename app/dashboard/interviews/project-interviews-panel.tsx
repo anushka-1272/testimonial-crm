@@ -16,6 +16,7 @@ import {
   PHYSICAL_INTERVIEW_DISPATCH_COMMENT,
   PHYSICAL_INTERVIEW_REWARD_ITEM,
   physicalInterviewStatusLabel,
+  type PhysicalInterviewCity,
   type PhysicalInterviewStatus,
 } from "@/lib/physical-interview-track";
 import { ensureGwcTestingForProjectCandidate } from "@/lib/gwc-testing-actions";
@@ -38,6 +39,7 @@ import {
 
 import { AssignInterviewerModal } from "./assign-interviewer-modal";
 import { EditInterviewDetailsModal } from "./edit-interview-details-modal";
+import { PhysicalInterviewCityModal } from "./physical-interview-city-modal";
 import { isPostRescheduleDraftRow } from "./interview-reschedule-workflow";
 import {
   followupStatusBadgeFromSnapshot,
@@ -220,6 +222,8 @@ function normalizeProjectCandidateFromDb(
           raw.physical_interview_status as string | null | undefined,
         )
       : null,
+    physical_interview_city:
+      (raw.physical_interview_city as string | null | undefined) ?? null,
   };
 }
 
@@ -512,11 +516,16 @@ function physicalInterviewPipelineBadge(status: PhysicalInterviewStatus | null) 
   }
 }
 
-function physicalInterviewTrackColumnBadge() {
+function physicalInterviewTrackColumnBadge(city: string | null | undefined) {
   return (
-    <span className="inline-flex rounded-full bg-[#f3e8ff] px-2.5 py-1 text-xs font-medium text-[#7c3aed]">
-      Physical interview
-    </span>
+    <div className="flex flex-col gap-1">
+      <span className="inline-flex w-fit rounded-full bg-[#f3e8ff] px-2.5 py-1 text-xs font-medium text-[#7c3aed]">
+        Physical interview
+      </span>
+      {city?.trim() ? (
+        <span className="text-xs text-muted">{city.trim()}</span>
+      ) : null}
+    </div>
   );
 }
 
@@ -665,6 +674,8 @@ export function ProjectInterviewsPanel({
   const [physicalInterviewBusyId, setPhysicalInterviewBusyId] = useState<
     string | null
   >(null);
+  const [physicalInterviewCityFor, setPhysicalInterviewCityFor] =
+    useState<ProjectCandidateRow | null>(null);
   const [physicalInterviewListPage, setPhysicalInterviewListPage] = useState(0);
   const [revertBusyId, setRevertBusyId] = useState<string | null>(null);
   const [addZoomFor, setAddZoomFor] =
@@ -685,7 +696,7 @@ export function ProjectInterviewsPanel({
     const { data: pc, error: eCandidates } = await supabase
       .from("project_candidates")
       .select(
-        "id, created_at, email, full_name, whatsapp_number, project_title, problem_statement, target_user, ai_usage, demo_link, status, poc_assigned, poc_assigned_at, assigned_at, interview_type, followup_status, followup_count, callback_datetime, not_interested_reason, not_interested_at, physical_interview_track, physical_interview_status",
+        "id, created_at, email, full_name, whatsapp_number, project_title, problem_statement, target_user, ai_usage, demo_link, status, poc_assigned, poc_assigned_at, assigned_at, interview_type, followup_status, followup_count, callback_datetime, not_interested_reason, not_interested_at, physical_interview_track, physical_interview_status, physical_interview_city",
       )
       .eq("is_deleted", false)
       .order("created_at", { ascending: true });
@@ -1407,18 +1418,16 @@ export function ProjectInterviewsPanel({
 
   const moveProjectCandidateToPhysicalInterviewTrack = async (
     pc: ProjectCandidateRow,
+    city: PhysicalInterviewCity,
   ) => {
     if (!canEditScheduledTab) return;
-    const confirmed = window.confirm(
-      "Move this candidate to the physical interview track?\n\nThey will be removed from Zoom interview scheduling.",
-    );
-    if (!confirmed) return;
     setPhysicalInterviewBusyId(pc.id);
     const { error: uErr } = await supabase
       .from("project_candidates")
       .update({
         physical_interview_track: true,
         physical_interview_status: "pending",
+        physical_interview_city: city,
       })
       .eq("id", pc.id)
       .eq("is_deleted", false);
@@ -1439,9 +1448,10 @@ export function ProjectInterviewsPanel({
         entity_type: "project_candidate",
         entity_id: pc.id,
         candidate_name: label,
-        description: `Moved ${label} to physical interview track (pending)`,
+        description: `Moved ${label} to physical interview track in ${city} (pending)`,
       });
     }
+    setPhysicalInterviewCityFor(null);
     await loadProjectData();
     onPipelineChanged();
   };
@@ -1494,6 +1504,7 @@ export function ProjectInterviewsPanel({
       .update({
         physical_interview_track: false,
         physical_interview_status: "pending",
+        physical_interview_city: null,
       })
       .eq("id", pc.id)
       .eq("is_deleted", false);
@@ -1677,6 +1688,8 @@ export function ProjectInterviewsPanel({
   const tdTrack = `${tdBase} min-w-[130px] text-left align-top`;
   const thPhysicalInterviewStatus = `${thBase} min-w-[160px] text-left`;
   const tdPhysicalInterviewStatus = `${tdBase} min-w-[160px] text-left align-top`;
+  const thCity = `${thBase} min-w-[100px] text-left`;
+  const tdCity = `${tdBase} min-w-[100px] text-left text-muted`;
   const thPoc = `${thBase} min-w-[160px] text-left`;
   const thAssignedOn = `${thBase} min-w-[140px] text-left`;
   const tdPoc = `${tdBase} min-w-[160px] text-left`;
@@ -1911,11 +1924,7 @@ export function ProjectInterviewsPanel({
                                 physicalInterviewBusyId === c.id
                               }
                               className="w-fit text-left text-xs font-medium text-[#7c3aed] hover:underline disabled:cursor-not-allowed disabled:opacity-50"
-                              onClick={() =>
-                                void moveProjectCandidateToPhysicalInterviewTrack(
-                                  c,
-                                )
-                              }
+                              onClick={() => setPhysicalInterviewCityFor(c)}
                             >
                               → Physical interview
                             </button>
@@ -2103,6 +2112,7 @@ export function ProjectInterviewsPanel({
                         <th className={thEmail}>Email</th>
                         <th className={thProjTitle}>Project title</th>
                         <th className={thTrack}>Track</th>
+                        <th className={thCity}>City</th>
                         <th className={thPhysicalInterviewStatus}>
                           Interview status
                         </th>
@@ -2131,7 +2141,12 @@ export function ProjectInterviewsPanel({
                               {c.project_title?.trim() || "—"}
                             </td>
                             <td className={tdTrack}>
-                              {physicalInterviewTrackColumnBadge()}
+                              {physicalInterviewTrackColumnBadge(
+                                c.physical_interview_city,
+                              )}
+                            </td>
+                            <td className={tdCity}>
+                              {c.physical_interview_city?.trim() || "—"}
                             </td>
                             <td className={tdPhysicalInterviewStatus}>
                               {physicalInterviewPipelineBadge(st)}
@@ -3125,6 +3140,34 @@ export function ProjectInterviewsPanel({
           </div>
         </section>
       )}
+
+      <PhysicalInterviewCityModal
+        open={!!physicalInterviewCityFor}
+        candidateLabel={
+          physicalInterviewCityFor
+            ? (() => {
+                const d = projectDisplayName(physicalInterviewCityFor);
+                return d === "—"
+                  ? physicalInterviewCityFor.email
+                  : d;
+              })()
+            : ""
+        }
+        busy={
+          physicalInterviewCityFor
+            ? physicalInterviewBusyId === physicalInterviewCityFor.id
+            : false
+        }
+        onClose={() => setPhysicalInterviewCityFor(null)}
+        onConfirm={(city) => {
+          if (physicalInterviewCityFor) {
+            void moveProjectCandidateToPhysicalInterviewTrack(
+              physicalInterviewCityFor,
+              city,
+            );
+          }
+        }}
+      />
 
       <ProjectCandidateDetailModal
         open={!!detail}

@@ -99,6 +99,7 @@ export type EligibleCandidate = {
   assigned_at?: string | null;
   physical_interview_track: boolean;
   physical_interview_status: PhysicalInterviewStatus | null;
+  physical_interview_city: string | null;
   followup_status: FollowupStatus;
   followup_count: number;
   callback_datetime: string | null;
@@ -131,6 +132,7 @@ export type ProjectCandidateRow = {
   not_interested_at?: string | null;
   physical_interview_track?: boolean;
   physical_interview_status?: PhysicalInterviewStatus | null;
+  physical_interview_city?: string | null;
 };
 
 /** Row passed into `LogFollowupCallModal` for project pending tab */
