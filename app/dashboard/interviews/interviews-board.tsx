@@ -79,6 +79,7 @@ import { ConfirmSocialPostsModal } from "./confirm-social-posts-modal";
 import { FinalizeDispatchModal } from "./finalize-dispatch-modal";
 import { MarkNoShowModal } from "./mark-no-show-modal";
 import { RescheduleInterviewModal } from "./reschedule-interview-modal";
+import { ScheduledInterviewRowActions } from "./scheduled-interview-row-actions";
 import { AssignInterviewerModal } from "./assign-interviewer-modal";
 import { EditInterviewDetailsModal } from "./edit-interview-details-modal";
 import { followupStatusBadgeFromSnapshot } from "./followup-status";
@@ -1935,7 +1936,7 @@ export function InterviewsBoard() {
   const tdPocAssigned = `${tdBase} min-w-[160px] text-left`;
   const tdAssignedOn = `${tdBase} min-w-[140px] text-left text-muted`;
   const tdFollowUp = `${tdBase} min-w-[150px] text-left align-top`;
-  const tdActions = `${tdBase} min-w-[220px] text-right max-lg:min-w-[170px] max-lg:px-2 max-lg:py-2 max-lg:text-xs`;
+  const tdActions = `${tdBase} relative min-w-[140px] text-right max-lg:min-w-[120px] max-lg:px-2 max-lg:py-2 max-lg:text-xs`;
 
   const thDateTime = `${thBase} min-w-[170px] text-left`;
   const tdDateTime = `${tdBase} min-w-[170px] text-left`;
@@ -2908,147 +2909,50 @@ export function InterviewsBoard() {
                                   <CommentTableCell value={i.remarks} />
                                 </td>
                                 <td className={tdActions}>
-                                  <div className="flex flex-wrap items-center justify-end gap-2">
-                                    <button
-                                      type="button"
-                                      disabled={!canEditScheduledTab}
-                                      title={
-                                        !canEditScheduledTab
-                                          ? "View only"
+                                  <ScheduledInterviewRowActions
+                                    canEdit={canEditScheduledTab}
+                                    showAssignInterviewer={
+                                      !hasIv &&
+                                      (isDraftRow ||
+                                        Boolean(
+                                          i.previous_scheduled_date?.trim(),
+                                        ))
+                                    }
+                                    canRevert={
+                                      !isCompletedRow && revertBusyId !== i.id
+                                    }
+                                    revertBusy={revertBusyId === i.id}
+                                    canReschedule={!isCompletedRow}
+                                    canNoShow={!isCompletedRow}
+                                    canMarkCompleted={hasZoom && !isCompletedRow}
+                                    markCompletedTitle={
+                                      !hasZoom
+                                        ? "Add Zoom details first"
+                                        : isCompletedRow
+                                          ? "Already completed"
                                           : undefined
-                                      }
-                                      className="rounded-lg border border-border bg-elevated px-3 py-1.5 text-xs font-medium text-foreground hover:bg-background/80 disabled:cursor-not-allowed disabled:opacity-40"
-                                      onClick={() =>
-                                        canEditScheduledTab
-                                          ? setEditInterviewFor(i)
-                                          : undefined
-                                      }
-                                    >
-                                      Edit
-                                    </button>
-                                    {!hasIv &&
-                                    (isDraftRow ||
-                                      Boolean(
-                                        i.previous_scheduled_date?.trim(),
-                                      )) ? (
-                                      <button
-                                        type="button"
-                                        disabled={!canEditScheduledTab}
-                                        title={
-                                          !canEditScheduledTab
-                                            ? "View only"
-                                            : undefined
-                                        }
-                                        className="rounded-lg bg-[#2563eb] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#1d4ed8] disabled:cursor-not-allowed disabled:opacity-40"
-                                        onClick={() =>
-                                          canEditScheduledTab
-                                            ? setAssignInterviewerFor(i)
-                                            : undefined
-                                        }
-                                      >
-                                        Assign Interviewer
-                                      </button>
-                                    ) : null}
-                                    <button
-                                      type="button"
-                                      disabled={
-                                        !canEditScheduledTab ||
-                                        isCompletedRow ||
-                                        revertBusyId === i.id
-                                      }
-                                      title={
-                                        !canEditScheduledTab
-                                          ? "View only"
-                                          : isCompletedRow
-                                            ? "Already completed"
-                                            : "Send back to callings (same POC)"
-                                      }
-                                      className="rounded-lg border border-border bg-elevated px-3 py-1.5 text-xs font-medium text-foreground hover:bg-background/80 disabled:cursor-not-allowed disabled:opacity-40"
-                                      onClick={() => {
-                                        if (
-                                          !canEditScheduledTab ||
-                                          isCompletedRow ||
-                                          revertBusyId === i.id
-                                        )
-                                          return;
-                                        void handleRevertInterview(i);
-                                      }}
-                                    >
-                                      {revertBusyId === i.id
-                                        ? "Reverting…"
-                                        : "Revert"}
-                                    </button>
-                                    <button
-                                      type="button"
-                                      disabled={
-                                        !canEditScheduledTab || isCompletedRow
-                                      }
-                                      title={
-                                        !canEditScheduledTab
-                                          ? "View only"
-                                          : isCompletedRow
-                                            ? "Already completed"
-                                            : undefined
-                                      }
-                                      className="rounded-lg bg-[#ea580c] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#c2410c] disabled:cursor-not-allowed disabled:opacity-40"
-                                      onClick={() => {
-                                        console.debug(
-                                          "[InterviewsBoard] reschedule click",
-                                          i,
-                                        );
-                                        if (!canEditScheduledTab || isCompletedRow) return;
-                                        setRescheduleCtx({
-                                          interview: i,
-                                          mode: i.previous_scheduled_date?.trim()
-                                            ? "from_rescheduled"
-                                            : "from_scheduled",
-                                        });
-                                      }}
-                                    >
-                                      Reschedule
-                                    </button>
-                                    <button
-                                      type="button"
-                                      disabled={
-                                        !canEditScheduledTab || isCompletedRow
-                                      }
-                                      className="rounded-lg border border-[#fecaca] bg-[#fef2f2] px-3 py-1.5 text-xs font-medium text-[#dc2626] hover:bg-[#fee2e2] disabled:cursor-not-allowed disabled:opacity-40"
-                                      onClick={() => {
-                                        if (!canEditScheduledTab || isCompletedRow)
-                                          return;
-                                        setNoShowFor(i);
-                                      }}
-                                    >
-                                      No show
-                                    </button>
-                                    <button
-                                      type="button"
-                                      disabled={
-                                        !canEditScheduledTab ||
-                                        !hasZoom ||
-                                        isCompletedRow
-                                      }
-                                      title={
-                                        !canEditScheduledTab
-                                          ? "View only"
-                                          : isCompletedRow
-                                            ? "Already completed"
-                                            : !hasZoom
-                                              ? "Add Zoom details first"
-                                            : undefined
-                                      }
-                                      className="rounded-lg bg-[#16a34a] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#15803d] disabled:cursor-not-allowed disabled:opacity-40"
-                                      onClick={() => {
-                                        console.debug(
-                                          "[InterviewsBoard] mark completed click",
-                                          i,
-                                        );
-                                        openCompleteModal(i);
-                                      }}
-                                    >
-                                      Mark completed
-                                    </button>
-                                  </div>
+                                    }
+                                    revertTitle={
+                                      isCompletedRow
+                                        ? "Already completed"
+                                        : "Send back to callings (same POC)"
+                                    }
+                                    onEdit={() => setEditInterviewFor(i)}
+                                    onAssignInterviewer={() =>
+                                      setAssignInterviewerFor(i)
+                                    }
+                                    onRevert={() => void handleRevertInterview(i)}
+                                    onReschedule={() =>
+                                      setRescheduleCtx({
+                                        interview: i,
+                                        mode: i.previous_scheduled_date?.trim()
+                                          ? "from_rescheduled"
+                                          : "from_scheduled",
+                                      })
+                                    }
+                                    onNoShow={() => setNoShowFor(i)}
+                                    onMarkCompleted={() => openCompleteModal(i)}
+                                  />
                                 </td>
                               </tr>
                             );

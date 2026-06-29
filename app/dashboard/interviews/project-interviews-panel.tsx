@@ -52,6 +52,7 @@ import { ConfirmSocialPostsModal } from "./confirm-social-posts-modal";
 import { EditInterviewDetailsModal } from "./edit-interview-details-modal";
 import { FinalizeDispatchModal } from "./finalize-dispatch-modal";
 import { MarkNoShowModal } from "./mark-no-show-modal";
+import { ScheduledInterviewRowActions } from "./scheduled-interview-row-actions";
 import { PhysicalInterviewCityModal } from "./physical-interview-city-modal";
 import { isPostRescheduleDraftRow } from "./interview-reschedule-workflow";
 import {
@@ -1849,7 +1850,7 @@ export function ProjectInterviewsPanel({
   const thFollowUp = `${thBase} min-w-[150px] text-left`;
   const tdFollowUp = `${tdBase} min-w-[150px] text-left`;
   const thActions = `${thBase} min-w-[120px] text-right`;
-  const tdActions = `${tdBase} min-w-[120px] text-right`;
+  const tdActions = `${tdBase} relative min-w-[120px] text-right`;
   const thDateTime = `${thBase} min-w-[170px] text-left`;
   const tdDateTime = `${tdBase} min-w-[170px] text-left`;
   const thInterviewer = `${thBase} min-w-[120px] text-left`;
@@ -2638,96 +2639,46 @@ export function ProjectInterviewsPanel({
                             {followupBadgeForProjectCandidate(i.project_candidate_id)}
                           </td>
                           <td className={tdActions}>
-                            <div className="flex flex-wrap items-center justify-end gap-2">
-                              <button
-                                type="button"
-                                disabled={!canEditScheduledTab}
-                                title={
-                                  !canEditScheduledTab
-                                    ? "View only"
-                                    : undefined
-                                }
-                                className="rounded-lg border border-border bg-elevated px-3 py-1.5 text-xs font-medium text-foreground hover:bg-background/80 disabled:cursor-not-allowed disabled:border-border disabled:text-muted"
-                                onClick={() =>
-                                  canEditScheduledTab
-                                    ? setEditInterviewFor(i)
-                                    : undefined
-                                }
-                              >
-                                Edit
-                              </button>
-                              {!hasIv &&
-                              (isDraftRow ||
-                                Boolean(i.previous_scheduled_date?.trim())) ? (
-                                <button
-                                  type="button"
-                                  className="rounded-lg bg-[#2563eb] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#1d4ed8]"
-                                  onClick={() => setAssignInterviewerFor(i)}
-                                >
-                                  Assign Interviewer
-                                </button>
-                              ) : null}
-                              <button
-                                type="button"
-                                disabled={
-                                  !canEditScheduledTab ||
-                                  !canTakeInterviewActions ||
-                                  revertBusyId === i.id
-                                }
-                                title={
-                                  blockedActionTitle ??
-                                  "Send back to callings (same POC)"
-                                }
-                                className="rounded-lg border border-border bg-elevated px-3 py-1.5 text-xs font-medium text-foreground hover:bg-background/80 disabled:cursor-not-allowed disabled:border-border disabled:text-muted"
-                                onClick={() => {
-                                  if (
-                                    !canEditScheduledTab ||
-                                    !canTakeInterviewActions ||
-                                    revertBusyId === i.id
-                                  )
-                                    return;
-                                  void handleRevertProjectInterview(i);
-                                }}
-                              >
-                                {revertBusyId === i.id
-                                  ? "Reverting…"
-                                  : "Revert"}
-                              </button>
-                              <button
-                                type="button"
-                                className="rounded-lg bg-[#ea580c] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#c2410c] disabled:cursor-not-allowed disabled:opacity-40 disabled:text-muted"
-                                onClick={() =>
-                                  onRescheduleProjectInterview(
-                                    i,
-                                    i.previous_scheduled_date?.trim()
-                                      ? "from_rescheduled"
-                                      : "from_scheduled",
-                                  )
-                                }
-                                disabled={!canEditScheduledTab || !canTakeInterviewActions}
-                                title={blockedActionTitle}
-                              >
-                                Reschedule
-                              </button>
-                              <button
-                                type="button"
-                                className="rounded-lg border border-[#fecaca] bg-[#fef2f2] px-3 py-1.5 text-xs font-medium text-[#dc2626] hover:bg-[#fee2e2] disabled:cursor-not-allowed disabled:opacity-40 disabled:text-muted"
-                                onClick={() => setNoShowFor(i)}
-                                disabled={!canEditScheduledTab || !canTakeInterviewActions}
-                                title={blockedActionTitle}
-                              >
-                                No show
-                              </button>
-                              <button
-                                type="button"
-                                className="rounded-lg bg-[#16a34a] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#15803d] disabled:cursor-not-allowed disabled:opacity-40 disabled:text-muted"
-                                onClick={() => onPostProjectInterview(i)}
-                                disabled={!canEditScheduledTab || !canTakeInterviewActions}
-                                title={blockedActionTitle}
-                              >
-                                Mark completed
-                              </button>
-                            </div>
+                            <ScheduledInterviewRowActions
+                              canEdit={canEditScheduledTab}
+                              showAssignInterviewer={
+                                !hasIv &&
+                                (isDraftRow ||
+                                  Boolean(i.previous_scheduled_date?.trim()))
+                              }
+                              canRevert={
+                                canTakeInterviewActions &&
+                                revertBusyId !== i.id
+                              }
+                              revertBusy={revertBusyId === i.id}
+                              canReschedule={canTakeInterviewActions}
+                              canNoShow={canTakeInterviewActions}
+                              canMarkCompleted={canTakeInterviewActions}
+                              blockedTitle={blockedActionTitle}
+                              revertTitle={
+                                blockedActionTitle ??
+                                "Send back to callings (same POC)"
+                              }
+                              onEdit={() => setEditInterviewFor(i)}
+                              onAssignInterviewer={() =>
+                                setAssignInterviewerFor(i)
+                              }
+                              onRevert={() =>
+                                void handleRevertProjectInterview(i)
+                              }
+                              onReschedule={() =>
+                                onRescheduleProjectInterview(
+                                  i,
+                                  i.previous_scheduled_date?.trim()
+                                    ? "from_rescheduled"
+                                    : "from_scheduled",
+                                )
+                              }
+                              onNoShow={() => setNoShowFor(i)}
+                              onMarkCompleted={() =>
+                                onPostProjectInterview(i)
+                              }
+                            />
                           </td>
                         </tr>
                       );
