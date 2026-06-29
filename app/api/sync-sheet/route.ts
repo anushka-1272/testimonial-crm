@@ -1,12 +1,14 @@
 import { isValid, parseISO } from "date-fns";
 import { createClient } from "@supabase/supabase-js";
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 
 import { runAssessEligibilityAndPersist } from "@/lib/candidate-assessment";
 import { getUserSafe } from "@/lib/supabase-auth";
 import { createSupabaseAdmin } from "@/lib/supabase";
 
 export const runtime = "nodejs";
+/** Sheet sync + AI scoring can run long on large batches (Vercel Pro). */
+export const maxDuration = 300;
 
 /** Testimonial candidates — Google Sheet (not project pipeline). */
 const SHEET_ID = "1tw4h3C1wYi1Nyt2CjXaf_eRSHV1-pV9g8i8-r2J5_F0";
@@ -125,10 +127,6 @@ function declarationFromCell(cell: GvizCell): boolean {
     return true;
   }
   return s.length > 0;
-}
-
-function escapeILikeExact(value: string): string {
-  return value.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
 }
 
 function sleep(ms: number): Promise<void> {
@@ -276,6 +274,94 @@ function rowFromSheetCells(
   };
 }
 
+type SupabaseAdmin = ReturnType<typeof createSupabaseAdmin>;
+
+type ExistingCandidate = {
+  id: string;
+  is_deleted: boolean;
+};
+
+/** Preload emails so sync does not issue one SELECT per sheet row. */
+async function loadExistingCandidates(supabase: SupabaseAdmin): Promise<{
+  byEmail: Map<string, ExistingCandidate>;
+  error: string | null;
+}> {
+  const byEmail = new Map<string, ExistingCandidate>();
+  let rangeStart = 0;
+  const pageSize = 1000;
+  for (;;) {
+    const { data: batch, error } = await supabase
+      .from("candidates")
+      .select("id, email, is_deleted")
+      .order("id", { ascending: true })
+      .range(rangeStart, rangeStart + pageSize - 1);
+    if (error) {
+      return { byEmail, error: error.message };
+    }
+    const chunk = batch ?? [];
+    for (const r of chunk) {
+      const email = String(r.email ?? "")
+        .trim()
+        .toLowerCase();
+      if (!email) continue;
+      byEmail.set(email, {
+        id: String(r.id),
+        is_deleted: Boolean(r.is_deleted),
+      });
+    }
+    if (chunk.length < pageSize) break;
+    rangeStart += pageSize;
+  }
+  return { byEmail, error: null };
+}
+
+function isUniqueViolation(err: { code?: string; message?: string }): boolean {
+  if (err.code === "23505") return true;
+  const m = (err.message ?? "").toLowerCase();
+  return m.includes("duplicate key") || m.includes("unique constraint");
+}
+
+async function scoreCandidatesInBackground(
+  supabase: SupabaseAdmin,
+  candidateIds: string[],
+): Promise<void> {
+  if (candidateIds.length === 0) return;
+
+  const { data: needScoreRows, error: needScoreErr } = await supabase
+    .from("candidates")
+    .select("id, email")
+    .in("id", candidateIds)
+    .is("ai_eligibility_score", null)
+    .eq("is_deleted", false);
+
+  if (needScoreErr) {
+    console.error("AI scoring prefetch failed:", needScoreErr.message);
+    return;
+  }
+
+  const candidatesNeedingScore = needScoreRows ?? [];
+  const total = candidatesNeedingScore.length;
+  for (let i = 0; i < total; i++) {
+    const row = candidatesNeedingScore[i];
+    const email = row.email ?? row.id;
+    console.log(`Scoring candidate ${i + 1} of ${total}: ${email}`);
+    try {
+      const result = await runAssessEligibilityAndPersist(
+        supabase,
+        row.id as string,
+      );
+      if (!result.ok) {
+        console.error("AI scoring failed for:", email, result.error);
+      }
+    } catch (err) {
+      console.error("AI scoring failed for:", email, err);
+    }
+    if (i < total - 1) {
+      await sleep(1000);
+    }
+  }
+}
+
 async function verifyRequestUser(request: Request) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -302,8 +388,6 @@ export async function POST(request: Request) {
   let newInserted = 0;
   let updatedRows = 0;
   let skippedEmptyEmail = 0;
-  let scored = 0;
-  let failedScore = 0;
 
   try {
     const user = await verifyRequestUser(request);
@@ -392,6 +476,25 @@ export async function POST(request: Request) {
     totalRows = dataRows.length;
 
     const supabase = createSupabaseAdmin();
+    const { byEmail: existingByEmail, error: existingLoadErr } =
+      await loadExistingCandidates(supabase);
+    if (existingLoadErr) {
+      return NextResponse.json(
+        {
+          error: `Failed to load existing candidates: ${existingLoadErr}`,
+          total_rows: totalRows,
+          new_inserted: 0,
+          updated_rows: 0,
+          upserted: 0,
+          scored: 0,
+          failed: 0,
+          skipped_empty_email: 0,
+          errors: [],
+        },
+        { status: 500 },
+      );
+    }
+
     /** Candidate rows successfully written this run (insert or update). */
     const syncedCandidateIds = new Set<string>();
 
@@ -400,7 +503,7 @@ export async function POST(request: Request) {
       const sheetRowNum = RANGE_FIRST_ROW + idx;
       const c = row.c ?? [];
 
-      const emailRaw = cellToString(c[1] ?? null).trim();
+      const emailRaw = cellToString(cellAt(c, columnMap, "email")).trim();
       if (!emailRaw) {
         skippedEmptyEmail++;
         continue;
@@ -408,12 +511,7 @@ export async function POST(request: Request) {
 
       const emailNormalized = emailRaw.toLowerCase();
       const payload = rowFromSheetCells(c, emailNormalized, columnMap);
-
-      const { data: existing } = await supabase
-        .from("candidates")
-        .select("id, is_deleted")
-        .ilike("email", escapeILikeExact(emailRaw.trim()))
-        .maybeSingle();
+      const existing = existingByEmail.get(emailNormalized);
 
       if (existing?.is_deleted) {
         errors.push(
@@ -454,19 +552,27 @@ export async function POST(request: Request) {
         .single();
 
       if (insErr) {
-        const dup =
-          insErr.code === "23505" ||
-          (insErr.message ?? "").toLowerCase().includes("duplicate");
-        if (dup) {
-          const { data: clash } = await supabase
-            .from("candidates")
-            .select("is_deleted")
-            .ilike("email", escapeILikeExact(emailRaw.trim()))
-            .maybeSingle();
+        if (isUniqueViolation(insErr)) {
+          const clash = existingByEmail.get(emailNormalized);
           if (clash?.is_deleted) {
             errors.push(
               `Row ${sheetRowNum}: skipped (deleted candidate with same email — not restored)`,
             );
+            continue;
+          }
+          if (clash?.id) {
+            const { created_at: _omitCreated, ...updateFields } = payload;
+            const { error: upErr } = await supabase
+              .from("candidates")
+              .update(updateFields)
+              .eq("id", clash.id)
+              .eq("is_deleted", false);
+            if (upErr) {
+              errors.push(`Row ${sheetRowNum}: ${upErr.message}`);
+              continue;
+            }
+            syncedCandidateIds.add(clash.id);
+            updatedRows++;
             continue;
           }
         }
@@ -475,53 +581,21 @@ export async function POST(request: Request) {
       }
 
       if (inserted?.id) {
+        existingByEmail.set(emailNormalized, {
+          id: String(inserted.id),
+          is_deleted: false,
+        });
         syncedCandidateIds.add(inserted.id);
         newInserted++;
       }
     }
 
     const idsSynced = [...syncedCandidateIds];
-    if (idsSynced.length > 0) {
-      const { data: needScoreRows, error: needScoreErr } = await supabase
-        .from("candidates")
-        .select("id, email")
-        .in("id", idsSynced)
-        .is("ai_eligibility_score", null)
-        .eq("is_deleted", false);
-
-      if (needScoreErr) {
-        errors.push(`AI scoring prefetch: ${needScoreErr.message}`);
-      } else {
-        const candidatesNeedingScore = needScoreRows ?? [];
-        const total = candidatesNeedingScore.length;
-        for (let i = 0; i < total; i++) {
-          const row = candidatesNeedingScore[i];
-          const email = row.email ?? row.id;
-          console.log(`Scoring candidate ${i + 1} of ${total}: ${email}`);
-          try {
-            const result = await runAssessEligibilityAndPersist(
-              supabase,
-              row.id as string,
-            );
-            if (result.ok) {
-              scored++;
-            } else {
-              failedScore++;
-              errors.push(`Assessment ${row.id}: ${result.error}`);
-              console.error("AI scoring failed for:", email, result.error);
-            }
-          } catch (err) {
-            failedScore++;
-            console.error("AI scoring failed for:", email, err);
-            errors.push(
-              `Assessment ${row.id}: ${err instanceof Error ? err.message : String(err)}`,
-            );
-          }
-          if (i < total - 1) {
-            await sleep(1000);
-          }
-        }
-      }
+    const pendingScoreCount = idsSynced.length;
+    if (pendingScoreCount > 0) {
+      after(async () => {
+        await scoreCandidatesInBackground(supabase, idsSynced);
+      });
     }
 
     const upserted = newInserted + updatedRows;
@@ -532,8 +606,9 @@ export async function POST(request: Request) {
       new_inserted: newInserted,
       updated_rows: updatedRows,
       upserted,
-      scored,
-      failed: failedScore,
+      scored: 0,
+      failed: 0,
+      scoring_queued: pendingScoreCount,
       skipped_empty_email: skippedEmptyEmail,
       errors,
     });
@@ -547,8 +622,8 @@ export async function POST(request: Request) {
         new_inserted: newInserted,
         updated_rows: updatedRows,
         upserted: newInserted + updatedRows,
-        scored,
-        failed: failedScore,
+        scored: 0,
+        failed: 0,
         skipped_empty_email: skippedEmptyEmail,
         errors,
       },
