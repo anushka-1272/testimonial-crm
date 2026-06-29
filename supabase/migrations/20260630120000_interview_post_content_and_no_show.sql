@@ -30,7 +30,7 @@ ALTER TABLE public.project_interviews
 COMMENT ON COLUMN public.interviews.post_content_status IS
   'Social post / dispatch pipeline after interview completion.';
 COMMENT ON COLUMN public.interviews.no_show_reason IS
-  'Required reason when interview_status is no_show.';
+  'Optional note when interview_status is no_show.';
 COMMENT ON COLUMN public.project_interviews.post_content_status IS
   'Social post / dispatch pipeline after project interview completion.';
 

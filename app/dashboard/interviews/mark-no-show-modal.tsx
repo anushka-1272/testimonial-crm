@@ -64,10 +64,6 @@ export function MarkNoShowModal({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const trimmed = reason.trim();
-    if (!trimmed) {
-      setError("Reason is required.");
-      return;
-    }
     setSubmitting(true);
     setError(null);
     const table = isProject ? "project_interviews" : "interviews";
@@ -76,7 +72,7 @@ export function MarkNoShowModal({
       .from(table)
       .update({
         interview_status: "no_show",
-        no_show_reason: trimmed,
+        no_show_reason: trimmed || null,
         no_show_at: now,
       })
       .eq("id", interview.id);
@@ -96,7 +92,9 @@ export function MarkNoShowModal({
         entity_type: isProject ? "project_interview" : "interview",
         entity_id: interview.id,
         candidate_name: label,
-        description: `Marked no show for ${label} — ${trimmed}`,
+        description: trimmed
+          ? `Marked no show for ${label} — ${trimmed}`
+          : `Marked no show for ${label}`,
       });
     }
 
@@ -118,7 +116,7 @@ export function MarkNoShowModal({
         <form onSubmit={(e) => void handleSubmit(e)} className="mt-4 space-y-4">
           <label className="block text-sm">
             <span className="text-xs font-medium uppercase tracking-widest text-muted/80">
-              Reason <span className="text-[#dc2626]">*</span>
+              Reason <span className="font-normal normal-case text-muted">(optional)</span>
             </span>
             <textarea
               className="mt-1 w-full resize-y rounded-xl border border-border px-3 py-2.5 text-sm text-foreground focus:border-[#3b82f6] focus:outline-none"
@@ -126,7 +124,6 @@ export function MarkNoShowModal({
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               placeholder="e.g. Did not join Zoom, no response on WhatsApp"
-              required
             />
           </label>
           {error ? (
