@@ -11,6 +11,7 @@ import { useAccessControl } from "@/components/access-control-context";
 import { ProjectCandidateDetailModal } from "@/components/project-candidate-detail-modal";
 import { ZoomDetailsModal } from "@/components/ZoomDetailsModal";
 import { logActivity } from "@/lib/activity-logger";
+import { buildNoShowRevertPatch } from "@/lib/interview-no-show";
 import {
   normalizePhysicalInterviewStatus,
   PHYSICAL_INTERVIEW_DISPATCH_COMMENT,
@@ -718,6 +719,9 @@ export function ProjectInterviewsPanel({
     useState<ProjectInterviewWithProjectCandidate | null>(null);
   const [finalizeDispatchFor, setFinalizeDispatchFor] =
     useState<ProjectInterviewWithProjectCandidate | null>(null);
+  const [noShowRevertBusyId, setNoShowRevertBusyId] = useState<string | null>(
+    null,
+  );
 
   const { role, canEditCurrentPage } = useAccessControl();
   const canEditScheduledTab =
@@ -1423,6 +1427,54 @@ export function ProjectInterviewsPanel({
 
   const setPage = (tab: ProjectSubTab, page: number) => {
     setFilters((prev) => ({ ...prev, [tab]: { ...prev[tab], page } }));
+  };
+
+  const handleRevertNoShowToScheduled = async (
+    i: ProjectInterviewWithProjectCandidate,
+  ) => {
+    if (!i.scheduled_date?.trim()) {
+      onError("Cannot revert — this interview has no scheduled date/time.");
+      return;
+    }
+    const pc = i.project_candidates;
+    const display = pc ? projectDisplayName(pc) : "Candidate";
+    const when = formatDateTime(i.scheduled_date);
+    const confirmed = window.confirm(
+      `Revert ${display} back to Scheduled?\n\nOriginal slot: ${when}`,
+    );
+    if (!confirmed) return;
+
+    setNoShowRevertBusyId(i.id);
+    const patch = buildNoShowRevertPatch(i);
+    const { error: upErr } = await supabase
+      .from("project_interviews")
+      .update(patch)
+      .eq("id", i.id);
+
+    if (upErr) {
+      setNoShowRevertBusyId(null);
+      onError(upErr.message);
+      return;
+    }
+
+    const auth = await getUserSafe(supabase);
+    if (auth) {
+      await logActivity({
+        supabase,
+        user: auth,
+        action_type: "interviews",
+        entity_type: "project_interview",
+        entity_id: i.id,
+        candidate_name: display,
+        description: `Reverted no show to scheduled for ${display} (${when})`,
+      });
+    }
+
+    setNoShowRevertBusyId(null);
+    onToast?.(`${display} moved back to Scheduled.`);
+    setSubTab("scheduled");
+    void loadProjectData();
+    onPipelineChanged();
   };
 
   const deleteProjectCandidate = async (pc: ProjectCandidateRow) => {
@@ -3130,6 +3182,21 @@ export function ProjectInterviewsPanel({
                           </td>
                           <td className={tdActions}>
                             <div className="flex flex-wrap justify-end gap-2">
+                              <button
+                                type="button"
+                                className="rounded-lg border border-border bg-elevated px-3 py-1.5 text-xs font-medium text-foreground hover:bg-background disabled:opacity-40"
+                                disabled={
+                                  !canEditScheduledTab ||
+                                  noShowRevertBusyId === i.id
+                                }
+                                onClick={() =>
+                                  void handleRevertNoShowToScheduled(i)
+                                }
+                              >
+                                {noShowRevertBusyId === i.id
+                                  ? "Reverting…"
+                                  : "Revert to schedule"}
+                              </button>
                               <button
                                 type="button"
                                 className="rounded-lg bg-[#ea580c] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#c2410c] disabled:opacity-40"
