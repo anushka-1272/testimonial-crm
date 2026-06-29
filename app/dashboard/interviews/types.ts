@@ -5,7 +5,14 @@ export type InterviewColumnStatus =
   | "scheduled"
   | "rescheduled"
   | "completed"
-  | "cancelled";
+  | "cancelled"
+  | "no_show";
+
+export type PostContentStatus =
+  | "awaiting_posts"
+  | "posts_confirmed"
+  | "dispatch_ready"
+  | "not_applicable";
 
 export type InterviewWithCandidate = {
   id: string;
@@ -32,6 +39,13 @@ export type InterviewWithCandidate = {
   funnel: string | null;
   comments: string | null;
   interview_type: TestimonialInterviewType;
+  post_content_status: PostContentStatus | null;
+  linkedin_post_url: string | null;
+  blog_post_url: string | null;
+  posts_confirmed_at: string | null;
+  skip_social_posts: boolean;
+  no_show_reason: string | null;
+  no_show_at: string | null;
   candidates: {
     id: string;
     created_at?: string;
@@ -175,6 +189,13 @@ export type ProjectInterviewWithProjectCandidate = {
   funnel: string | null;
   comments: string | null;
   interview_type: "project";
+  post_content_status: PostContentStatus | null;
+  linkedin_post_url: string | null;
+  blog_post_url: string | null;
+  posts_confirmed_at: string | null;
+  skip_social_posts: boolean;
+  no_show_reason: string | null;
+  no_show_at: string | null;
   project_candidates: ProjectCandidateRow | null;
 };
 

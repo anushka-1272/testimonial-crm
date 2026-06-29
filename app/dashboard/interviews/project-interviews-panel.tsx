@@ -29,6 +29,15 @@ import {
   type InterviewerSelectOption,
 } from "@/lib/interviewer-enum";
 import {
+  canConfirmSocialPosts,
+  canFinalizeDispatch,
+  matchesPostContentStageFilter,
+  postContentStatusBadgeClass,
+  postContentStatusLabel,
+  POST_CONTENT_STAGE_FILTER_OPTIONS,
+  type PostContentStageFilter,
+} from "@/lib/post-interview-content";
+import {
   canMoveToPostProduction,
   POST_PRODUCTION_ELIGIBILITY_TOOLTIP,
 } from "@/lib/post-production-eligibility";
@@ -38,7 +47,10 @@ import {
 } from "@/lib/team-roster";
 
 import { AssignInterviewerModal } from "./assign-interviewer-modal";
+import { ConfirmSocialPostsModal } from "./confirm-social-posts-modal";
 import { EditInterviewDetailsModal } from "./edit-interview-details-modal";
+import { FinalizeDispatchModal } from "./finalize-dispatch-modal";
+import { MarkNoShowModal } from "./mark-no-show-modal";
 import { PhysicalInterviewCityModal } from "./physical-interview-city-modal";
 import { isPostRescheduleDraftRow } from "./interview-reschedule-workflow";
 import {
@@ -58,10 +70,10 @@ import type {
 const PAGE_SIZE = 20;
 
 /** Interview rows only — join `project_candidates` client-side so a failed embed never blocks loading candidates. */
-const PROJECT_INTERVIEW_COLUMNS = `id, created_at, project_candidate_id, scheduled_date, previous_scheduled_date, reschedule_reason, completed_at, interviewer, interviewer_assigned_at, zoom_link, zoom_account, not_eligible_recording_link, language, invitation_sent, poc, remarks, reminder_count, interview_status, post_interview_eligible, reward_item, category, funnel, comments, interview_type`;
+const PROJECT_INTERVIEW_COLUMNS = `id, created_at, project_candidate_id, scheduled_date, previous_scheduled_date, reschedule_reason, completed_at, interviewer, interviewer_assigned_at, zoom_link, zoom_account, not_eligible_recording_link, language, invitation_sent, poc, remarks, reminder_count, interview_status, post_interview_eligible, reward_item, category, funnel, comments, interview_type, post_content_status, linkedin_post_url, blog_post_url, posts_confirmed_at, skip_social_posts, no_show_reason, no_show_at`;
 const PROJECT_INTERVIEW_COLUMNS_LEGACY = `id, created_at, project_candidate_id, scheduled_date, previous_scheduled_date, reschedule_reason, completed_at, interviewer, interviewer_assigned_at, zoom_link, zoom_account, language, invitation_sent, poc, remarks, reminder_count, interview_status, post_interview_eligible, reward_item, category, funnel, comments, interview_type`;
 
-type ProjectSubTab = "pending" | "scheduled" | "completed" | "notEligible";
+type ProjectSubTab = "pending" | "scheduled" | "completed" | "notEligible" | "noShow";
 
 /** Sentinel for POC filter dropdown (rows with no POC). */
 const POC_FILTER_UNASSIGNED = "__poc_unassigned__";
@@ -265,6 +277,15 @@ function normalizeProjectInterviewRow(
     category: (r.category as string | null) ?? null,
     funnel: (r.funnel as string | null) ?? null,
     comments: (r.comments as string | null) ?? null,
+    post_content_status:
+      (r.post_content_status as ProjectInterviewWithProjectCandidate["post_content_status"]) ??
+      null,
+    linkedin_post_url: (r.linkedin_post_url as string | null) ?? null,
+    blog_post_url: (r.blog_post_url as string | null) ?? null,
+    posts_confirmed_at: (r.posts_confirmed_at as string | null) ?? null,
+    skip_social_posts: Boolean(r.skip_social_posts),
+    no_show_reason: (r.no_show_reason as string | null) ?? null,
+    no_show_at: (r.no_show_at as string | null) ?? null,
     project_candidates: pc,
   } as ProjectInterviewWithProjectCandidate;
 }
@@ -624,6 +645,7 @@ const defaultFilters = (): Record<ProjectSubTab, TabFilters> => ({
   scheduled: { search: "", page: 0, poc: "all", interviewer: "all" },
   completed: { search: "", page: 0, poc: "all", interviewer: "all" },
   notEligible: { search: "", page: 0, poc: "all", interviewer: "all" },
+  noShow: { search: "", page: 0, poc: "all", interviewer: "all" },
 });
 
 function hasAssignedProjectInterviewer(
@@ -686,6 +708,16 @@ export function ProjectInterviewsPanel({
     useState<ProjectInterviewWithProjectCandidate | null>(null);
   const [logFollowupFor, setLogFollowupFor] =
     useState<ProjectLogFollowupRow | null>(null);
+  const [dispatchProjectCandidateIds, setDispatchProjectCandidateIds] =
+    useState<Set<string>>(() => new Set());
+  const [completedPostContentStage, setCompletedPostContentStage] =
+    useState<PostContentStageFilter>("all");
+  const [noShowFor, setNoShowFor] =
+    useState<ProjectInterviewWithProjectCandidate | null>(null);
+  const [confirmPostsFor, setConfirmPostsFor] =
+    useState<ProjectInterviewWithProjectCandidate | null>(null);
+  const [finalizeDispatchFor, setFinalizeDispatchFor] =
+    useState<ProjectInterviewWithProjectCandidate | null>(null);
 
   const { role, canEditCurrentPage } = useAccessControl();
   const canEditScheduledTab =
@@ -731,7 +763,8 @@ export function ProjectInterviewsPanel({
     if (
       projectInterviewError?.message?.includes(
         "column project_interviews.not_eligible_recording_link does not exist",
-      )
+      ) ||
+      projectInterviewError?.message?.includes("post_content_status")
     ) {
       const { data: legacyPi, error: legacyErr } = await supabase
         .from("project_interviews")
@@ -741,6 +774,13 @@ export function ProjectInterviewsPanel({
         legacyPi?.map((row) => ({
           ...row,
           not_eligible_recording_link: null,
+          post_content_status: null,
+          linkedin_post_url: null,
+          blog_post_url: null,
+          posts_confirmed_at: null,
+          skip_social_posts: false,
+          no_show_reason: null,
+          no_show_at: null,
         })) ?? null;
       projectInterviewError = legacyErr;
     }
@@ -812,6 +852,17 @@ export function ProjectInterviewsPanel({
     } else {
       setFollowupLogs((fl ?? []) as FollowupLogStatusRow[]);
     }
+
+    const { data: dispatchRows } = await supabase
+      .from("project_dispatch")
+      .select("project_candidate_id");
+    setDispatchProjectCandidateIds(
+      new Set(
+        (dispatchRows ?? [])
+          .map((d) => String(d.project_candidate_id ?? "").trim())
+          .filter(Boolean),
+      ),
+    );
 
     if (eCandidates && projectInterviewError) {
       onError(
@@ -1047,8 +1098,13 @@ export function ProjectInterviewsPanel({
       scheduled: [] as ProjectInterviewWithProjectCandidate[],
       completed: [] as ProjectInterviewWithProjectCandidate[],
       notEligible: [] as ProjectInterviewWithProjectCandidate[],
+      noShow: [] as ProjectInterviewWithProjectCandidate[],
     };
     for (const i of interviews) {
+      if (i.interview_status === "no_show") {
+        m.noShow.push(i);
+        continue;
+      }
       if (
         isStaleActiveProjectInterview(
           i,
@@ -1096,7 +1152,8 @@ export function ProjectInterviewsPanel({
             (i) =>
               i.interview_status === "scheduled" ||
               i.interview_status === "rescheduled" ||
-              i.interview_status === "draft",
+              i.interview_status === "draft" ||
+              i.interview_status === "no_show",
           )
           .map((i) => i.project_candidate_id),
       ),
@@ -1195,6 +1252,15 @@ export function ProjectInterviewsPanel({
   const completedFiltered = useMemo(
     () =>
       [...byStatus.completed.filter((i) => {
+        if (
+          !matchesPostContentStageFilter(
+            i,
+            completedPostContentStage,
+            dispatchProjectCandidateIds,
+            true,
+          )
+        )
+          return false;
         if (!matchesInterviewSearch(i, filters.completed.search))
           return false;
         if (
@@ -1214,6 +1280,36 @@ export function ProjectInterviewsPanel({
       filters.completed.search,
       filters.completed.poc,
       filters.completed.interviewer,
+      completedPostContentStage,
+      dispatchProjectCandidateIds,
+    ],
+  );
+
+  const noShowFiltered = useMemo(
+    () =>
+      [...byStatus.noShow.filter((i) => {
+        if (!matchesInterviewSearch(i, filters.noShow.search)) return false;
+        if (
+          !pocMatchesFilter(
+            filters.noShow.poc,
+            effectivePocForProjectInterview(i),
+          )
+        )
+          return false;
+        return interviewerMatchesFilter(
+          filters.noShow.interviewer,
+          i.interviewer,
+        );
+      })].sort((a, b) => {
+        const dateA = new Date(a.no_show_at || a.scheduled_date || 0).getTime();
+        const dateB = new Date(b.no_show_at || b.scheduled_date || 0).getTime();
+        return dateB - dateA;
+      }),
+    [
+      byStatus.noShow,
+      filters.noShow.search,
+      filters.noShow.poc,
+      filters.noShow.interviewer,
     ],
   );
 
@@ -1271,6 +1367,10 @@ export function ProjectInterviewsPanel({
   const completedPage = useMemo(
     () => paginate(completedFiltered, filters.completed.page),
     [completedFiltered, filters.completed.page],
+  );
+  const noShowPage = useMemo(
+    () => paginate(noShowFiltered, filters.noShow.page),
+    [noShowFiltered, filters.noShow.page],
   );
   const notEligiblePage = useMemo(
     () => paginate(notEligibleFiltered, filters.notEligible.page),
@@ -1777,7 +1877,8 @@ export function ProjectInterviewsPanel({
               ["pending", "Pending", pendingQueue.length],
               ["scheduled", "Scheduled", scheduledFiltered.length],
               ["completed", "Completed", completedFiltered.length],
-                ["notEligible", "Not eligible", notEligibleFiltered.length],
+              ["noShow", "No show", noShowFiltered.length],
+              ["notEligible", "Not eligible", notEligibleFiltered.length],
             ] as const
           ).map(([id, label, n]) => (
             <button
@@ -2558,6 +2659,15 @@ export function ProjectInterviewsPanel({
                               </button>
                               <button
                                 type="button"
+                                className="rounded-lg border border-[#fecaca] bg-[#fef2f2] px-3 py-1.5 text-xs font-medium text-[#dc2626] hover:bg-[#fee2e2] disabled:cursor-not-allowed disabled:opacity-40 disabled:text-muted"
+                                onClick={() => setNoShowFor(i)}
+                                disabled={!canEditScheduledTab || !canTakeInterviewActions}
+                                title={blockedActionTitle}
+                              >
+                                No show
+                              </button>
+                              <button
+                                type="button"
                                 className="rounded-lg bg-[#16a34a] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#15803d] disabled:cursor-not-allowed disabled:opacity-40 disabled:text-muted"
                                 onClick={() => onPostProjectInterview(i)}
                                 disabled={!canEditScheduledTab || !canTakeInterviewActions}
@@ -2642,6 +2752,27 @@ export function ProjectInterviewsPanel({
                 ))}
               </select>
             </label>
+            <label className="flex w-full flex-col gap-1 sm:w-52 sm:shrink-0">
+              <span className="text-xs uppercase tracking-widest text-muted/80">
+                Content stage
+              </span>
+              <select
+                className={filterInp}
+                value={completedPostContentStage}
+                onChange={(e) => {
+                  setCompletedPostContentStage(
+                    e.target.value as PostContentStageFilter,
+                  );
+                  patchFilter("completed", { page: 0 });
+                }}
+              >
+                {POST_CONTENT_STAGE_FILTER_OPTIONS.map(({ value, label }) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
           <div className={tableWrap}>
             <div className="w-full overflow-x-auto">
@@ -2656,6 +2787,7 @@ export function ProjectInterviewsPanel({
                     <th className={thPostInterview}>
                       Post-interview eligible
                     </th>
+                    <th className={thPostInterview}>Content stage</th>
                     <th
                       className={thPostProdGate}
                       title={POST_PRODUCTION_ELIGIBILITY_TOOLTIP}
@@ -2711,6 +2843,13 @@ export function ProjectInterviewsPanel({
                               i.reward_item,
                             )}
                           </td>
+                          <td className={tdPostInterview}>
+                            <span
+                              className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${postContentStatusBadgeClass(i.post_content_status)}`}
+                            >
+                              {postContentStatusLabel(i.post_content_status)}
+                            </span>
+                          </td>
                           <td className={tdPostProdGate}>
                             {postProductionGateBadgeProject(i)}
                           </td>
@@ -2751,6 +2890,42 @@ export function ProjectInterviewsPanel({
                                 }}
                               >
                                 Log Call (Post)
+                              </button>
+                              <button
+                                type="button"
+                                disabled={
+                                  !canEditScheduledTab ||
+                                  !canConfirmSocialPosts(i.post_content_status)
+                                }
+                                className="rounded-lg border border-[#bfdbfe] bg-[#eff6ff] px-2.5 py-1 text-xs font-medium text-[#2563eb] hover:bg-[#dbeafe] disabled:opacity-40"
+                                onMouseDown={(e) => e.stopPropagation()}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setConfirmPostsFor(i);
+                                }}
+                              >
+                                Confirm posts
+                              </button>
+                              <button
+                                type="button"
+                                disabled={
+                                  !canEditScheduledTab ||
+                                  !canFinalizeDispatch(
+                                    i.post_content_status,
+                                    i.reward_item,
+                                  ) ||
+                                  dispatchProjectCandidateIds.has(
+                                    i.project_candidate_id,
+                                  )
+                                }
+                                className="rounded-lg border border-[#bbf7d0] bg-[#f0fdf4] px-2.5 py-1 text-xs font-medium text-[#16a34a] hover:bg-[#dcfce7] disabled:opacity-40"
+                                onMouseDown={(e) => e.stopPropagation()}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setFinalizeDispatchFor(i);
+                                }}
+                              >
+                                Finalize dispatch
                               </button>
                               <button
                                 type="button"
@@ -2891,6 +3066,108 @@ export function ProjectInterviewsPanel({
               "completed",
               completedPage.totalPages,
               completedPage.total,
+            )}
+          </div>
+        </section>
+      )}
+
+      {subTab === "noShow" && (
+        <section className="space-y-4">
+          <label className="flex min-w-0 max-w-md flex-col gap-1">
+            <span className="text-xs uppercase tracking-widest text-muted/80">
+              Search
+            </span>
+            <input
+              type="search"
+              placeholder="Name, email, or title"
+              className={filterInp}
+              value={filters.noShow.search}
+              onChange={(e) =>
+                patchFilter("noShow", { search: e.target.value })
+              }
+            />
+          </label>
+          <div className={tableWrap}>
+            <div className="w-full overflow-x-auto">
+              <table className="w-full min-w-[1000px] table-auto border-collapse">
+                <thead>
+                  <tr>
+                    <th className={thName}>Name</th>
+                    <th className={thEmail}>Email</th>
+                    <th className={thCompletedOn}>Scheduled for</th>
+                    <th className={thInterviewer}>Interviewer</th>
+                    <th className={thCommentsCol}>No-show reason</th>
+                    <th className={thCompletedOn}>Marked at</th>
+                    <th className={thActions}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {noShowPage.slice.length === 0 ? (
+                    <tr>
+                      <td className={tdBase} colSpan={7}>
+                        No entries here yet
+                      </td>
+                    </tr>
+                  ) : (
+                    noShowPage.slice.map((i) => {
+                      const pc = i.project_candidates;
+                      if (!pc) return null;
+                      return (
+                        <tr key={i.id}>
+                          <td className={tdName}>{projectDisplayName(pc)}</td>
+                          <td className={tdEmail}>{pc.email?.trim() || "—"}</td>
+                          <td className={tdCompletedOn}>
+                            {formatDateTime(i.scheduled_date)}
+                          </td>
+                          <td className={tdInterviewer}>
+                            {formatInterviewerStoredForUi(i.interviewer)}
+                          </td>
+                          <td className={tdCommentsCol}>
+                            <CommentTableCell value={i.no_show_reason} />
+                          </td>
+                          <td className={tdCompletedOn}>
+                            {formatDateTime(i.no_show_at)}
+                          </td>
+                          <td className={tdActions}>
+                            <div className="flex flex-wrap justify-end gap-2">
+                              <button
+                                type="button"
+                                className="rounded-lg bg-[#ea580c] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#c2410c] disabled:opacity-40"
+                                disabled={!canEditScheduledTab}
+                                onClick={() =>
+                                  onRescheduleProjectInterview(
+                                    i,
+                                    "from_scheduled",
+                                  )
+                                }
+                              >
+                                Reschedule
+                              </button>
+                              <button
+                                type="button"
+                                className="rounded-lg border border-border bg-elevated px-3 py-1.5 text-xs font-medium text-foreground hover:bg-background disabled:opacity-40"
+                                disabled={!canEditScheduledTab}
+                                onClick={() =>
+                                  setLogFollowupFor(
+                                    projectCandidateForLogModal(pc),
+                                  )
+                                }
+                              >
+                                Log follow-up
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+            {renderPagination(
+              "noShow",
+              noShowPage.totalPages,
+              noShowPage.total,
             )}
           </div>
         </section>
@@ -3231,6 +3508,39 @@ export function ProjectInterviewsPanel({
               }
             : undefined
         }
+      />
+
+      <MarkNoShowModal
+        open={!!noShowFor}
+        interview={noShowFor}
+        supabase={supabase}
+        onClose={() => setNoShowFor(null)}
+        onSaved={() => {
+          void loadProjectData();
+          onPipelineChanged();
+        }}
+      />
+
+      <ConfirmSocialPostsModal
+        open={!!confirmPostsFor}
+        interview={confirmPostsFor}
+        supabase={supabase}
+        onClose={() => setConfirmPostsFor(null)}
+        onSaved={() => {
+          void loadProjectData();
+          onPipelineChanged();
+        }}
+      />
+
+      <FinalizeDispatchModal
+        open={!!finalizeDispatchFor}
+        interview={finalizeDispatchFor}
+        supabase={supabase}
+        onClose={() => setFinalizeDispatchFor(null)}
+        onSaved={() => {
+          void loadProjectData();
+          onPipelineChanged();
+        }}
       />
 
       <LogFollowupCallModal

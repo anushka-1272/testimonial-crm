@@ -21,14 +21,16 @@ const cardChrome =
 type ProjectPipelineStats = {
   pending: number;
   scheduled: number;
-  completed: number;
+  interviewsCompleted: number;
+  inDispatch: number;
 };
 
 /** Matches `ProjectInterviewsPanel` pending-queue rules (no search filter). */
 async function loadProjectPipelineStats(
   supabase: SupabaseClient,
 ): Promise<ProjectPipelineStats> {
-  const [{ data: pcRows }, { data: piRows }] = await Promise.all([
+  const [{ data: pcRows }, { data: piRows }, { data: dispatchRows }] =
+    await Promise.all([
     supabase
       .from("project_candidates")
       .select("id, status, interview_type")
@@ -37,6 +39,7 @@ async function loadProjectPipelineStats(
     supabase
       .from("project_interviews")
       .select("project_candidate_id, interview_status, completed_at"),
+    supabase.from("project_dispatch").select("id"),
   ]);
 
   const interviews = piRows ?? [];
@@ -49,7 +52,8 @@ async function loadProjectPipelineStats(
         (r) =>
           r.interview_status === "draft" ||
           r.interview_status === "scheduled" ||
-          r.interview_status === "rescheduled",
+          r.interview_status === "rescheduled" ||
+          r.interview_status === "no_show",
       )
       .map((r) => r.project_candidate_id as string),
   );
@@ -74,13 +78,19 @@ async function loadProjectPipelineStats(
       Boolean((r as { completed_at?: string | null }).completed_at?.trim());
     if (done) return false;
     const st = (r.interview_status ?? "").trim().toLowerCase();
-    if (st === "cancelled") return false;
+    if (st === "cancelled" || st === "no_show") return false;
     return true;
   }).length;
-  const completed = interviews.filter((r) => r.interview_status === "completed")
-    .length;
+  const interviewsCompleted = interviews.filter(
+    (r) => r.interview_status === "completed",
+  ).length;
 
-  return { pending, scheduled, completed };
+  return {
+    pending,
+    scheduled,
+    interviewsCompleted,
+    inDispatch: (dispatchRows ?? []).length,
+  };
 }
 
 export function ProjectInterviewsPage() {
@@ -97,7 +107,8 @@ export function ProjectInterviewsPage() {
   const [stats, setStats] = useState<ProjectPipelineStats>({
     pending: 0,
     scheduled: 0,
-    completed: 0,
+    interviewsCompleted: 0,
+    inDispatch: 0,
   });
   const [statsTick, setStatsTick] = useState(0);
 
@@ -117,7 +128,8 @@ export function ProjectInterviewsPage() {
           setStats({
             pending: 0,
             scheduled: 0,
-            completed: 0,
+            interviewsCompleted: 0,
+            inDispatch: 0,
           });
         }
       }
@@ -190,7 +202,7 @@ export function ProjectInterviewsPage() {
           </div>
         ) : null}
 
-        <section className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-3 lg:gap-4">
+        <section className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
           {(
             [
               {
@@ -207,9 +219,15 @@ export function ProjectInterviewsPage() {
               },
               {
                 key: "completed",
-                label: "Completed",
-                value: stats.completed,
+                label: "Interviews completed",
+                value: stats.interviewsCompleted,
                 accent: "bg-[#059669]",
+              },
+              {
+                key: "dispatch",
+                label: "In dispatch",
+                value: stats.inDispatch,
+                accent: "bg-[#7c3aed]",
               },
             ] as const
           ).map((card) => (

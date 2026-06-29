@@ -66,6 +66,8 @@ export function buildRescheduleDraftPatch(input: {
     zoom_account: null,
     interviewer_assigned_at: null,
     invitation_sent: false,
+    no_show_reason: null,
+    no_show_at: null,
   };
 }
 

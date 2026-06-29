@@ -42,6 +42,15 @@ import {
   type PhysicalInterviewStatus,
 } from "@/lib/physical-interview-track";
 import {
+  canConfirmSocialPosts,
+  canFinalizeDispatch,
+  matchesPostContentStageFilter,
+  postContentStatusBadgeClass,
+  postContentStatusLabel,
+  POST_CONTENT_STAGE_FILTER_OPTIONS,
+  type PostContentStageFilter,
+} from "@/lib/post-interview-content";
+import {
   canMoveToPostProduction,
   POST_PRODUCTION_ELIGIBILITY_TOOLTIP,
 } from "@/lib/post-production-eligibility";
@@ -65,6 +74,9 @@ import {
 } from "@/lib/ui-theme-classes";
 
 import { PostInterviewDrawer } from "./post-interview-drawer";
+import { ConfirmSocialPostsModal } from "./confirm-social-posts-modal";
+import { FinalizeDispatchModal } from "./finalize-dispatch-modal";
+import { MarkNoShowModal } from "./mark-no-show-modal";
 import { RescheduleInterviewModal } from "./reschedule-interview-modal";
 import { AssignInterviewerModal } from "./assign-interviewer-modal";
 import { EditInterviewDetailsModal } from "./edit-interview-details-modal";
@@ -85,12 +97,12 @@ import type {
 
 const PAGE_SIZE = 20;
 
-const INTERVIEW_SELECT = `id, candidate_id, scheduled_date, previous_scheduled_date, reschedule_reason, completed_at, interviewer, interviewer_assigned_at, zoom_link, zoom_account, not_eligible_recording_link, language, interview_language, invitation_sent, poc, remarks, reminder_count, interview_status, post_interview_eligible, reward_item, category, funnel, comments, interview_type, candidates ( id, created_at, full_name, email, whatsapp_number, poc_assigned, is_deleted )`;
+const INTERVIEW_SELECT = `id, candidate_id, scheduled_date, previous_scheduled_date, reschedule_reason, completed_at, interviewer, interviewer_assigned_at, zoom_link, zoom_account, not_eligible_recording_link, language, interview_language, invitation_sent, poc, remarks, reminder_count, interview_status, post_interview_eligible, reward_item, category, funnel, comments, interview_type, post_content_status, linkedin_post_url, blog_post_url, posts_confirmed_at, skip_social_posts, no_show_reason, no_show_at, candidates ( id, created_at, full_name, email, whatsapp_number, poc_assigned, is_deleted )`;
 const INTERVIEW_SELECT_LEGACY = `id, candidate_id, scheduled_date, previous_scheduled_date, reschedule_reason, completed_at, interviewer, interviewer_assigned_at, zoom_link, zoom_account, language, interview_language, invitation_sent, poc, remarks, reminder_count, interview_status, post_interview_eligible, reward_item, category, funnel, comments, interview_type, candidates ( id, created_at, full_name, email, whatsapp_number, poc_assigned, is_deleted )`;
 
 
 
-type BoardTab = "eligible" | "scheduled" | "completed" | "notEligible";
+type BoardTab = "eligible" | "scheduled" | "completed" | "notEligible" | "noShow";
 
 type InterviewTypeFilter = TestimonialInterviewTypeFilter;
 
@@ -164,6 +176,7 @@ type PostInterviewEligibleFilter = "all" | "eligible" | "not_eligible";
 
 type CompletedTabFilters = TableFilters & {
   postInterviewEligible: PostInterviewEligibleFilter;
+  postContentStage: PostContentStageFilter;
   completedFrom: string;
   completedTo: string;
   category: string;
@@ -184,6 +197,7 @@ const emptyFilters = (): TableFilters => ({
 const defaultCompletedFilters = (): CompletedTabFilters => ({
   ...emptyFilters(),
   postInterviewEligible: "all",
+  postContentStage: "all",
   completedFrom: "",
   completedTo: "",
   category: "",
@@ -231,8 +245,18 @@ function interviewCategoryLines(raw: string | null | undefined): string[] {
 function filterCompletedInterviews(
   rows: InterviewWithCandidate[],
   f: CompletedTabFilters,
+  dispatchCandidateIds: Set<string>,
 ): InterviewWithCandidate[] {
   return rows.filter((i) => {
+    if (
+      !matchesPostContentStageFilter(
+        { ...i, candidate_id: i.candidate_id },
+        f.postContentStage,
+        dispatchCandidateIds,
+        false,
+      )
+    )
+      return false;
     if (
       f.interviewType !== "all" &&
       i.interview_type !== f.interviewType
@@ -638,6 +662,15 @@ function normalizeInterviewRow(
     not_eligible_recording_link:
       (r.not_eligible_recording_link as string | null | undefined) ?? null,
     interview_language: (r.interview_language as string | null | undefined) ?? null,
+    post_content_status:
+      (r.post_content_status as InterviewWithCandidate["post_content_status"]) ??
+      null,
+    linkedin_post_url: (r.linkedin_post_url as string | null) ?? null,
+    blog_post_url: (r.blog_post_url as string | null) ?? null,
+    posts_confirmed_at: (r.posts_confirmed_at as string | null) ?? null,
+    skip_social_posts: Boolean(r.skip_social_posts),
+    no_show_reason: (r.no_show_reason as string | null) ?? null,
+    no_show_at: (r.no_show_at as string | null) ?? null,
     candidates: candidate,
   } as InterviewWithCandidate;
 }
@@ -748,6 +781,7 @@ export function InterviewsBoard() {
     eligible: emptyFilters(),
     scheduled: emptyFilters(),
     notEligible: emptyFilters(),
+    noShow: emptyFilters(),
   });
   const [completedFilters, setCompletedFilters] = useState<CompletedTabFilters>(
     defaultCompletedFilters,
@@ -755,6 +789,16 @@ export function InterviewsBoard() {
   const [completedPopoverId, setCompletedPopoverId] = useState<string | null>(
     null,
   );
+  const [dispatchCandidateIds, setDispatchCandidateIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [noShowFor, setNoShowFor] = useState<InterviewWithCandidate | null>(
+    null,
+  );
+  const [confirmPostsFor, setConfirmPostsFor] =
+    useState<InterviewWithCandidate | null>(null);
+  const [finalizeDispatchFor, setFinalizeDispatchFor] =
+    useState<InterviewWithCandidate | null>(null);
   const [postProdBusyId, setPostProdBusyId] = useState<string | null>(null);
   const [notEligibleRecordingBusyId, setNotEligibleRecordingBusyId] = useState<
     string | null
@@ -800,7 +844,8 @@ export function InterviewsBoard() {
     if (
       interviewError?.message?.includes(
         "column interviews.not_eligible_recording_link does not exist",
-      )
+      ) ||
+      interviewError?.message?.includes("post_content_status")
     ) {
       const { data: legacyInv, error: legacyErr } = await supabase
         .from("interviews")
@@ -813,6 +858,17 @@ export function InterviewsBoard() {
       setError(e1?.message ?? interviewError?.message ?? "Failed to load");
       return;
     }
+
+    const { data: dispatchRows } = await supabase
+      .from("dispatch")
+      .select("candidate_id");
+    setDispatchCandidateIds(
+      new Set(
+        (dispatchRows ?? [])
+          .map((d) => String(d.candidate_id ?? "").trim())
+          .filter(Boolean),
+      ),
+    );
 
     const list = dedupeInterviewRows(
       (interviewRows ?? [])
@@ -829,7 +885,8 @@ export function InterviewsBoard() {
           (i) =>
             i.interview_status === "scheduled" ||
             i.interview_status === "rescheduled" ||
-            i.interview_status === "draft",
+            i.interview_status === "draft" ||
+            i.interview_status === "no_show",
         )
         .map((i) => i.candidate_id),
     );
@@ -997,8 +1054,13 @@ export function InterviewsBoard() {
       scheduled: [] as InterviewWithCandidate[],
       completed: [] as InterviewWithCandidate[],
       notEligible: [] as InterviewWithCandidate[],
+      noShow: [] as InterviewWithCandidate[],
     };
     for (const i of interviews) {
+      if (i.interview_status === "no_show") {
+        m.noShow.push(i);
+        continue;
+      }
       if (isCompletedInterview(i)) {
         if (i.post_interview_eligible === false) {
           m.notEligible.push(i);
@@ -1020,8 +1082,12 @@ export function InterviewsBoard() {
       scheduled: byStatus.scheduled.length,
       completed: byStatus.completed.length,
       notEligible: byStatus.notEligible.length,
+      noShow: byStatus.noShow.length,
+      interviewsCompleted:
+        byStatus.completed.length + byStatus.notEligible.length,
+      inDispatch: dispatchCandidateIds.size,
     }),
-    [eligibleQueue.length, byStatus],
+    [eligibleQueue.length, byStatus, dispatchCandidateIds.size],
   );
 
   const pocFilterNames = useMemo(() => {
@@ -1232,15 +1298,30 @@ export function InterviewsBoard() {
 
   const completedFiltered = useMemo(
     () =>
-      [...filterCompletedInterviews(byStatus.completed, completedFilters)].sort(
-        (a, b) => {
+      [
+        ...filterCompletedInterviews(
+          byStatus.completed,
+          completedFilters,
+          dispatchCandidateIds,
+        ),
+      ].sort((a, b) => {
           const dateA = new Date(a.completed_at || 0).getTime();
           const dateB = new Date(b.completed_at || 0).getTime();
           const cmp = dateB - dateA;
           return cmp !== 0 ? cmp : a.id.localeCompare(b.id);
-        },
-      ),
-    [byStatus.completed, completedFilters],
+      }),
+    [byStatus.completed, completedFilters, dispatchCandidateIds],
+  );
+
+  const noShowFiltered = useMemo(
+    () =>
+      [...filterInterviews(byStatus.noShow, filters.noShow)].sort((a, b) => {
+        const dateA = new Date(a.no_show_at || a.scheduled_date || 0).getTime();
+        const dateB = new Date(b.no_show_at || b.scheduled_date || 0).getTime();
+        const cmp = dateB - dateA;
+        return cmp !== 0 ? cmp : a.id.localeCompare(b.id);
+      }),
+    [byStatus.noShow, filters.noShow, filterInterviews],
   );
 
   const notEligibleFiltered = useMemo(
@@ -1291,6 +1372,32 @@ export function InterviewsBoard() {
   const notEligiblePage = useMemo(
     () => paginate(notEligibleFiltered, filters.notEligible.page),
     [notEligibleFiltered, filters.notEligible.page],
+  );
+  const noShowPage = useMemo(
+    () => paginate(noShowFiltered, filters.noShow.page),
+    [noShowFiltered, filters.noShow.page],
+  );
+
+  const eligibleCandidateFromInterview = useCallback(
+    (i: InterviewWithCandidate): EligibleCandidate => ({
+      id: i.candidate_id,
+      full_name: i.candidates?.full_name ?? null,
+      email: i.candidates?.email ?? "",
+      whatsapp_number: i.candidates?.whatsapp_number,
+      interview_type:
+        i.interview_type === "project" ? "project" : "testimonial",
+      poc_assigned: i.candidates?.poc_assigned ?? i.poc ?? null,
+      poc_assigned_at: null,
+      physical_interview_track: false,
+      physical_interview_status: null,
+      physical_interview_city: null,
+      followup_status: "pending",
+      followup_count: 0,
+      callback_datetime: null,
+      not_interested_reason: null,
+      not_interested_at: null,
+    }),
+    [],
   );
 
   const exportCompletedCsv = useCallback(() => {
@@ -1925,15 +2032,15 @@ export function InterviewsBoard() {
                   },
                   {
                     key: "completed",
-                    label: "Completed",
-                    value: counts.completed,
+                    label: "Interviews completed",
+                    value: counts.interviewsCompleted,
                     accent: "bg-[#059669]",
                   },
                   {
-                    key: "notEligible",
-                    label: "Not eligible",
-                    value: counts.notEligible,
-                    accent: "bg-[#dc2626]",
+                    key: "dispatch",
+                    label: "In dispatch",
+                    value: counts.inDispatch,
+                    accent: "bg-[#7c3aed]",
                   },
                 ] as const
               ).map((card) => (
@@ -1956,6 +2063,7 @@ export function InterviewsBoard() {
                     ["eligible", "Eligible", counts.eligible],
                     ["scheduled", "Scheduled", counts.scheduled],
                     ["completed", "Completed", counts.completed],
+                    ["noShow", "No show", counts.noShow],
                     ["notEligible", "Not eligible", counts.notEligible],
                   ] as const
                 ).map(([id, label, n]) => (
@@ -2852,6 +2960,20 @@ export function InterviewsBoard() {
                                     <button
                                       type="button"
                                       disabled={
+                                        !canEditScheduledTab || isCompletedRow
+                                      }
+                                      className="rounded-lg border border-[#fecaca] bg-[#fef2f2] px-3 py-1.5 text-xs font-medium text-[#dc2626] hover:bg-[#fee2e2] disabled:cursor-not-allowed disabled:opacity-40"
+                                      onClick={() => {
+                                        if (!canEditScheduledTab || isCompletedRow)
+                                          return;
+                                        setNoShowFor(i);
+                                      }}
+                                    >
+                                      No show
+                                    </button>
+                                    <button
+                                      type="button"
+                                      disabled={
                                         !canEditScheduledTab ||
                                         !hasZoom ||
                                         isCompletedRow
@@ -2970,6 +3092,29 @@ export function InterviewsBoard() {
 
                 <div className="flex flex-col gap-3 rounded-2xl border border-border-subtle bg-elevated p-4 shadow-sm">
                   <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+                    <label className="flex flex-col gap-1">
+                      <span className="text-xs uppercase tracking-widest text-muted/80">
+                        Content stage
+                      </span>
+                      <select
+                        className={filterInp}
+                        value={completedFilters.postContentStage}
+                        onChange={(e) =>
+                          patchCompletedFilters({
+                            postContentStage: e.target
+                              .value as PostContentStageFilter,
+                          })
+                        }
+                      >
+                        {POST_CONTENT_STAGE_FILTER_OPTIONS.map(
+                          ({ value, label }) => (
+                            <option key={value} value={value}>
+                              {label}
+                            </option>
+                          ),
+                        )}
+                      </select>
+                    </label>
                     <label className="flex flex-col gap-1">
                       <span className="text-xs uppercase tracking-widest text-muted/80">
                         Post-interview eligible
@@ -3113,6 +3258,7 @@ export function InterviewsBoard() {
                           <th className={thPostInterview}>
                             Post-interview eligible
                           </th>
+                          <th className={thPostInterview}>Content stage</th>
                           <th
                             className={thPostProdGate}
                             title={POST_PRODUCTION_ELIGIBILITY_TOOLTIP}
@@ -3128,7 +3274,7 @@ export function InterviewsBoard() {
                       <tbody>
                         {completedPage.slice.length === 0 ? (
                           <tr>
-                            <td className={tdBase} colSpan={12}>
+                            <td className={tdBase} colSpan={13}>
                               {emptyState}
                             </td>
                           </tr>
@@ -3174,6 +3320,13 @@ export function InterviewsBoard() {
                                     i.reward_item,
                                   )}
                                 </td>
+                                <td className={tdPostInterview}>
+                                  <span
+                                    className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${postContentStatusBadgeClass(i.post_content_status)}`}
+                                  >
+                                    {postContentStatusLabel(i.post_content_status)}
+                                  </span>
+                                </td>
                                 <td className={tdPostProdGate}>
                                   {postProductionEligibilityGateBadge(i)}
                                 </td>
@@ -3191,6 +3344,40 @@ export function InterviewsBoard() {
                                     className="relative flex flex-wrap items-center justify-end gap-2"
                                     data-completed-popover-root
                                   >
+                                    <button
+                                      type="button"
+                                      disabled={
+                                        !canEditCompletedTab ||
+                                        !canConfirmSocialPosts(i.post_content_status)
+                                      }
+                                      className="rounded-lg border border-[#bfdbfe] bg-[#eff6ff] px-2.5 py-1 text-xs font-medium text-[#2563eb] hover:bg-[#dbeafe] disabled:cursor-not-allowed disabled:opacity-40"
+                                      onMouseDown={(e) => e.stopPropagation()}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setConfirmPostsFor(i);
+                                      }}
+                                    >
+                                      Confirm posts
+                                    </button>
+                                    <button
+                                      type="button"
+                                      disabled={
+                                        !canEditCompletedTab ||
+                                        !canFinalizeDispatch(
+                                          i.post_content_status,
+                                          i.reward_item,
+                                        ) ||
+                                        dispatchCandidateIds.has(i.candidate_id)
+                                      }
+                                      className="rounded-lg border border-[#bbf7d0] bg-[#f0fdf4] px-2.5 py-1 text-xs font-medium text-[#16a34a] hover:bg-[#dcfce7] disabled:cursor-not-allowed disabled:opacity-40"
+                                      onMouseDown={(e) => e.stopPropagation()}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setFinalizeDispatchFor(i);
+                                      }}
+                                    >
+                                      Finalize dispatch
+                                    </button>
                                     <button
                                       type="button"
                                       disabled={
@@ -3356,6 +3543,110 @@ export function InterviewsBoard() {
                     "completed",
                     completedPage.totalPages,
                     completedPage.total,
+                  )}
+                </div>
+              </section>
+            )}
+
+            {activeTab === "noShow" && (
+              <section className="space-y-4">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+                  <label className="flex min-w-0 flex-1 flex-col gap-1">
+                    <span className="text-xs uppercase tracking-widest text-muted/80">
+                      Search
+                    </span>
+                    <input
+                      type="search"
+                      className={filterInp}
+                      placeholder="Name or email"
+                      value={filters.noShow.search}
+                      onChange={(e) =>
+                        updateFilter("noShow", { search: e.target.value })
+                      }
+                    />
+                  </label>
+                </div>
+                <div className={tableWrap}>
+                  <div className="w-full min-w-0 max-w-full overflow-x-auto">
+                    <table className="w-full min-w-[1100px] table-auto border-collapse">
+                      <thead>
+                        <tr>
+                          <th className={thName}>Name</th>
+                          <th className={thEmail}>Email</th>
+                          <th className={thDateTime}>Scheduled for</th>
+                          <th className={thInterviewer}>Interviewer</th>
+                          <th className={thCommentsCol}>No-show reason</th>
+                          <th className={thCompletedOn}>Marked at</th>
+                          <th className={thActions}>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {noShowPage.slice.length === 0 ? (
+                          <tr>
+                            <td className={tdBase} colSpan={7}>
+                              {emptyState}
+                            </td>
+                          </tr>
+                        ) : (
+                          noShowPage.slice.map((i) => (
+                            <tr key={i.id}>
+                              <td className={tdName}>
+                                {i.candidates?.full_name?.trim() || "—"}
+                              </td>
+                              <td className={tdEmail}>
+                                {i.candidates?.email || "—"}
+                              </td>
+                              <td className={tdDateTime}>
+                                {formatDateTime(i.scheduled_date)}
+                              </td>
+                              <td className={tdInterviewer}>
+                                {formatInterviewerStoredForUi(i.interviewer)}
+                              </td>
+                              <td className={tdCommentsCol}>
+                                <CommentTableCell value={i.no_show_reason} />
+                              </td>
+                              <td className={tdCompletedOn}>
+                                {formatDateTime(i.no_show_at)}
+                              </td>
+                              <td className={tdActions}>
+                                <div className="flex flex-wrap items-center justify-end gap-2">
+                                  <button
+                                    type="button"
+                                    disabled={!canEditScheduledTab}
+                                    className="rounded-lg bg-[#ea580c] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#c2410c] disabled:opacity-40"
+                                    onClick={() =>
+                                      setRescheduleCtx({
+                                        interview: i,
+                                        mode: "from_scheduled",
+                                      })
+                                    }
+                                  >
+                                    Reschedule
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={!canEditScheduledTab}
+                                    className="rounded-lg border border-border bg-elevated px-3 py-1.5 text-xs font-medium text-foreground hover:bg-background disabled:opacity-40"
+                                    onClick={() =>
+                                      setLogFollowupFor(
+                                        eligibleCandidateFromInterview(i),
+                                      )
+                                    }
+                                  >
+                                    Log follow-up
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                  {renderPagination(
+                    "noShow",
+                    noShowPage.totalPages,
+                    noShowPage.total,
                   )}
                 </div>
               </section>
@@ -3752,6 +4043,30 @@ export function InterviewsBoard() {
         mode={rescheduleCtx?.mode ?? "from_scheduled"}
         supabase={supabase}
         onClose={() => setRescheduleCtx(null)}
+        onSaved={() => void loadData()}
+      />
+
+      <MarkNoShowModal
+        open={!!noShowFor}
+        interview={noShowFor}
+        supabase={supabase}
+        onClose={() => setNoShowFor(null)}
+        onSaved={() => void loadData()}
+      />
+
+      <ConfirmSocialPostsModal
+        open={!!confirmPostsFor}
+        interview={confirmPostsFor}
+        supabase={supabase}
+        onClose={() => setConfirmPostsFor(null)}
+        onSaved={() => void loadData()}
+      />
+
+      <FinalizeDispatchModal
+        open={!!finalizeDispatchFor}
+        interview={finalizeDispatchFor}
+        supabase={supabase}
+        onClose={() => setFinalizeDispatchFor(null)}
         onSaved={() => void loadData()}
       />
 
