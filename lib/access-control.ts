@@ -11,7 +11,6 @@ export type AccessScope =
   | "analytics"
   | "eligibility"
   | "interviews"
-  | "gwc_testing"
   | "dispatch"
   | "activity"
   | "post_production"
@@ -24,9 +23,9 @@ export function canEditScope(role: TeamRole, scope: AccessScope): boolean {
   if (role === "viewer") return false;
   if (role === "interviewer") return scope === "interviews";
   if (role === "poc")
-    return scope === "eligibility" || scope === "interviews" || scope === "gwc_testing";
+    return scope === "eligibility" || scope === "interviews";
   if (role === "operations")
-    return scope === "interviews" || scope === "gwc_testing" || scope === "dispatch";
+    return scope === "interviews" || scope === "dispatch";
   if (role === "post_production") return scope === "post_production";
   return false;
 }

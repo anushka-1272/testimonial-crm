@@ -16,13 +16,12 @@ import {
   type DashboardPeriod,
 } from "@/lib/dashboard-ist-dates";
 import { logActivity } from "@/lib/activity-logger";
-import { ensureGwcTestingForCandidate } from "@/lib/gwc-testing-actions";
 import { displayNameFromUser, getUserSafe } from "@/lib/supabase-auth";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 
 type EligibilityStatus = "pending_review" | "eligible" | "not_eligible";
 
-export type InterviewTrack = "testimonial" | "project" | "gwc";
+export type InterviewTrack = "testimonial" | "project";
 
 export type CandidateRow = {
   id: string;
@@ -139,13 +138,6 @@ function interviewTypeTableCell(t: InterviewTrack | null | undefined) {
     return (
       <span className="inline-flex rounded-full bg-[#eff6ff] px-3 py-1 text-xs font-medium text-[#2563eb]">
         Project
-      </span>
-    );
-  }
-  if (t === "gwc") {
-    return (
-      <span className="inline-flex rounded-full bg-[#faf5ff] px-3 py-1 text-xs font-medium text-[#7c3aed]">
-        GWC
       </span>
     );
   }
@@ -378,11 +370,7 @@ export function EligibilityDashboard() {
     if (actor) {
       const display = r.full_name?.trim() || r.email || "Candidate";
       const trackLabel =
-        interviewType === "testimonial"
-          ? "Testimonial"
-          : interviewType === "project"
-            ? "Project"
-            : "GWC";
+        interviewType === "testimonial" ? "Testimonial" : "Project";
       if (
         r.eligibility_status === "eligible" &&
         r.interview_type !== interviewType
@@ -408,51 +396,6 @@ export function EligibilityDashboard() {
           description: `Marked ${display} as Eligible (${trackLabel})`,
         });
       }
-    }
-    setSelected((prev) => {
-      const n = new Set(prev);
-      n.delete(r.id);
-      return n;
-    });
-    setDetailCandidate((prev) => (prev?.id === r.id ? null : prev));
-  };
-
-  const markGwc = async (r: CandidateRow) => {
-    if (!canEditCurrentPage) return;
-    if (!supabase) return;
-    setBusyId(r.id);
-    const { error: uErr } = await supabase
-      .from("candidates")
-      .update({
-        eligibility_status: "eligible",
-        congratulation_call_pending: true,
-        interview_type: "gwc",
-      })
-      .eq("id", r.id)
-      .eq("is_deleted", false);
-    if (uErr) {
-      setBusyId(null);
-      setError(uErr.message);
-      return;
-    }
-    const { error: gwcErr } = await ensureGwcTestingForCandidate(supabase, r.id);
-    setBusyId(null);
-    if (gwcErr) {
-      setError(gwcErr);
-      return;
-    }
-    const actor = await getUserSafe(supabase);
-    if (actor) {
-      const display = r.full_name?.trim() || r.email || "Candidate";
-      await logActivity({
-        supabase,
-        user: actor,
-        action_type: "eligibility",
-        entity_type: "candidate",
-        entity_id: r.id,
-        candidate_name: display,
-        description: `Marked ${display} as Eligible (GWC Testing)`,
-      });
     }
     setSelected((prev) => {
       const n = new Set(prev);
@@ -1187,16 +1130,6 @@ export function EligibilityDashboard() {
                               >
                                 P
                               </button>
-                              <button
-                                type="button"
-                                disabled={busyId === r.id}
-                                title="Mark eligible for GWC Testing workflow"
-                                aria-label="Mark eligible as GWC"
-                                className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[#e9d5ff] bg-[#faf5ff] text-xs font-bold text-[#7c3aed] transition-colors hover:bg-[#f3e8ff] disabled:opacity-50"
-                                onClick={() => void markGwc(r)}
-                              >
-                                G
-                              </button>
                             </div>
                             <button
                               type="button"
@@ -1429,16 +1362,6 @@ export function EligibilityDashboard() {
               >
                 <Check className="h-4 w-4 shrink-0" strokeWidth={2.5} />
                 Project
-              </button>
-              <button
-                type="button"
-                disabled={busyId === detailCandidate.id}
-                title="Mark eligible for GWC Testing workflow"
-                className="inline-flex items-center justify-center gap-2 rounded-lg border border-[#e9d5ff] bg-[#faf5ff] px-4 py-2.5 text-sm font-medium text-[#7c3aed] transition-colors hover:bg-[#f3e8ff] disabled:opacity-50 sm:col-span-2"
-                onClick={() => void markGwc(detailCandidate)}
-              >
-                <Check className="h-4 w-4 shrink-0" strokeWidth={2.5} />
-                GWC Testing
               </button>
               <button
                 type="button"

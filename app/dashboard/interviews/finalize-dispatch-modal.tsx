@@ -85,6 +85,13 @@ export function FinalizeDispatchModal({
   if (!open || !interview) return null;
 
   const label = displayName(interview);
+  const subtitle = isProject
+    ? `${interview.project_candidates?.project_title?.trim() || "Project"} · ${interview.project_candidates?.email ?? ""}`
+    : `${interview.candidates?.full_name ?? "Candidate"} · ${interview.candidates?.email ?? ""}`;
+
+  const inp =
+    "mt-1 w-full resize-none rounded-xl border border-border px-3 py-2.5 text-sm text-foreground focus:border-[#3b82f6] focus:outline-none focus:ring-0";
+  const lab = "text-xs font-medium uppercase tracking-widest text-muted/80";
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -195,33 +202,63 @@ export function FinalizeDispatchModal({
 
   return (
     <div className={modalOverlayClass}>
-      <div className={modalPanelClass} role="dialog" aria-labelledby="finalize-dispatch-title">
-        <h2 id="finalize-dispatch-title" className="text-lg font-semibold text-foreground">
-          Finalize &amp; move to dispatch
-        </h2>
-        <p className="mt-1 text-sm text-muted">
-          {label} — reward: <strong>{rewardItem ?? "—"}</strong>
+      <button
+        type="button"
+        className="absolute inset-0"
+        aria-label="Close"
+        onClick={onClose}
+      />
+      <div
+        className={`${modalPanelClass} p-6 shadow-card`}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="finalize-dispatch-title"
+      >
+        <div className="mb-4 flex items-start justify-between">
+          <div>
+            <h2 id="finalize-dispatch-title" className="text-lg font-semibold text-foreground">
+              Finalize &amp; move to dispatch
+            </h2>
+            <p className="text-sm text-muted">{subtitle}</p>
+          </div>
+          <button
+            type="button"
+            className="rounded-xl p-2 text-muted/80 transition-all hover:bg-background hover:text-foreground"
+            aria-label="Close dialog"
+            onClick={onClose}
+          >
+            ✕
+          </button>
+        </div>
+
+        <p className="text-sm text-muted">
+          Reward item for {label}: <span className="font-medium text-foreground">{rewardItem ?? "—"}</span>
         </p>
-        <form onSubmit={(e) => void handleSubmit(e)} className="mt-4 space-y-4">
+
+        <form onSubmit={(e) => void handleSubmit(e)} className="mt-4 space-y-4 text-sm">
+          {error ? (
+            <p className="rounded-xl border border-border-subtle bg-background px-3 py-2 text-sm text-foreground">
+              {error}
+            </p>
+          ) : null}
+
           <label className="block text-sm">
-            <span className="text-xs font-medium uppercase tracking-widest text-muted/80">
+            <span className={lab}>
               Shipping address <span className="text-[#dc2626]">*</span>
             </span>
             <textarea
-              className="mt-1 w-full resize-y rounded-xl border border-border px-3 py-2.5 text-sm text-foreground focus:border-[#3b82f6] focus:outline-none"
               rows={4}
+              className={inp}
               value={shippingAddress}
               onChange={(e) => setShippingAddress(e.target.value)}
               required
             />
           </label>
-          {error ? (
-            <p className="text-sm text-[#dc2626]">{error}</p>
-          ) : null}
-          <div className="flex justify-end gap-2">
+
+          <div className="flex justify-end gap-2 pt-2">
             <button
               type="button"
-              className="rounded-xl border border-border px-4 py-2 text-sm font-medium text-muted hover:bg-background"
+              className="rounded-xl border border-border-subtle bg-elevated px-4 py-2 text-sm font-medium text-foreground transition-all hover:bg-background/80"
               onClick={onClose}
               disabled={submitting}
             >
@@ -229,7 +266,7 @@ export function FinalizeDispatchModal({
             </button>
             <button
               type="submit"
-              className="rounded-xl bg-foreground px-4 py-2 text-sm font-medium text-background hover:opacity-90 disabled:opacity-50"
+              className="rounded-xl bg-foreground px-4 py-2 text-sm font-medium text-background transition-all hover:opacity-90 disabled:opacity-50"
               disabled={submitting}
             >
               {submitting ? "Saving…" : "Create dispatch"}

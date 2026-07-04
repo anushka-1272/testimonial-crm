@@ -63,6 +63,13 @@ export function ConfirmSocialPostsModal({
 
   const isProject = isProjectInterviewRow(interview);
   const label = displayName(interview);
+  const subtitle = isProject
+    ? `${interview.project_candidates?.project_title?.trim() || "Project"} · ${interview.project_candidates?.email ?? ""}`
+    : `${interview.candidates?.full_name ?? "Candidate"} · ${interview.candidates?.email ?? ""}`;
+
+  const inp =
+    "mt-1 w-full rounded-xl border border-border px-3 py-2.5 text-sm text-foreground focus:border-[#3b82f6] focus:outline-none focus:ring-0";
+  const lab = "text-xs font-medium uppercase tracking-widest text-muted/80";
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -112,45 +119,72 @@ export function ConfirmSocialPostsModal({
 
   return (
     <div className={modalOverlayClass}>
-      <div className={modalPanelClass} role="dialog" aria-labelledby="confirm-posts-title">
-        <h2 id="confirm-posts-title" className="text-lg font-semibold text-foreground">
-          Confirm social posts
-        </h2>
-        <p className="mt-1 text-sm text-muted">
-          {label} — add at least one post link (LinkedIn or blog).
+      <button
+        type="button"
+        className="absolute inset-0"
+        aria-label="Close"
+        onClick={onClose}
+      />
+      <div
+        className={`${modalPanelClass} p-6 shadow-card`}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="confirm-posts-title"
+      >
+        <div className="mb-4 flex items-start justify-between">
+          <div>
+            <h2 id="confirm-posts-title" className="text-lg font-semibold text-foreground">
+              Confirm social posts
+            </h2>
+            <p className="text-sm text-muted">{subtitle}</p>
+          </div>
+          <button
+            type="button"
+            className="rounded-xl p-2 text-muted/80 transition-all hover:bg-background hover:text-foreground"
+            aria-label="Close dialog"
+            onClick={onClose}
+          >
+            ✕
+          </button>
+        </div>
+
+        <p className="text-sm text-muted">
+          Add at least one post link for {label} — LinkedIn or blog.
         </p>
-        <form onSubmit={(e) => void handleSubmit(e)} className="mt-4 space-y-4">
+
+        <form onSubmit={(e) => void handleSubmit(e)} className="mt-4 space-y-4 text-sm">
+          {error ? (
+            <p className="rounded-xl border border-border-subtle bg-background px-3 py-2 text-sm text-foreground">
+              {error}
+            </p>
+          ) : null}
+
           <label className="block text-sm">
-            <span className="text-xs font-medium uppercase tracking-widest text-muted/80">
-              LinkedIn post URL
-            </span>
+            <span className={lab}>LinkedIn post URL</span>
             <input
               type="url"
-              className="mt-1 w-full rounded-xl border border-border px-3 py-2.5 text-sm text-foreground focus:border-[#3b82f6] focus:outline-none"
+              className={inp}
               value={linkedinUrl}
               onChange={(e) => setLinkedinUrl(e.target.value)}
               placeholder="https://linkedin.com/…"
             />
           </label>
+
           <label className="block text-sm">
-            <span className="text-xs font-medium uppercase tracking-widest text-muted/80">
-              Blog post URL
-            </span>
+            <span className={lab}>Blog post URL</span>
             <input
               type="url"
-              className="mt-1 w-full rounded-xl border border-border px-3 py-2.5 text-sm text-foreground focus:border-[#3b82f6] focus:outline-none"
+              className={inp}
               value={blogUrl}
               onChange={(e) => setBlogUrl(e.target.value)}
               placeholder="https://…"
             />
           </label>
-          {error ? (
-            <p className="text-sm text-[#dc2626]">{error}</p>
-          ) : null}
-          <div className="flex justify-end gap-2">
+
+          <div className="flex justify-end gap-2 pt-2">
             <button
               type="button"
-              className="rounded-xl border border-border px-4 py-2 text-sm font-medium text-muted hover:bg-background"
+              className="rounded-xl border border-border-subtle bg-elevated px-4 py-2 text-sm font-medium text-foreground transition-all hover:bg-background/80"
               onClick={onClose}
               disabled={submitting}
             >
@@ -158,7 +192,7 @@ export function ConfirmSocialPostsModal({
             </button>
             <button
               type="submit"
-              className="rounded-xl bg-foreground px-4 py-2 text-sm font-medium text-background hover:opacity-90 disabled:opacity-50"
+              className="rounded-xl bg-foreground px-4 py-2 text-sm font-medium text-background transition-all hover:opacity-90 disabled:opacity-50"
               disabled={submitting}
             >
               {submitting ? "Saving…" : "Confirm posts"}

@@ -915,8 +915,7 @@ export function InterviewsBoard() {
       .filter(
         (c) =>
           !busy.has(c.id) &&
-          !completedCandidateIds.has(c.id) &&
-          (c as { interview_type?: string | null }).interview_type !== "gwc",
+          !completedCandidateIds.has(c.id),
       )
       .map((row) => {
         const r = row as Record<string, unknown>;

@@ -63,10 +63,6 @@ async function loadProjectPipelineStats(
     const id = c.id as string;
     if (activePipelineCandidateIds.has(id)) continue;
     const statusNorm = ((c.status as string | null) ?? "pending").trim() || "pending";
-    const interviewType = ((c.interview_type as string | null) ?? "")
-      .trim()
-      .toLowerCase();
-    if (statusNorm === "gwc" || interviewType === "gwc") continue;
     const hasInterview = candidateIdsWithInterview.has(id);
     const qualifiesPending = statusNorm === "pending" || !hasInterview;
     if (qualifiesPending) pending++;

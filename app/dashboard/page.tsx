@@ -125,7 +125,7 @@ function avatarHue(s: string): string {
   return `hsl(${h % 360} 65% 42%)`;
 }
 
-/** Testimonial funnel: exclude GWC-track candidates. */
+/** Testimonial funnel candidates (testimonial + project tracks from eligibility). */
 const TESTIMONIAL_CANDIDATE_TYPE_OR =
   "interview_type.is.null,interview_type.eq.testimonial,interview_type.eq.project";
 

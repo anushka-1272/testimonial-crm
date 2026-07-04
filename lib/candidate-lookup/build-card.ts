@@ -13,7 +13,7 @@ export type CandidateLookupSnapshot = {
   followupStatus: string | null;
   followupCount: number | null;
   callbackDatetime: string | null;
-  candidateInterviewType: "testimonial" | "project" | "gwc" | null;
+  candidateInterviewType: "testimonial" | "project" | null;
   interview: {
     effective:
       | "draft"

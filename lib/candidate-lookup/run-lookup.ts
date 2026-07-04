@@ -23,7 +23,7 @@ const DISPATCH_SELECT_MIN =
 
 type DbEligibility = "pending_review" | "eligible" | "not_eligible";
 type DbInterviewType = "testimonial" | "project" | "written_feedback";
-type DbCandidateInterviewType = "testimonial" | "project" | "gwc";
+type DbCandidateInterviewType = "testimonial" | "project";
 type DbDispatchStatus = "pending" | "dispatched" | "delivered";
 
 type CandidateRow = {

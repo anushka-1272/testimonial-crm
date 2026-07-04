@@ -3,7 +3,7 @@ export type CandidateLookupCardData = {
   fullName: string;
   email: string;
   phone: string | null;
-  interviewType: "testimonial" | "project" | "written_feedback" | "gwc" | null;
+  interviewType: "testimonial" | "project" | "written_feedback" | null;
   statusTitle: string;
   statusBadgeClass: string;
   statusDetailLines: string[];
