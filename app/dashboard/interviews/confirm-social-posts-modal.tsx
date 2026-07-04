@@ -63,7 +63,7 @@ export function ConfirmSocialPostsModal({
 
   const isProject = isProjectInterviewRow(interview);
   const label = displayName(interview);
-  const subtitle = isProject
+  const subtitle = isProjectInterviewRow(interview)
     ? `${interview.project_candidates?.project_title?.trim() || "Project"} · ${interview.project_candidates?.email ?? ""}`
     : `${interview.candidates?.full_name ?? "Candidate"} · ${interview.candidates?.email ?? ""}`;
 
