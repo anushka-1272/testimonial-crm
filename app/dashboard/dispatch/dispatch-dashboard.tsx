@@ -64,36 +64,41 @@ function isMissingProjectDispatchColumnError(message: string): boolean {
 async function loadProjectDispatchRows(
   supabase: NonNullable<ReturnType<typeof createBrowserSupabaseClient>>,
 ): Promise<{ rows: DispatchRow[]; warning: string | null }> {
-  let usedLegacy = false;
-  let result = await supabase
+  const primary = await supabase
     .from("project_dispatch")
     .select(PROJECT_SELECT)
     .eq("project_candidates.is_deleted", false)
     .order("dispatch_date", { ascending: false, nullsFirst: false });
 
-  if (
-    result.error &&
-    isMissingProjectDispatchColumnError(result.error.message)
-  ) {
-    usedLegacy = true;
-    result = await supabase
-      .from("project_dispatch")
-      .select(PROJECT_SELECT_LEGACY)
-      .eq("project_candidates.is_deleted", false)
-      .order("created_at", { ascending: false });
+  if (!primary.error) {
+    return {
+      rows: (primary.data ?? []).map((r) =>
+        normalizeProjectRow(r as Parameters<typeof normalizeProjectRow>[0]),
+      ),
+      warning: null,
+    };
   }
 
-  if (result.error) {
-    return { rows: [], warning: result.error.message };
+  if (!isMissingProjectDispatchColumnError(primary.error.message)) {
+    return { rows: [], warning: primary.error.message };
+  }
+
+  const legacy = await supabase
+    .from("project_dispatch")
+    .select(PROJECT_SELECT_LEGACY)
+    .eq("project_candidates.is_deleted", false)
+    .order("created_at", { ascending: false });
+
+  if (legacy.error) {
+    return { rows: [], warning: legacy.error.message };
   }
 
   return {
-    rows: (result.data ?? []).map((r) =>
+    rows: (legacy.data ?? []).map((r) =>
       normalizeProjectRow(r as Parameters<typeof normalizeProjectRow>[0]),
     ),
-    warning: usedLegacy
-      ? "Project dispatch is missing shipment columns in the database. Run the latest Supabase migrations to enable full tracking for project rewards."
-      : null,
+    warning:
+      "Project dispatch is missing shipment columns in the database. Run the latest Supabase migrations to enable full tracking for project rewards.",
   };
 }
 
