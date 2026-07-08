@@ -275,17 +275,29 @@ export default function DashboardPage() {
     setInterviewerOpts(ivOptions);
     const ivStats: Record<string, number> = {};
     for (const opt of ivOptions) {
-      let q = supabase
+      let testimonialQ = supabase
         .from("interviews")
         .select("id, candidates!inner(id)", { count: "exact", head: true })
         .eq("interviewer", opt.value)
         .or("interview_status.eq.completed,completed_at.not.is.null")
         .not("completed_at", "is", null)
         .eq("candidates.is_deleted", false);
-      if (rangeStart) q = q.gte("completed_at", rangeStart);
-      if (rangeEnd) q = q.lt("completed_at", rangeEnd);
-      const { count } = await q;
-      ivStats[opt.value] = count || 0;
+      if (rangeStart) testimonialQ = testimonialQ.gte("completed_at", rangeStart);
+      if (rangeEnd) testimonialQ = testimonialQ.lt("completed_at", rangeEnd);
+
+      let projectQ = supabase
+        .from("project_interviews")
+        .select("id, project_candidates!inner(id)", { count: "exact", head: true })
+        .eq("interviewer", opt.value)
+        .or("interview_status.eq.completed,completed_at.not.is.null")
+        .not("completed_at", "is", null)
+        .eq("project_candidates.is_deleted", false);
+      if (rangeStart) projectQ = projectQ.gte("completed_at", rangeStart);
+      if (rangeEnd) projectQ = projectQ.lt("completed_at", rangeEnd);
+
+      const [{ count: testimonialCount }, { count: projectCount }] =
+        await Promise.all([testimonialQ, projectQ]);
+      ivStats[opt.value] = (testimonialCount || 0) + (projectCount || 0);
     }
     setInterviewer(ivStats);
 
@@ -623,13 +635,13 @@ export default function DashboardPage() {
                     Interviewer performance
                   </h2>
                   <p className="mt-1 text-sm text-muted">
-                    Completed testimonial interviews · share of team total
+                    Completed interviews (testimonials + projects) · share of team total
                   </p>
                 </div>
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   {!loading && interviewerGrid.length === 0 ? (
                     <p className="text-sm text-muted md:col-span-2">
-                      No completed testimonial interviews in this period.
+                      No completed interviews in this period.
                     </p>
                   ) : null}
                   {interviewerGrid.map((row) => {
