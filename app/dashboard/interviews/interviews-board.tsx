@@ -132,8 +132,8 @@ const ZOOM_STATUS_FILTER_OPTIONS: { value: ZoomStatusFilter; label: string }[] =
   [
     { value: "all", label: "All" },
     { value: "awaiting_interviewer", label: "Awaiting Interviewer" },
-    { value: "awaiting_zoom", label: "Awaiting Zoom" },
-    { value: "zoom_added", label: "Zoom Added" },
+    { value: "awaiting_zoom", label: "Awaiting meeting" },
+    { value: "zoom_added", label: "Meeting added" },
   ];
 
 /** Sentinel for POC filter dropdown (rows with no POC). */
@@ -479,11 +479,11 @@ function zoomStatusColumn(
         </span>
       ) : awaitingZoom ? (
         <span className="inline-flex rounded-full bg-[#fff7ed] px-2.5 py-1 text-xs font-medium text-[#c2410c]">
-          Awaiting Zoom
+          Awaiting meeting
         </span>
       ) : hasZoom ? (
         <span className="inline-flex rounded-full bg-[#f0fdf4] px-2.5 py-1 text-xs font-medium text-[#15803d]">
-          Zoom Added
+          Meeting added
         </span>
       ) : (
         <span className="text-muted">—</span>
@@ -497,7 +497,7 @@ function zoomStatusColumn(
             href={link}
             target="_blank"
             rel="noopener noreferrer"
-            title={acct ? `Account: ${acct}` : "Join Zoom meeting"}
+            title={acct ? `Account: ${acct}` : "Join meeting"}
             className="inline-flex rounded-lg border border-border bg-elevated px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:bg-background"
           >
             Join
@@ -524,7 +524,7 @@ function zoomStatusColumn(
           className="rounded-lg border border-foreground bg-elevated px-2.5 py-1 text-xs font-medium text-foreground hover:bg-background/80 disabled:cursor-not-allowed disabled:opacity-40"
           onClick={() => (canOpenZoomModal ? opts.onOpenZoomModal(i) : undefined)}
         >
-          {link ? "Edit" : "Add Zoom Details"}
+          {link ? "Edit" : "Add meeting details"}
         </button>
       </div>
     </div>
@@ -1825,7 +1825,7 @@ export function InterviewsBoard() {
   const revokePhysicalInterviewTrack = async (c: EligibleCandidate) => {
     if (!supabase) return;
     const confirmed = window.confirm(
-      "Revoke physical interview track for this candidate?\n\nThey will move back to the Zoom interview scheduling queue.",
+      "Revoke physical interview track for this candidate?\n\nThey will move back to the meeting interview scheduling queue.",
     );
     if (!confirmed) return;
     setLiBusyId(c.id);
@@ -2515,7 +2515,7 @@ export function InterviewsBoard() {
                         Physical interview track
                       </h2>
                       <p className="mt-1 text-xs text-muted">
-                        These candidates are no longer in the Zoom scheduling
+                        These candidates are no longer in the meeting scheduling
                         queue. Conduct the in-person interview, then mark
                         completion and reward eligibility below.
                       </p>
@@ -2754,7 +2754,7 @@ export function InterviewsBoard() {
                     </label>
                     <label className="flex w-full flex-col gap-1 sm:w-48">
                       <span className="text-xs uppercase tracking-widest text-muted/80">
-                        Zoom status
+                        Meeting status
                       </span>
                       <select
                         className={filterInp}
@@ -2832,7 +2832,7 @@ export function InterviewsBoard() {
                           <th className={thLanguage}>Language</th>
                           <th className={thDateTime}>Date &amp; time</th>
                           <th className={thInterviewer}>Interviewer</th>
-                          <th className={thZoomStatus}>Zoom status</th>
+                          <th className={thZoomStatus}>Meeting status</th>
                           <th className={thPocInterview}>POC</th>
                           <th className={thCommentsCol}>Remarks</th>
                           <th className={thActions}>Actions</th>
@@ -2926,7 +2926,7 @@ export function InterviewsBoard() {
                                     canMarkCompleted={hasZoom && !isCompletedRow}
                                     markCompletedTitle={
                                       !hasZoom
-                                        ? "Add Zoom details first"
+                                        ? "Add meeting details first"
                                         : isCompletedRow
                                           ? "Already completed"
                                           : undefined
@@ -3723,7 +3723,7 @@ export function InterviewsBoard() {
                           <th className={thInterviewType}>Interview type</th>
                           <th className={thCompletedOn}>Completed on</th>
                           <th className={thInterviewer}>Interviewer</th>
-                          <th className={thZoomStatus}>Zoom</th>
+                          <th className={thZoomStatus}>Meeting</th>
                           <th className={thCommentsCol}>Recording</th>
                           <th className={thCommentsCol}>Comments</th>
                         </tr>
@@ -3951,7 +3951,7 @@ export function InterviewsBoard() {
                 : row,
             ),
           );
-          setToastMessage("Zoom details saved");
+          setToastMessage("Meeting details saved");
         }}
       />
 

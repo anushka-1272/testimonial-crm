@@ -173,7 +173,7 @@ export function MarkNoShowModal({
               className={inp}
               value={reason}
               onChange={(e) => setReason(e.target.value)}
-              placeholder="e.g. Did not join Zoom, no response on WhatsApp"
+              placeholder="e.g. Did not join meeting, no response on WhatsApp"
             />
           </label>
 

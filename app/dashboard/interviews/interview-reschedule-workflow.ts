@@ -109,19 +109,24 @@ function slackStep1RescheduledAnushka(
   return `${base}${slackProjectInterviewSuffix(kind)}`;
 }
 
-/** Step 2: after interviewer is assigned on a post-reschedule draft, notify Dishan to add Zoom. */
-export function slackStep2InterviewerAssignedDishan(
+/** After interviewer is assigned, notify meeting coordinator to add link and schedule. */
+export function slackInterviewerAssignedMeetingCoordinator(
   candidateName: string,
+  formattedDateTime: string,
+  interviewerLabel: string,
   kind: ReschedulePipelineKind,
 ): string {
   const base =
-    `Interviewer assigned for ${candidateName}. Please add Zoom link.`;
+    `Interviewer assigned for *${candidateName}*\n` +
+    `*Date & Time:* ${formattedDateTime}\n` +
+    `*Interviewer:* ${interviewerLabel}\n` +
+    `Please add meeting link and schedule.`;
   return `${base}${slackProjectInterviewSuffix(kind)}`;
 }
 
 /**
  * Apply reschedule: move row to draft, clear Zoom & interviewer, persist new slot + reason,
- * log activity, notify Anushka (step 1). Dishan is notified only after assign (step 2).
+ * log activity, notify Anushka (step 1). Meeting coordinator is notified after assign (step 2).
  */
 export async function handleReschedule(
   supabase: SupabaseClient,

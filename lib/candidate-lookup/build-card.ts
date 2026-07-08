@@ -189,15 +189,15 @@ export function buildCandidateLookupCard(
       const lines: string[] = [`Interviewer: ${ivName}`];
       const full = formatSlot(iv.scheduledDate);
       if (full) lines.push(`Slot: ${full}`);
-      lines.push("Zoom link is not live yet.");
+      lines.push("Meeting link is not live yet.");
       return {
         fullName: "",
         email: "",
         phone: null,
         interviewType,
         statusTitle: head
-          ? `Scheduled for ${head} — Zoom pending`
-          : "Interview slot reserved — Zoom pending",
+          ? `Scheduled for ${head} — meeting pending`
+          : "Interview slot reserved — meeting pending",
         statusBadgeClass: badge.amber,
         statusDetailLines: lines,
         followup: null,

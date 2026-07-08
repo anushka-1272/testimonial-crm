@@ -54,26 +54,26 @@ export function ZoomDetailsModal({
 
   const hasExistingZoom =
     Boolean(existingZoomLink?.trim()) || Boolean(existingZoomAccount?.trim());
-  const title = hasExistingZoom ? "Edit Zoom Details" : "Add Zoom Details";
+  const title = hasExistingZoom ? "Edit Meeting Details" : "Add Meeting Details";
 
   const handleSave = async () => {
     const link = zoomLink.trim();
     const account = zoomAccount.trim();
 
     if (!link) {
-      setError("Zoom link is required.");
+      setError("Meeting link is required.");
       return;
     }
     if (!isValidHttpUrl(link)) {
-      setError("Zoom link must be a valid URL.");
+      setError("Meeting link must be a valid URL.");
       return;
     }
     if (!account) {
-      setError("Zoom account email is required.");
+      setError("Host account email is required.");
       return;
     }
     if (!isValidEmail(account)) {
-      setError("Zoom account must be a valid email.");
+      setError("Host account must be a valid email.");
       return;
     }
 
@@ -129,13 +129,13 @@ export function ZoomDetailsModal({
 
           <label className="block text-sm">
             <span className="text-xs font-medium uppercase tracking-widest text-muted/80">
-              Zoom Link
+              Meeting Link
             </span>
             <input
               type="url"
               required
               className="mt-1 w-full rounded-xl border border-border px-3 py-2.5 text-sm text-foreground focus:border-[#3b82f6] focus:outline-none focus:ring-0"
-              placeholder="https://zoom.us/j/..."
+              placeholder="https://meet.google.com/... or https://zoom.us/j/..."
               value={zoomLink}
               onChange={(e) => setZoomLink(e.target.value)}
               autoComplete="off"
@@ -144,7 +144,7 @@ export function ZoomDetailsModal({
 
           <label className="block text-sm">
             <span className="text-xs font-medium uppercase tracking-widest text-muted/80">
-              Zoom Account Email
+              Host Account Email
             </span>
             <input
               type="email"

@@ -55,7 +55,7 @@ export function PhysicalInterviewCityModal({
           Select the city for{" "}
           <span className="font-medium text-foreground">{candidateLabel}</span>
           . They will move to the physical interview track and be removed from
-          Zoom scheduling.
+          meeting scheduling.
         </p>
 
         <fieldset className="mt-5 space-y-2">

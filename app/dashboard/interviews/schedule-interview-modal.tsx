@@ -18,7 +18,6 @@ import {
 import { getUserSafe } from "@/lib/supabase-auth";
 import {
   POC_INTERVIEWER_SLACK_EMAILS,
-  SLACK_DISHAN_EMAIL,
 } from "@/lib/slack-contacts";
 import { modalOverlayClass, modalPanelClass } from "@/lib/modal-responsive";
 import { voidSlackNotify } from "@/lib/slack-client";
@@ -274,12 +273,6 @@ export function ScheduleInterviewModal({
           `Please assign an interviewer in the CRM.`;
         voidSlackNotify(supabase, SLACK_ANUSHKA_EMAIL, anushkaMsg);
 
-        const dishMsg =
-          `🗓️ New interview draft created!\n` +
-          `*Candidate:* ${candDisplay}\n` +
-          `*Date & Time:* ${dateLabel} at ${timeLabel}\n` +
-          `Please wait for Anushka to assign an interviewer before adding Zoom details.`;
-        voidSlackNotify(supabase, SLACK_DISHAN_EMAIL, dishMsg);
         setDate("");
         setTime("");
         setPoc("");
@@ -299,13 +292,6 @@ export function ScheduleInterviewModal({
         `*POC:* ${actorName}\n` +
         `Please assign an interviewer in the CRM (Project Interviews → Scheduled).`;
       voidSlackNotify(supabase, SLACK_ANUSHKA_EMAIL, anushkaProjectMsg);
-
-      const dishProjectMsg =
-        `🗓️ New project interview draft created!\n` +
-        `*Project / candidate:* ${candDisplay}\n` +
-        `*Date & Time:* ${dateLabel} at ${timeLabel}\n` +
-        `Please wait for Anushka to assign an interviewer before adding Zoom details.`;
-      voidSlackNotify(supabase, SLACK_DISHAN_EMAIL, dishProjectMsg);
 
       setDate("");
       setTime("");

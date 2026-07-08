@@ -34,7 +34,7 @@ export async function sendInterviewConfirmationEmail(params: {
   }
   const n = displayName(params.name);
   const zoom = params.zoom_link?.trim() || "(link to follow)";
-  const body = `Hi ${escapeHtml(n)}, your interview is confirmed for ${escapeHtml(params.date)} at ${escapeHtml(params.time)}. Zoom link: ${escapeHtml(zoom)}`;
+  const body = `Hi ${escapeHtml(n)}, your interview is confirmed for ${escapeHtml(params.date)} at ${escapeHtml(params.time)}. Meeting link: ${escapeHtml(zoom)}`;
   const { error } = await resend.emails.send({
     from: defaultFrom,
     to: params.to,
@@ -57,7 +57,7 @@ export async function sendInterviewReminderEmail(params: {
   }
   const n = displayName(params.name);
   const zoom = params.zoom_link?.trim() || "(see your confirmation email)";
-  const text = `Hi ${escapeHtml(n)}, reminder: your interview is in 1 hour at ${escapeHtml(params.time)}. Zoom link: ${escapeHtml(zoom)}`;
+  const text = `Hi ${escapeHtml(n)}, reminder: your interview is in 1 hour at ${escapeHtml(params.time)}. Meeting link: ${escapeHtml(zoom)}`;
   const { error } = await resend.emails.send({
     from: defaultFrom,
     to: params.to,

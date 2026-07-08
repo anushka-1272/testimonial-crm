@@ -1594,7 +1594,7 @@ export function ProjectInterviewsPanel({
   const revokeProjectPhysicalInterviewTrack = async (pc: ProjectCandidateRow) => {
     if (!canEditScheduledTab) return;
     const confirmed = window.confirm(
-      "Revoke physical interview track for this candidate?\n\nThey will move back to the Zoom interview scheduling queue.",
+      "Revoke physical interview track for this candidate?\n\nThey will move back to the meeting interview scheduling queue.",
     );
     if (!confirmed) return;
     setPhysicalInterviewBusyId(pc.id);
@@ -2181,7 +2181,7 @@ export function ProjectInterviewsPanel({
                   Physical interview track
                 </h2>
                 <p className="mt-1 text-xs text-muted">
-                  These candidates are no longer in the Zoom scheduling queue.
+                  These candidates are no longer in the meeting scheduling queue.
                   Conduct the in-person interview, then mark completion and
                   reward eligibility below.
                 </p>
@@ -2420,7 +2420,7 @@ export function ProjectInterviewsPanel({
                     <th className={thProjTitle}>Project title</th>
                     <th className={thDateTime}>Date &amp; time</th>
                     <th className={thInterviewer}>Interviewer</th>
-                    <th className={thZoomStatus}>Zoom status</th>
+                    <th className={thZoomStatus}>Meeting status</th>
                     <th className={thPoc}>POC</th>
                     <th className={thCommentsCol}>Remarks</th>
                     <th className={thFollowUp}>Follow-up</th>
@@ -2458,7 +2458,7 @@ export function ProjectInterviewsPanel({
                         : !hasIv
                           ? "Assign interviewer first"
                           : !hasZoom
-                            ? "Add Zoom details first"
+                            ? "Add meeting details first"
                             : undefined;
                       return (
                         <tr key={i.id}>
@@ -2503,11 +2503,11 @@ export function ProjectInterviewsPanel({
                                 </span>
                               ) : awaitingZoom ? (
                                 <span className="inline-flex rounded-full bg-[#fff7ed] px-2.5 py-1 text-xs font-medium text-[#c2410c]">
-                                  Awaiting Zoom
+                                  Awaiting meeting
                                 </span>
                               ) : zoomAdded ? (
                                 <span className="inline-flex rounded-full bg-[#f0fdf4] px-2.5 py-1 text-xs font-medium text-[#15803d]">
-                                  Zoom Added
+                                  Meeting added
                                 </span>
                               ) : (
                                 <span className="text-muted">—</span>
@@ -2551,7 +2551,7 @@ export function ProjectInterviewsPanel({
                                     canEditZoom ? setAddZoomFor(i) : undefined
                                   }
                                 >
-                                  {hasZoom ? "Edit" : "Add Zoom Details"}
+                                  {hasZoom ? "Edit" : "Add meeting details"}
                                 </button>
                               </div>
                             </div>
@@ -3192,7 +3192,7 @@ export function ProjectInterviewsPanel({
                     <th className={thProjTitle}>Project title</th>
                     <th className={thInterviewer}>Interviewer</th>
                     <th className={thCompletedOn}>Completed on</th>
-                    <th className={thZoomStatus}>Zoom</th>
+                    <th className={thZoomStatus}>Meeting</th>
                     <th className={thCommentsCol}>Recording</th>
                     <th className={thCommentsCol}>Comments</th>
                     <th className={thFollowUp}>Follow-up</th>
@@ -3434,7 +3434,7 @@ export function ProjectInterviewsPanel({
                 : row,
             ),
           );
-          onToast?.("Zoom details saved");
+          onToast?.("Meeting details saved");
         }}
       />
 

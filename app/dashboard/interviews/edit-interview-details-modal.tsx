@@ -297,7 +297,7 @@ export function EditInterviewDetailsModal({
             `📅 Interview details updated — you are assigned to interview *${slackCand}*${pipelineNote}\n` +
             `Date & Time: ${formattedDateTime}\n` +
             `POC: ${slackPocDisplay}\n` +
-            `Please check the CRM for Zoom details.`;
+            `Please check the CRM for meeting details.`;
           voidSlackNotify(supabase, slackEmail, slackMsg);
         }
       }

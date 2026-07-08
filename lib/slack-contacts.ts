@@ -9,7 +9,9 @@ export const POC_INTERVIEWER_SLACK_EMAILS: Record<string, string> = {
   Mudit: "mudit.saxena@houseofedtech.in",
 };
 
-export const SLACK_DISHAN_EMAIL = "dishan.pramanik.ost@houseofedtech.in";
+/** Adds meeting links after an interviewer is assigned. */
+export const SLACK_MEETING_COORDINATOR_EMAIL =
+  "anuj.jha.ost@houseofedtech.in";
 export const SLACK_RIANKA_EMAIL = "rianka.dutta.ost@houseofedtech.in";
 export const SLACK_SIDDHARTHA_EMAIL = "siddhartha.bardhan.ost@houseofedtech.in";
 export const SLACK_PRKHRVV_EMAIL = "prkhrvv@houseofedtech.in";

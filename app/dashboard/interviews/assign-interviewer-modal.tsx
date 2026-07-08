@@ -13,7 +13,7 @@ import { logActivity } from "@/lib/activity-logger";
 import { getUserSafe } from "@/lib/supabase-auth";
 import {
   POC_INTERVIEWER_SLACK_EMAILS,
-  SLACK_DISHAN_EMAIL,
+  SLACK_MEETING_COORDINATOR_EMAIL,
   slackEmailForTeamMember,
 } from "@/lib/slack-contacts";
 import { voidSlackNotify } from "@/lib/slack-client";
@@ -24,7 +24,7 @@ import {
   isPostRescheduleDraftRow,
   rescheduleCandidateDisplayName,
   rescheduleKindFromInterview,
-  slackStep2InterviewerAssignedDishan,
+  slackInterviewerAssignedMeetingCoordinator,
 } from "./interview-reschedule-workflow";
 import type {
   InterviewWithCandidate,
@@ -166,17 +166,22 @@ export function AssignInterviewerModal({
           `📅 You have been assigned to interview *${candName}*${pipelineNote}\n` +
           `Date & Time: ${formattedDateTime}\n` +
           `POC: ${pocName}\n` +
-          `Please be ready. Zoom details will be shared soon.`;
+          `Please be ready. Meeting details will be shared soon.`;
         voidSlackNotify(supabase, slackEmail, slackMsg);
       }
 
-      if (postRescheduleDraft) {
-        voidSlackNotify(
-          supabase,
-          SLACK_DISHAN_EMAIL,
-          slackStep2InterviewerAssignedDishan(candName, kind),
-        );
-      } else if (isProject) {
+      voidSlackNotify(
+        supabase,
+        SLACK_MEETING_COORDINATOR_EMAIL,
+        slackInterviewerAssignedMeetingCoordinator(
+          candName,
+          formattedDateTime,
+          ivLabel,
+          kind,
+        ),
+      );
+
+      if (isProject) {
         const anushkaMsg =
           `✅ Interviewer assigned (project pipeline)\n` +
           `*Interviewer:* ${ivLabel}\n` +

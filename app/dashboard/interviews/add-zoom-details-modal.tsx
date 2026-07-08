@@ -82,15 +82,15 @@ export function AddZoomDetailsModal({
     const link = zoomLink.trim();
     const account = zoomAccount.trim();
     if (!link) {
-      setError("Zoom link is required.");
+      setError("Meeting link is required.");
       return;
     }
     if (!link.startsWith("https://")) {
-      setError("Zoom link must start with https://");
+      setError("Meeting link must start with https://");
       return;
     }
     if (!account) {
-      setError("Zoom account is required.");
+      setError("Host account is required.");
       return;
     }
 
@@ -129,7 +129,7 @@ export function AddZoomDetailsModal({
           entity_type: "interview",
           entity_id: interview.id,
           candidate_name: candName,
-          description: `Zoom link added for ${candName}`,
+          description: `Meeting link added for ${candName}`,
           metadata: {},
         });
       }
@@ -146,8 +146,8 @@ export function AddZoomDetailsModal({
           `📅 New interview scheduled!\n` +
           `*Candidate:* ${candName}\n` +
           `*Date & Time:* ${formattedDateTime || "—"}\n` +
-          `*Zoom Link:* ${link}\n` +
-          `*Zoom Account:* ${account}`;
+          `*Meeting Link:* ${link}\n` +
+          `*Host Account:* ${account}`;
         voidSlackNotify(supabase, interviewerSlackEmail, slackMsg);
       }
       const waPhone = isProject
@@ -245,7 +245,7 @@ export function AddZoomDetailsModal({
         <div className="mb-4 flex items-start justify-between">
           <div>
             <h2 className="text-lg font-semibold text-foreground">
-              Add Zoom Details
+              Add Meeting Details
             </h2>
             <p className="text-sm text-muted">{subtitle}</p>
           </div>
@@ -266,12 +266,12 @@ export function AddZoomDetailsModal({
           )}
 
           <label className="block text-sm">
-            <span className={lab}>Zoom link</span>
+            <span className={lab}>Meeting link</span>
             <input
               type="url"
               required
               className={inp}
-              placeholder="https://zoom.us/j/..."
+              placeholder="https://meet.google.com/... or https://zoom.us/j/..."
               value={zoomLink}
               onChange={(e) => setZoomLink(e.target.value)}
               autoComplete="off"
@@ -279,7 +279,7 @@ export function AddZoomDetailsModal({
           </label>
 
           <label className="block text-sm">
-            <span className={lab}>Zoom account (internal reference)</span>
+            <span className={lab}>Host account (internal reference)</span>
             <input
               type="text"
               required

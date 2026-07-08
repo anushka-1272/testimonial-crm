@@ -2293,7 +2293,7 @@ export function PostProductionDashboard() {
                     {modalDetails.interviewer?.trim() || "—"}
                   </p>
                   <p>
-                    <span className="font-medium text-[#374151]">Zoom Account:</span>{" "}
+                    <span className="font-medium text-[#374151]">Host account:</span>{" "}
                     {modalDetails.zoomAccount?.trim() || "—"}
                   </p>
                 </section>
