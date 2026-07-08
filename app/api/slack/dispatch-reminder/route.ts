@@ -47,21 +47,35 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const { count, error } = await admin
-      .from("dispatch")
-      .select("id, candidates!inner(id)", { count: "exact", head: true })
-      .eq("candidates.is_deleted", false)
-      .eq("dispatch_status", "pending");
+    const [testimonialRes, projectRes] = await Promise.all([
+      admin
+        .from("dispatch")
+        .select("id, candidates!inner(id)", { count: "exact", head: true })
+        .eq("candidates.is_deleted", false)
+        .eq("dispatch_status", "pending"),
+      admin
+        .from("project_dispatch")
+        .select("id, project_candidates!inner(id)", { count: "exact", head: true })
+        .eq("project_candidates.is_deleted", false)
+        .eq("dispatch_status", "pending"),
+    ]);
 
-    if (error) {
-      console.error("dispatch-reminder count:", error);
+    if (testimonialRes.error) {
+      console.error("dispatch-reminder count:", testimonialRes.error);
       return NextResponse.json(
-        { success: false, error: error.message },
+        { success: false, error: testimonialRes.error.message },
+        { status: 500 },
+      );
+    }
+    if (projectRes.error) {
+      console.error("dispatch-reminder count:", projectRes.error);
+      return NextResponse.json(
+        { success: false, error: projectRes.error.message },
         { status: 500 },
       );
     }
 
-    const n = count ?? 0;
+    const n = (testimonialRes.count ?? 0) + (projectRes.count ?? 0);
     const message = `📦 Dispatch reminder!\nThere are *${n} pending dispatch(es)* waiting to be processed.\nPlease review and update in the CRM.`;
 
     const result = await sendSlackDM(SLACK_SIDDHARTHA_EMAIL, message);

@@ -11,9 +11,11 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 
+import type { ProjectCandidateRow } from "@/app/dashboard/interviews/types";
 import { CommentTableCell } from "@/components/comment-display";
 import { useAccessControl } from "@/components/access-control-context";
 import { CandidateDetailModal } from "@/components/candidate-detail-modal";
+import { ProjectCandidateDetailModal } from "@/components/project-candidate-detail-modal";
 import { logActivity } from "@/lib/activity-logger";
 import { getUserSafe } from "@/lib/supabase-auth";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
@@ -21,9 +23,18 @@ import { modalOverlayClass, modalPanelMdClass } from "@/lib/modal-responsive";
 import { sendWatiNotification } from "@/lib/wati-client";
 
 type DispatchStatus = "pending" | "dispatched" | "delivered";
+export type DispatchType = "T" | "P";
+type DispatchTypeFilter = DispatchType | "all";
+
+type DispatchContact = {
+  full_name: string | null;
+  email: string;
+  whatsapp_number: string | null;
+};
 
 export type DispatchRow = {
   id: string;
+  type: DispatchType;
   candidate_id: string;
   shipping_address: string | null;
   dispatch_status: DispatchStatus;
@@ -33,27 +44,106 @@ export type DispatchRow = {
   tracking_id: string | null;
   special_comments: string | null;
   reward_item: string | null;
-  candidates: {
-    full_name: string | null;
-    email: string;
-    whatsapp_number: string | null;
-  } | null;
+  candidates: DispatchContact | null;
+  projectCandidate: ProjectCandidateRow | null;
 };
 
-const SELECT = `id, candidate_id, shipping_address, dispatch_status, dispatch_date, expected_delivery_date, actual_delivery_date, tracking_id, special_comments, reward_item, candidates!inner ( full_name, email, whatsapp_number )`;
+const TESTIMONIAL_SELECT = `id, candidate_id, shipping_address, dispatch_status, dispatch_date, expected_delivery_date, actual_delivery_date, tracking_id, special_comments, reward_item, candidates!inner ( full_name, email, whatsapp_number )`;
 
-function normalizeRow(
+const PROJECT_SELECT = `id, project_candidate_id, shipping_address, dispatch_status, dispatch_date, expected_delivery_date, actual_delivery_date, tracking_id, special_comments, reward_item, project_candidates!inner ( id, email, full_name, whatsapp_number, project_title, problem_statement, target_user, ai_usage, demo_link, status, poc_assigned, poc_assigned_at, interview_type, is_deleted )`;
+
+function dispatchTable(type: DispatchType): "dispatch" | "project_dispatch" {
+  return type === "T" ? "dispatch" : "project_dispatch";
+}
+
+function rowKey(row: Pick<DispatchRow, "type" | "id">): string {
+  return `${row.type}-${row.id}`;
+}
+
+function normalizeTestimonialRow(
   row: Record<string, unknown> & {
     candidates:
-      | { full_name: string | null; email: string; whatsapp_number: string | null }
-      | { full_name: string | null; email: string; whatsapp_number: string | null }[]
+      | DispatchContact
+      | DispatchContact[]
       | null;
   },
 ): DispatchRow {
   const c = row.candidates;
   const candidate =
     c == null ? null : Array.isArray(c) ? c[0] ?? null : c;
-  return { ...row, candidates: candidate } as DispatchRow;
+  return {
+    id: row.id as string,
+    type: "T",
+    candidate_id: row.candidate_id as string,
+    shipping_address: (row.shipping_address as string | null) ?? null,
+    dispatch_status: row.dispatch_status as DispatchStatus,
+    dispatch_date: (row.dispatch_date as string | null) ?? null,
+    expected_delivery_date: (row.expected_delivery_date as string | null) ?? null,
+    actual_delivery_date: (row.actual_delivery_date as string | null) ?? null,
+    tracking_id: (row.tracking_id as string | null) ?? null,
+    special_comments: (row.special_comments as string | null) ?? null,
+    reward_item: (row.reward_item as string | null) ?? null,
+    candidates: candidate,
+    projectCandidate: null,
+  };
+}
+
+function normalizeProjectRow(
+  row: Record<string, unknown> & {
+    project_candidates: ProjectCandidateRow | ProjectCandidateRow[] | null;
+  },
+): DispatchRow {
+  const pcRaw = row.project_candidates;
+  const pc =
+    pcRaw == null ? null : Array.isArray(pcRaw) ? pcRaw[0] ?? null : pcRaw;
+  return {
+    id: row.id as string,
+    type: "P",
+    candidate_id: row.project_candidate_id as string,
+    shipping_address: (row.shipping_address as string | null) ?? null,
+    dispatch_status: row.dispatch_status as DispatchStatus,
+    dispatch_date: (row.dispatch_date as string | null) ?? null,
+    expected_delivery_date: (row.expected_delivery_date as string | null) ?? null,
+    actual_delivery_date: (row.actual_delivery_date as string | null) ?? null,
+    tracking_id: (row.tracking_id as string | null) ?? null,
+    special_comments: (row.special_comments as string | null) ?? null,
+    reward_item: (row.reward_item as string | null) ?? null,
+    candidates: pc
+      ? {
+          full_name: pc.full_name,
+          email: pc.email,
+          whatsapp_number: pc.whatsapp_number,
+        }
+      : null,
+    projectCandidate: pc,
+  };
+}
+
+function displayContactName(row: DispatchRow): string {
+  if (row.type === "P") {
+    return (
+      row.candidates?.full_name?.trim() ||
+      row.projectCandidate?.project_title?.trim() ||
+      "—"
+    );
+  }
+  return row.candidates?.full_name?.trim() || "—";
+}
+
+function typeBadge(type: DispatchType) {
+  const isTestimonial = type === "T";
+  return (
+    <span
+      title={isTestimonial ? "Testimonial" : "Project"}
+      className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${
+        isTestimonial
+          ? "bg-[#eff6ff] text-[#2563eb]"
+          : "bg-[#f3e8ff] text-[#7c3aed]"
+      }`}
+    >
+      {type}
+    </span>
+  );
 }
 
 /** Partial match on name, email (case-insensitive), or phone digits. */
@@ -144,7 +234,7 @@ function RewardItemCell({
 }: {
   row: DispatchRow;
   supabase: NonNullable<ReturnType<typeof createBrowserSupabaseClient>>;
-  onRewardSaved: (id: string, reward_item: string | null) => void;
+  onRewardSaved: (type: DispatchType, id: string, reward_item: string | null) => void;
   setError: (msg: string | null) => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -233,7 +323,7 @@ function RewardItemCell({
     setSaving(true);
     setError(null);
     const { error: uErr } = await supabase
-      .from("dispatch")
+      .from(dispatchTable(row.type))
       .update({ reward_item: trimmed })
       .eq("id", row.id);
     setSaving(false);
@@ -244,15 +334,14 @@ function RewardItemCell({
     const oldLabel = row.reward_item?.trim() || "—";
     const newLabel = trimmed || "—";
     if (oldLabel !== newLabel) {
-      const candDisplay =
-        row.candidates?.full_name?.trim() || "Candidate";
+      const candDisplay = displayContactName(row);
       const authRw = await getUserSafe(supabase);
       if (authRw) {
         await logActivity({
           supabase,
           user: authRw,
           action_type: "dispatch",
-          entity_type: "dispatch",
+          entity_type: row.type === "T" ? "dispatch" : "project_dispatch",
           entity_id: row.id,
           candidate_name: candDisplay,
           description: `Changed reward item for ${candDisplay} from ${oldLabel} to ${newLabel}`,
@@ -260,7 +349,7 @@ function RewardItemCell({
         });
       }
     }
-    onRewardSaved(row.id, trimmed);
+    onRewardSaved(row.type, row.id, trimmed);
     setMenuOpen(false);
     setOtherMode(false);
     setOtherText("");
@@ -423,6 +512,7 @@ function csvEscape(value: string): string {
 
 function buildCsv(rows: DispatchRow[]): string {
   const headers = [
+    "Type",
     "Name",
     "Email",
     "Phone",
@@ -440,7 +530,8 @@ function buildCsv(rows: DispatchRow[]): string {
     const c = r.candidates;
     lines.push(
       [
-        csvEscape(c?.full_name ?? ""),
+        csvEscape(r.type),
+        csvEscape(displayContactName(r)),
         csvEscape(c?.email ?? ""),
         csvEscape(c?.whatsapp_number ?? ""),
         csvEscape(r.shipping_address ?? ""),
@@ -509,7 +600,7 @@ function UpdateDispatchModal({
   if (!open || !row) return null;
 
   const email = row.candidates?.email;
-  const name = row.candidates?.full_name;
+  const name = displayContactName(row);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -534,7 +625,7 @@ function UpdateDispatchModal({
         row.dispatch_status === "delivered" ? "delivered" : "dispatched";
 
       const { error: upErr } = await supabase
-        .from("dispatch")
+        .from(dispatchTable(row.type))
         .update({
           tracking_id: trackingId.trim(),
           dispatch_date: dispatchIso,
@@ -550,8 +641,7 @@ function UpdateDispatchModal({
         return;
       }
 
-      const candDisplay =
-        row.candidates?.full_name?.trim() || "Candidate";
+      const candDisplay = displayContactName(row);
       const expectedStr = format(parseISO(expectedIso), "MMMM d, yyyy");
       const authDu = await getUserSafe(supabase);
       if (authDu) {
@@ -559,7 +649,7 @@ function UpdateDispatchModal({
           supabase,
           user: authDu,
           action_type: "dispatch",
-          entity_type: "dispatch",
+          entity_type: row.type === "T" ? "dispatch" : "project_dispatch",
           entity_id: row.id,
           candidate_name: candDisplay,
           description: `Updated dispatch for ${candDisplay} — Tracking: ${trackingId.trim()}, Expected: ${expectedStr}`,
@@ -750,14 +840,17 @@ export function DispatchDashboard() {
   const { canEditCurrentPage, showViewOnlyBadge, role } = useAccessControl();
   const [rows, setRows] = useState<DispatchRow[]>([]);
   const [filter, setFilter] = useState<DispatchStatus | "all">("all");
+  const [typeFilter, setTypeFilter] = useState<DispatchTypeFilter>("all");
   const [contactSearch, setContactSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [busyId, setBusyId] = useState<string | null>(null);
+  const [busyKey, setBusyKey] = useState<string | null>(null);
   const [updateRow, setUpdateRow] = useState<DispatchRow | null>(null);
   const [detailCandidateId, setDetailCandidateId] = useState<string | null>(
     null,
   );
+  const [detailProjectCandidate, setDetailProjectCandidate] =
+    useState<ProjectCandidateRow | null>(null);
   const [stats, setStats] = useState<{
     pending: number;
     dispatchedWeek: number;
@@ -785,19 +878,39 @@ export function DispatchDashboard() {
 
   const loadRows = useCallback(async () => {
     if (!supabase) return;
-    const { data, error: qErr } = await supabase
-      .from("dispatch")
-      .select(SELECT)
-      .eq("candidates.is_deleted", false)
-      .order("dispatch_date", { ascending: false, nullsFirst: false });
+    const [testimonialRes, projectRes] = await Promise.all([
+      supabase
+        .from("dispatch")
+        .select(TESTIMONIAL_SELECT)
+        .eq("candidates.is_deleted", false)
+        .order("dispatch_date", { ascending: false, nullsFirst: false }),
+      supabase
+        .from("project_dispatch")
+        .select(PROJECT_SELECT)
+        .eq("project_candidates.is_deleted", false)
+        .order("dispatch_date", { ascending: false, nullsFirst: false }),
+    ]);
 
-    if (qErr) {
-      setError(qErr.message);
+    if (testimonialRes.error) {
+      setError(testimonialRes.error.message);
       return;
     }
-    const list = (data ?? []).map((r) =>
-      normalizeRow(r as Parameters<typeof normalizeRow>[0]),
+    if (projectRes.error) {
+      setError(projectRes.error.message);
+      return;
+    }
+
+    const testimonialRows = (testimonialRes.data ?? []).map((r) =>
+      normalizeTestimonialRow(r as Parameters<typeof normalizeTestimonialRow>[0]),
     );
+    const projectRows = (projectRes.data ?? []).map((r) =>
+      normalizeProjectRow(r as Parameters<typeof normalizeProjectRow>[0]),
+    );
+    const list = [...testimonialRows, ...projectRows].sort((a, b) => {
+      const aTime = a.dispatch_date ? Date.parse(a.dispatch_date) : 0;
+      const bTime = b.dispatch_date ? Date.parse(b.dispatch_date) : 0;
+      return bTime - aTime;
+    });
     setRows(list);
     setError(null);
   }, [supabase]);
@@ -807,16 +920,28 @@ export function DispatchDashboard() {
     const ws = weekStart.toISOString();
     const we = weekEnd.toISOString();
 
-    const [pendingRes, dispRes, delRes] = await Promise.all([
+    const [pendingT, pendingP, dispT, dispP, delT, delP] = await Promise.all([
       supabase
         .from("dispatch")
         .select("id, candidates!inner(id)", { count: "exact", head: true })
         .eq("candidates.is_deleted", false)
         .eq("dispatch_status", "pending"),
       supabase
+        .from("project_dispatch")
+        .select("id, project_candidates!inner(id)", { count: "exact", head: true })
+        .eq("project_candidates.is_deleted", false)
+        .eq("dispatch_status", "pending"),
+      supabase
         .from("dispatch")
         .select("id, candidates!inner(id)", { count: "exact", head: true })
         .eq("candidates.is_deleted", false)
+        .eq("dispatch_status", "dispatched")
+        .gte("dispatch_date", ws)
+        .lte("dispatch_date", we),
+      supabase
+        .from("project_dispatch")
+        .select("id, project_candidates!inner(id)", { count: "exact", head: true })
+        .eq("project_candidates.is_deleted", false)
         .eq("dispatch_status", "dispatched")
         .gte("dispatch_date", ws)
         .lte("dispatch_date", we),
@@ -827,12 +952,19 @@ export function DispatchDashboard() {
         .eq("dispatch_status", "delivered")
         .gte("actual_delivery_date", ws)
         .lte("actual_delivery_date", we),
+      supabase
+        .from("project_dispatch")
+        .select("id, project_candidates!inner(id)", { count: "exact", head: true })
+        .eq("project_candidates.is_deleted", false)
+        .eq("dispatch_status", "delivered")
+        .gte("actual_delivery_date", ws)
+        .lte("actual_delivery_date", we),
     ]);
 
     setStats({
-      pending: pendingRes.count ?? 0,
-      dispatchedWeek: dispRes.count ?? 0,
-      deliveredWeek: delRes.count ?? 0,
+      pending: (pendingT.count ?? 0) + (pendingP.count ?? 0),
+      dispatchedWeek: (dispT.count ?? 0) + (dispP.count ?? 0),
+      deliveredWeek: (delT.count ?? 0) + (delP.count ?? 0),
     });
   }, [supabase, weekStart, weekEnd]);
 
@@ -848,6 +980,14 @@ export function DispatchDashboard() {
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "dispatch" },
+        () => {
+          void loadRows();
+          void loadStats();
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "project_dispatch" },
         () => {
           void loadRows();
           void loadStats();
@@ -874,16 +1014,32 @@ export function DispatchDashboard() {
 
   const filtered = useMemo(() => {
     return rows.filter((r) => {
+      if (typeFilter !== "all" && r.type !== typeFilter) return false;
       if (filter !== "all" && r.dispatch_status !== filter) return false;
       const c = r.candidates;
-      return matchesDispatchContactSearch(
-        c?.full_name,
-        c?.email,
-        c?.whatsapp_number,
-        contactSearch,
-      );
+      const q = contactSearch.trim();
+      if (!q) return true;
+      if (
+        matchesDispatchContactSearch(
+          c?.full_name,
+          c?.email,
+          c?.whatsapp_number,
+          q,
+        )
+      ) {
+        return true;
+      }
+      if (
+        r.type === "P" &&
+        (r.projectCandidate?.project_title ?? "")
+          .toLowerCase()
+          .includes(q.toLowerCase())
+      ) {
+        return true;
+      }
+      return false;
     });
-  }, [rows, filter, contactSearch]);
+  }, [rows, filter, typeFilter, contactSearch]);
 
   const notifyDispatchTeamSlack = useCallback(async () => {
     if (!supabase || role !== "admin") return;
@@ -924,27 +1080,28 @@ export function DispatchDashboard() {
   const markDelivered = async (r: DispatchRow) => {
     if (!canEditCurrentPage) return;
     if (!supabase) return;
-    setBusyId(r.id);
+    const key = rowKey(r);
+    setBusyKey(key);
     const { error: uErr } = await supabase
-      .from("dispatch")
+      .from(dispatchTable(r.type))
       .update({
         dispatch_status: "delivered",
         actual_delivery_date: new Date().toISOString(),
       })
       .eq("id", r.id);
-    setBusyId(null);
+    setBusyKey(null);
     if (uErr) {
       setError(uErr.message);
       return;
     }
-    const candDisplay = r.candidates?.full_name?.trim() || "Candidate";
+    const candDisplay = displayContactName(r);
     const authMd = await getUserSafe(supabase);
     if (authMd) {
       await logActivity({
         supabase,
         user: authMd,
         action_type: "dispatch",
-        entity_type: "dispatch",
+        entity_type: r.type === "T" ? "dispatch" : "project_dispatch",
         entity_id: r.id,
         candidate_name: candDisplay,
         description: `Marked ${candDisplay} as Delivered`,
@@ -953,9 +1110,11 @@ export function DispatchDashboard() {
   };
 
   const patchRowReward = useCallback(
-    (id: string, reward_item: string | null) => {
+    (type: DispatchType, id: string, reward_item: string | null) => {
       setRows((prev) =>
-        prev.map((row) => (row.id === id ? { ...row, reward_item } : row)),
+        prev.map((row) =>
+          row.type === type && row.id === id ? { ...row, reward_item } : row,
+        ),
       );
     },
     [],
@@ -969,11 +1128,17 @@ export function DispatchDashboard() {
     );
   }
 
-  const tabs: { id: typeof filter; label: string }[] = [
+  const statusTabs: { id: typeof filter; label: string }[] = [
     { id: "all", label: "All" },
     { id: "pending", label: "Pending" },
     { id: "dispatched", label: "Dispatched" },
     { id: "delivered", label: "Delivered" },
+  ];
+
+  const typeTabs: { id: DispatchTypeFilter; label: string }[] = [
+    { id: "all", label: "All types" },
+    { id: "T", label: "T · Testimonials" },
+    { id: "P", label: "P · Projects" },
   ];
 
   return (
@@ -1079,22 +1244,42 @@ export function DispatchDashboard() {
             />
           </label>
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <div className="-mx-1 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] md:mx-0 md:overflow-visible [&::-webkit-scrollbar]:hidden">
-            <div className="inline-flex min-w-min rounded-full bg-elevated p-1 shadow-segment">
-              {tabs.map((t) => (
-                <button
-                  key={t.id}
-                  type="button"
-                  onClick={() => setFilter(t.id)}
-                  className={`shrink-0 rounded-full px-3 py-1.5 text-sm font-medium transition-all duration-200 ease-in-out sm:px-4 ${
-                    filter === t.id
-                      ? "bg-foreground text-background"
-                      : "text-muted hover:text-foreground"
-                  }`}
-                >
-                  {t.label}
-                </button>
-              ))}
+          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+            <div className="-mx-1 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] md:mx-0 md:overflow-visible [&::-webkit-scrollbar]:hidden">
+              <div className="inline-flex min-w-min rounded-full bg-elevated p-1 shadow-segment">
+                {typeTabs.map((t) => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => setTypeFilter(t.id)}
+                    className={`shrink-0 rounded-full px-3 py-1.5 text-sm font-medium transition-all duration-200 ease-in-out sm:px-4 ${
+                      typeFilter === t.id
+                        ? "bg-foreground text-background"
+                        : "text-muted hover:text-foreground"
+                    }`}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="-mx-1 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] md:mx-0 md:overflow-visible [&::-webkit-scrollbar]:hidden">
+              <div className="inline-flex min-w-min rounded-full bg-elevated p-1 shadow-segment">
+                {statusTabs.map((t) => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => setFilter(t.id)}
+                    className={`shrink-0 rounded-full px-3 py-1.5 text-sm font-medium transition-all duration-200 ease-in-out sm:px-4 ${
+                      filter === t.id
+                        ? "bg-foreground text-background"
+                        : "text-muted hover:text-foreground"
+                    }`}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
           <button
@@ -1113,6 +1298,9 @@ export function DispatchDashboard() {
             <table className="min-w-[960px] text-left text-sm">
               <thead>
                 <tr className="border-b border-[#f5f5f5]">
+                  <th className="px-3 py-3 text-xs font-medium uppercase tracking-widest text-muted/80">
+                    Type
+                  </th>
                   <th className="px-3 py-3 text-xs font-medium uppercase tracking-widest text-muted/80">
                     Name
                   </th>
@@ -1152,7 +1340,7 @@ export function DispatchDashboard() {
                 {loading ? (
                   <tr>
                     <td
-                      colSpan={11}
+                      colSpan={12}
                       className="px-4 py-12 text-center text-sm text-muted"
                     >
                       Loading…
@@ -1161,7 +1349,7 @@ export function DispatchDashboard() {
                 ) : filtered.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={11}
+                      colSpan={12}
                       className="px-4 py-12 text-center text-sm text-muted"
                     >
                       No dispatch records match the current filters.
@@ -1170,6 +1358,7 @@ export function DispatchDashboard() {
                 ) : (
                   filtered.map((r) => {
                     const c = r.candidates;
+                    const key = rowKey(r);
                     const canUpdate =
                       r.dispatch_status === "pending" ||
                       r.dispatch_status === "dispatched";
@@ -1178,16 +1367,25 @@ export function DispatchDashboard() {
                       r.dispatch_status === "dispatched";
                     return (
                       <tr
-                        key={r.id}
+                        key={key}
                         className="border-b border-[#f5f5f5] last:border-b-0 hover:bg-background/80"
                       >
+                        <td className="px-3 py-3">{typeBadge(r.type)}</td>
                         <td className="max-w-[140px] px-3 py-3">
                           <button
                             type="button"
                             className="max-w-full truncate text-left font-medium text-[#3b82f6] hover:underline focus:outline-none focus:ring-2 focus:ring-[#3b82f6]/25 rounded-sm"
-                            onClick={() => setDetailCandidateId(r.candidate_id)}
+                            onClick={() => {
+                              if (r.type === "T") {
+                                setDetailProjectCandidate(null);
+                                setDetailCandidateId(r.candidate_id);
+                              } else {
+                                setDetailCandidateId(null);
+                                setDetailProjectCandidate(r.projectCandidate);
+                              }
+                            }}
                           >
-                            {c?.full_name?.trim() || "—"}
+                            {displayContactName(r)}
                           </button>
                         </td>
                         <td className="max-w-[160px] truncate px-3 py-3 text-muted">
@@ -1240,7 +1438,7 @@ export function DispatchDashboard() {
                             {canEditCurrentPage && canDeliver && (
                               <button
                                 type="button"
-                                disabled={busyId === r.id}
+                                disabled={busyKey === key}
                                 className="whitespace-nowrap text-sm font-medium text-[#16a34a] transition-all hover:text-[#15803d] disabled:opacity-50"
                                 onClick={() => void markDelivered(r)}
                               >
@@ -1260,7 +1458,7 @@ export function DispatchDashboard() {
       </main>
 
       <UpdateDispatchModal
-        key={updateRow?.id ?? "closed"}
+        key={updateRow ? rowKey(updateRow) : "closed"}
         row={updateRow}
         open={!!updateRow}
         onClose={() => setUpdateRow(null)}
@@ -1277,6 +1475,12 @@ export function DispatchDashboard() {
         candidateId={detailCandidateId}
         supabase={supabase}
         onClose={() => setDetailCandidateId(null)}
+      />
+
+      <ProjectCandidateDetailModal
+        open={!!detailProjectCandidate}
+        candidate={detailProjectCandidate}
+        onClose={() => setDetailProjectCandidate(null)}
       />
     </>
   );
