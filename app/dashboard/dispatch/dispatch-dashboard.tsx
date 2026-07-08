@@ -52,6 +52,51 @@ const TESTIMONIAL_SELECT = `id, candidate_id, shipping_address, dispatch_status,
 
 const PROJECT_SELECT = `id, project_candidate_id, shipping_address, dispatch_status, dispatch_date, expected_delivery_date, actual_delivery_date, tracking_id, special_comments, reward_item, project_candidates!inner ( id, email, full_name, whatsapp_number, project_title, problem_statement, target_user, ai_usage, demo_link, status, poc_assigned, poc_assigned_at, interview_type, is_deleted )`;
 
+const PROJECT_SELECT_LEGACY = `id, project_candidate_id, shipping_address, dispatch_status, reward_item, project_candidates!inner ( id, email, full_name, whatsapp_number, project_title, problem_statement, target_user, ai_usage, demo_link, status, poc_assigned, poc_assigned_at, interview_type, is_deleted )`;
+
+function isMissingProjectDispatchColumnError(message: string): boolean {
+  return (
+    message.includes("project_dispatch") &&
+    message.includes("does not exist")
+  );
+}
+
+async function loadProjectDispatchRows(
+  supabase: NonNullable<ReturnType<typeof createBrowserSupabaseClient>>,
+): Promise<{ rows: DispatchRow[]; warning: string | null }> {
+  let usedLegacy = false;
+  let result = await supabase
+    .from("project_dispatch")
+    .select(PROJECT_SELECT)
+    .eq("project_candidates.is_deleted", false)
+    .order("dispatch_date", { ascending: false, nullsFirst: false });
+
+  if (
+    result.error &&
+    isMissingProjectDispatchColumnError(result.error.message)
+  ) {
+    usedLegacy = true;
+    result = await supabase
+      .from("project_dispatch")
+      .select(PROJECT_SELECT_LEGACY)
+      .eq("project_candidates.is_deleted", false)
+      .order("created_at", { ascending: false });
+  }
+
+  if (result.error) {
+    return { rows: [], warning: result.error.message };
+  }
+
+  return {
+    rows: (result.data ?? []).map((r) =>
+      normalizeProjectRow(r as Parameters<typeof normalizeProjectRow>[0]),
+    ),
+    warning: usedLegacy
+      ? "Project dispatch is missing shipment columns in the database. Run the latest Supabase migrations to enable full tracking for project rewards."
+      : null,
+  };
+}
+
 function dispatchTable(type: DispatchType): "dispatch" | "project_dispatch" {
   return type === "T" ? "dispatch" : "project_dispatch";
 }
@@ -878,41 +923,30 @@ export function DispatchDashboard() {
 
   const loadRows = useCallback(async () => {
     if (!supabase) return;
-    const [testimonialRes, projectRes] = await Promise.all([
+    const [testimonialRes, projectLoad] = await Promise.all([
       supabase
         .from("dispatch")
         .select(TESTIMONIAL_SELECT)
         .eq("candidates.is_deleted", false)
         .order("dispatch_date", { ascending: false, nullsFirst: false }),
-      supabase
-        .from("project_dispatch")
-        .select(PROJECT_SELECT)
-        .eq("project_candidates.is_deleted", false)
-        .order("dispatch_date", { ascending: false, nullsFirst: false }),
+      loadProjectDispatchRows(supabase),
     ]);
 
     if (testimonialRes.error) {
       setError(testimonialRes.error.message);
       return;
     }
-    if (projectRes.error) {
-      setError(projectRes.error.message);
-      return;
-    }
 
     const testimonialRows = (testimonialRes.data ?? []).map((r) =>
       normalizeTestimonialRow(r as Parameters<typeof normalizeTestimonialRow>[0]),
     );
-    const projectRows = (projectRes.data ?? []).map((r) =>
-      normalizeProjectRow(r as Parameters<typeof normalizeProjectRow>[0]),
-    );
-    const list = [...testimonialRows, ...projectRows].sort((a, b) => {
+    const list = [...testimonialRows, ...projectLoad.rows].sort((a, b) => {
       const aTime = a.dispatch_date ? Date.parse(a.dispatch_date) : 0;
       const bTime = b.dispatch_date ? Date.parse(b.dispatch_date) : 0;
       return bTime - aTime;
     });
     setRows(list);
-    setError(null);
+    setError(projectLoad.warning);
   }, [supabase]);
 
   const loadStats = useCallback(async () => {
