@@ -1,5 +1,7 @@
 import { format, parseISO } from "date-fns";
 
+import { MAX_FOLLOWUP_ATTEMPTS } from "@/lib/followup-constants";
+
 import type { FollowupStatus } from "./types";
 
 export type FollowupStatusSnapshot = {
@@ -56,7 +58,7 @@ export function getFollowUpStatus(
   );
   const latestStatus = normalizeFollowupStatus(latest.status);
   const followup_status =
-    latestStatus === "no_answer" && followup_count < 3
+    latestStatus === "no_answer" && followup_count < MAX_FOLLOWUP_ATTEMPTS
       ? "pending"
       : latestStatus;
   return {
@@ -102,7 +104,14 @@ export function followupStatusBadgeFromSnapshot(c: FollowupStatusSnapshot) {
       </span>
     );
   }
-  if (c.followup_count >= 3 && c.followup_status === "no_answer") {
+  if (c.followup_status === "not_interested") {
+    return (
+      <span className="inline-flex rounded-full bg-[#374151] px-2.5 py-1 text-xs font-medium text-gray-100">
+        Not Interested
+      </span>
+    );
+  }
+  if (c.followup_count >= MAX_FOLLOWUP_ATTEMPTS && c.followup_status === "no_answer") {
     return (
       <span className="inline-flex rounded-full bg-[#374151] px-2.5 py-1 text-xs font-medium text-gray-100">
         Max attempts reached

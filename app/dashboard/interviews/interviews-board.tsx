@@ -15,6 +15,7 @@ import { useAccessControl } from "@/components/access-control-context";
 import { CandidateDetailModal } from "@/components/candidate-detail-modal";
 import { ZoomDetailsModal } from "@/components/ZoomDetailsModal";
 import { logActivity } from "@/lib/activity-logger";
+import { MAX_FOLLOWUP_ATTEMPTS } from "@/lib/followup-constants";
 import { buildNoShowRevertPatch } from "@/lib/interview-no-show";
 import {
   buildInterviewerSelectOptions,
@@ -604,7 +605,7 @@ function canShowEligibleScheduleButton(c: EligibleCandidate): boolean {
   if (c.followup_status === "wrong_number") return false;
   if (c.followup_status === "already_completed") return false;
   if (c.followup_status === "not_eligible") return false;
-  if (c.followup_status === "no_answer" && c.followup_count >= 3)
+  if (c.followup_status === "no_answer" && c.followup_count >= MAX_FOLLOWUP_ATTEMPTS)
     return false;
   return true;
 }

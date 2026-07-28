@@ -140,6 +140,15 @@ function formatAssignedOnIst(iso: string | null | undefined) {
   }
 }
 
+function formatDateOnly(iso: string | null | undefined) {
+  if (!iso) return "—";
+  try {
+    return format(parseISO(iso), "MMM d, yyyy");
+  } catch {
+    return "—";
+  }
+}
+
 function projectDisplayName(pc: ProjectCandidateRow): string {
   const fn = pc.full_name?.trim();
   if (fn) return fn;
@@ -716,6 +725,10 @@ export function ProjectInterviewsPanel({
   const [noShowRevertBusyId, setNoShowRevertBusyId] = useState<string | null>(
     null,
   );
+  const [notInterestedOpen, setNotInterestedOpen] = useState(false);
+  const [restoringNotInterestedId, setRestoringNotInterestedId] = useState<
+    string | null
+  >(null);
 
   const { role, canEditCurrentPage } = useAccessControl();
   const canEditScheduledTab =
@@ -1182,9 +1195,26 @@ export function ProjectInterviewsPanel({
     return map;
   }, [followupLogs]);
 
+  const candidateById = useMemo(
+    () => new Map(candidates.map((c) => [c.id, c] as const)),
+    [candidates],
+  );
+
   const followupBadgeForProjectCandidate = useCallback(
-    (projectCandidateId: string) => {
-      const logs = followupLogsByProjectCandidateId.get(projectCandidateId) ?? [];
+    (
+      c: Pick<
+        ProjectCandidateRow,
+        "id" | "followup_status" | "followup_count" | "callback_datetime"
+      >,
+    ) => {
+      if (c.followup_status === "not_interested") {
+        return followupStatusBadgeFromSnapshot({
+          followup_status: "not_interested",
+          followup_count: c.followup_count ?? 0,
+          callback_datetime: null,
+        });
+      }
+      const logs = followupLogsByProjectCandidateId.get(c.id) ?? [];
       const summary = getFollowUpStatus(logs);
       if (!summary) return <span className="text-muted">—</span>;
       return followupStatusBadgeFromSnapshot(summary);
@@ -1192,11 +1222,21 @@ export function ProjectInterviewsPanel({
     [followupLogsByProjectCandidateId],
   );
 
+  const followupBadgeForProjectCandidateId = useCallback(
+    (projectCandidateId: string) => {
+      const c = candidateById.get(projectCandidateId);
+      if (!c) return <span className="text-muted">—</span>;
+      return followupBadgeForProjectCandidate(c);
+    },
+    [candidateById, followupBadgeForProjectCandidate],
+  );
+
   const pendingQueue = useMemo(() => {
     const q = filters.pending.search;
     const pocF = filters.pending.poc;
     const rows = candidates.filter((c) => {
       if (c.physical_interview_track) return false;
+      if (c.followup_status === "not_interested") return false;
       if (activePipelineCandidateIds.has(c.id)) return false;
       if (completedCandidateIds.has(c.id)) return false;
       const statusNorm = (c.status ?? "pending").trim() || "pending";
@@ -1220,6 +1260,15 @@ export function ProjectInterviewsPanel({
     filters.pending.poc,
     filters.pending.interviewer,
   ]);
+
+  const notInterestedProjectFiltered = useMemo(
+    () =>
+      candidates.filter(
+        (c) =>
+          !c.physical_interview_track && c.followup_status === "not_interested",
+      ),
+    [candidates],
+  );
 
   const scheduledFiltered = useMemo(
     () =>
@@ -1516,6 +1565,43 @@ export function ProjectInterviewsPanel({
     onPipelineChanged();
   };
 
+  const handleMarkProjectNotInterestedActive = async (pc: ProjectCandidateRow) => {
+    if (!canEditScheduledTab) return;
+    setRestoringNotInterestedId(pc.id);
+    const { error: uErr } = await supabase
+      .from("project_candidates")
+      .update({
+        followup_status: "pending",
+        followup_count: 0,
+        callback_datetime: null,
+        not_interested_reason: null,
+        not_interested_at: null,
+      })
+      .eq("id", pc.id)
+      .eq("is_deleted", false);
+    setRestoringNotInterestedId(null);
+    if (uErr) {
+      onError(uErr.message);
+      return;
+    }
+    const display = projectDisplayName(pc);
+    const authUser = await getUserSafe(supabase);
+    if (authUser) {
+      await logActivity({
+        supabase,
+        user: authUser,
+        action_type: "eligibility",
+        entity_type: "project_candidate",
+        entity_id: pc.id,
+        candidate_name: display === "—" ? pc.email : display,
+        description: `Marked ${display === "—" ? pc.email : display} active again (follow-up pipeline)`,
+        metadata: { followup: true, project: true },
+      });
+    }
+    void loadProjectData();
+    onPipelineChanged();
+  };
+
   const moveProjectCandidateToPhysicalInterviewTrack = async (
     pc: ProjectCandidateRow,
     city: PhysicalInterviewCity,
@@ -1804,6 +1890,8 @@ export function ProjectInterviewsPanel({
   const tdInterviewer = `${tdBase} min-w-[120px] text-left`;
   const thReason = `${thBase} min-w-[180px] text-left`;
   const tdReason = `${tdBase} min-w-[180px] text-left text-muted`;
+  const thDateOnly = `${thBase} min-w-[120px] text-left`;
+  const tdDateOnly = `${tdBase} min-w-[120px] text-left text-muted`;
   const thZoomStatus = `${thBase} min-w-[150px] text-left`;
   const tdZoomStatus = `${tdBase} min-w-[150px] text-left align-top`;
   const thCompletedOn = `${thBase} min-w-[170px] text-left`;
@@ -2088,7 +2176,7 @@ export function ProjectInterviewsPanel({
                             )}
                           </td>
                           <td className={tdFollowUp}>
-                            {followupBadgeForProjectCandidate(c.id)}
+                            {followupBadgeForProjectCandidate(c)}
                           </td>
                           <td className={tdActions}>
                             <div className="flex flex-wrap justify-end gap-2">
@@ -2174,6 +2262,78 @@ export function ProjectInterviewsPanel({
               pendingPage.total,
             )}
           </div>
+
+          {notInterestedProjectFiltered.length > 0 ? (
+            <div className="mt-8 space-y-2">
+              <button
+                type="button"
+                onClick={() => setNotInterestedOpen((o) => !o)}
+                className="flex w-full items-center justify-between rounded-xl border border-border-subtle bg-background/80 px-4 py-3 text-left text-sm font-semibold text-foreground transition-colors hover:bg-background"
+              >
+                <span>
+                  Not Interested ({notInterestedProjectFiltered.length})
+                </span>
+                <span className="text-muted">
+                  {notInterestedOpen ? "▼" : "▶"}
+                </span>
+              </button>
+              {notInterestedOpen ? (
+                <div className={tableWrap}>
+                  <div className="w-full min-w-0 max-w-full overflow-x-auto">
+                    <table className="w-full min-w-[900px] table-auto border-collapse">
+                      <thead>
+                        <tr>
+                          <th className={thName}>Name</th>
+                          <th className={thProjTitle}>Project title</th>
+                          <th className={thReason}>Reason</th>
+                          <th className={thDateOnly}>Date</th>
+                          <th className={thActions}>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {notInterestedProjectFiltered.map((c) => {
+                          const label = projectDisplayName(c);
+                          return (
+                            <tr key={c.id}>
+                              <td className={tdName}>{label}</td>
+                              <td className={tdProjTitle}>
+                                {c.project_title?.trim() || "—"}
+                              </td>
+                              <td className={tdReason}>
+                                {c.not_interested_reason?.trim() || "—"}
+                              </td>
+                              <td className={tdDateOnly}>
+                                {c.not_interested_at
+                                  ? formatDateOnly(c.not_interested_at)
+                                  : "—"}
+                              </td>
+                              <td className={tdActions}>
+                                <button
+                                  type="button"
+                                  disabled={
+                                    !canEditScheduledTab ||
+                                    restoringNotInterestedId === c.id
+                                  }
+                                  className="rounded-lg border border-foreground bg-elevated px-3 py-1.5 text-xs font-medium text-foreground hover:bg-background/80 disabled:cursor-not-allowed disabled:opacity-50"
+                                  onClick={() =>
+                                    void handleMarkProjectNotInterestedActive(c)
+                                  }
+                                >
+                                  {restoringNotInterestedId === c.id
+                                    ? "Saving…"
+                                    : "Mark as Active"}
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
 
           {physicalInterviewTrackFiltered.length > 0 ? (
             <div className="space-y-3">
@@ -2566,7 +2726,7 @@ export function ProjectInterviewsPanel({
                             <CommentTableCell value={i.remarks} />
                           </td>
                           <td className={tdFollowUp}>
-                            {followupBadgeForProjectCandidate(i.project_candidate_id)}
+                            {followupBadgeForProjectCandidateId(i.project_candidate_id)}
                           </td>
                           <td className={tdActions}>
                             <ScheduledInterviewRowActions
@@ -2793,7 +2953,7 @@ export function ProjectInterviewsPanel({
                             <CommentTableCell value={i.comments} />
                           </td>
                           <td className={tdFollowUp}>
-                            {followupBadgeForProjectCandidate(i.project_candidate_id)}
+                            {followupBadgeForProjectCandidateId(i.project_candidate_id)}
                           </td>
                           <td className={`${tdActions} relative`}>
                             <div
@@ -3351,7 +3511,7 @@ export function ProjectInterviewsPanel({
                             <CommentTableCell value={i.comments} />
                           </td>
                           <td className={tdFollowUp}>
-                            {followupBadgeForProjectCandidate(i.project_candidate_id)}
+                            {followupBadgeForProjectCandidateId(i.project_candidate_id)}
                           </td>
                         </tr>
                       );

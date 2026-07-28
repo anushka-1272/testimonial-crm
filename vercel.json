@@ -3,6 +3,10 @@
     {
       "path": "/api/slack/weekly-reminder",
       "schedule": "0 9 * * 1,5"
+    },
+    {
+      "path": "/api/cron/followup-stale",
+      "schedule": "0 3 * * *"
     }
   ]
 }

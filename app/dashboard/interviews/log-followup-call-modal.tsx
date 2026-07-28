@@ -6,6 +6,13 @@ import { useEffect, useState } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { logActivity } from "@/lib/activity-logger";
+import {
+  AUTO_NOT_INTERESTED_MAX_ATTEMPTS_REASON,
+  MAX_FOLLOWUP_ATTEMPTS,
+} from "@/lib/followup-constants";
+import {
+  shouldAutoNotInterestedForMaxAttempts,
+} from "@/lib/followup-auto-not-interested";
 import { getUserSafe } from "@/lib/supabase-auth";
 import { slackEmailForTeamMember } from "@/lib/slack-contacts";
 import { modalOverlayClass, modalPanelClass } from "@/lib/modal-responsive";
@@ -260,7 +267,12 @@ export function LogFollowupCallModal({
 
     switch (outcome) {
       case "no_answer":
-        newStatus = newCount >= 3 ? "no_answer" : "pending";
+        if (shouldAutoNotInterestedForMaxAttempts(outcome, newCount)) {
+          newStatus = "not_interested";
+          newReason = AUTO_NOT_INTERESTED_MAX_ATTEMPTS_REASON;
+        } else {
+          newStatus = "pending";
+        }
         newCallbackAt = null;
         break;
       case "callback":
@@ -333,9 +345,9 @@ export function LogFollowupCallModal({
         followup_status: newStatus,
         callback_datetime: newCallbackAt,
         not_interested_reason:
-          outcome === "not_interested" ? newReason : null,
+          newStatus === "not_interested" ? newReason : null,
         not_interested_at:
-          outcome === "not_interested" ? new Date().toISOString() : null,
+          newStatus === "not_interested" ? new Date().toISOString() : null,
       };
 
       const { error: upErr } = isProject
@@ -400,7 +412,7 @@ export function LogFollowupCallModal({
             description: `Callback scheduled for ${displayName} at ${dtLabel}`,
             metadata: { followup: true, project: isProject },
           });
-        } else if (outcome === "not_interested") {
+        } else if (outcome === "not_interested" || newStatus === "not_interested") {
           await logActivity({
             supabase,
             user: authUser,
@@ -431,20 +443,20 @@ export function LogFollowupCallModal({
       );
       if (pocEmail) {
         if (outcome === "no_answer") {
-          if (newCount >= 3 && newStatus === "no_answer") {
+          if (newStatus === "not_interested") {
             voidSlackNotify(
               supabase,
               pocEmail,
               `⚠️ Follow-up limit reached for *${displayName}*\n` +
-                `3 attempts made with no response.\n` +
-                `Candidate will be moved to inactive.`,
+                `${MAX_FOLLOWUP_ATTEMPTS} attempts made with no response.\n` +
+                `Candidate moved to Not Interested.`,
             );
           } else {
             voidSlackNotify(
               supabase,
               pocEmail,
               `📞 Follow-up needed for *${displayName}*\n` +
-                `Attempt ${newCount} of 3 — No answer\n` +
+                `Attempt ${newCount} of ${MAX_FOLLOWUP_ATTEMPTS} — No answer\n` +
                 `📱 ${phone}\n` +
                 `Please try again.`,
             );
@@ -469,7 +481,8 @@ export function LogFollowupCallModal({
     setSubmitting(false);
   };
 
-  const showFinalWarning = outcome === "no_answer" && row.followup_count >= 2;
+  const showFinalWarning =
+    outcome === "no_answer" && row.followup_count >= MAX_FOLLOWUP_ATTEMPTS - 1;
 
   return (
     <div className={modalOverlayClass}>
@@ -494,7 +507,7 @@ export function LogFollowupCallModal({
               <p className="mt-0.5 text-xs text-muted">{emailLine}</p>
             ) : null}
             <p className="mt-1 text-sm font-medium text-foreground">
-              Attempt {nextAttempt} of 3
+              Attempt {nextAttempt} of {MAX_FOLLOWUP_ATTEMPTS}
             </p>
           </div>
           <button
@@ -515,7 +528,8 @@ export function LogFollowupCallModal({
 
           {showFinalWarning ? (
             <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-              This is the final attempt. Further follow-ups will be stopped.
+              This is the final attempt. If there is no answer, the candidate
+              will be moved to Not Interested.
             </p>
           ) : null}
 
