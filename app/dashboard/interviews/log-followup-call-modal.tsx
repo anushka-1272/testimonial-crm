@@ -9,6 +9,7 @@ import { logActivity } from "@/lib/activity-logger";
 import {
   AUTO_NOT_INTERESTED_MAX_ATTEMPTS_REASON,
   MAX_FOLLOWUP_ATTEMPTS,
+  NOT_ELIGIBLE_NOT_INTERESTED_REASON,
 } from "@/lib/followup-constants";
 import {
   shouldAutoNotInterestedForMaxAttempts,
@@ -319,7 +320,8 @@ export function LogFollowupCallModal({
         newCallbackAt = null;
         break;
       case "not_eligible":
-        newStatus = "not_eligible";
+        newStatus = "not_interested";
+        newReason = NOT_ELIGIBLE_NOT_INTERESTED_REASON;
         newCallbackAt = null;
         break;
       case "not_interested":
@@ -443,7 +445,11 @@ export function LogFollowupCallModal({
             description: `Callback scheduled for ${displayName} at ${dtLabel}`,
             metadata: { followup: true, project: isProject },
           });
-        } else if (outcome === "not_interested" || newStatus === "not_interested") {
+        } else if (
+          outcome === "not_interested" ||
+          outcome === "not_eligible" ||
+          newStatus === "not_interested"
+        ) {
           await logActivity({
             supabase,
             user: authUser,
@@ -451,7 +457,10 @@ export function LogFollowupCallModal({
             entity_type: entityType,
             entity_id: entityId,
             candidate_name: displayName,
-            description: `Marked ${displayName} as not interested`,
+            description:
+              outcome === "not_eligible"
+                ? `Marked ${displayName} as not eligible (moved to Not Interested)`
+                : `Marked ${displayName} as not interested`,
             metadata: { followup: true, project: isProject },
           });
         } else {

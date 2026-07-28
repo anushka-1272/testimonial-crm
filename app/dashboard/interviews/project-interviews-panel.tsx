@@ -308,7 +308,7 @@ function isProjectCandidateFollowupDone(
   pc: ProjectCandidateRow | null | undefined,
 ): boolean {
   const fs = pc?.followup_status;
-  return fs === "already_completed" || fs === "not_eligible";
+  return fs === "already_completed" || fs === "not_eligible" || fs === "not_interested";
 }
 
 function projectCandidateIdsMarkedAlreadyCompleted(

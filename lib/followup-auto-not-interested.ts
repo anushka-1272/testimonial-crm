@@ -6,6 +6,7 @@ import {
   AUTO_NOT_INTERESTED_STALE_REASON,
   FOLLOWUP_INACTIVE_MONTHS,
   MAX_FOLLOWUP_ATTEMPTS,
+  NOT_ELIGIBLE_NOT_INTERESTED_REASON,
 } from "./followup-constants";
 import {
   groupFollowupLogsByEntity,
@@ -73,6 +74,8 @@ export type AutoNotInterestedResult = {
   projectsMaxAttempts: number;
   testimonialsStale: number;
   projectsStale: number;
+  testimonialsNotEligible: number;
+  projectsNotEligible: number;
   errors: string[];
 };
 
@@ -188,6 +191,59 @@ const TERMINAL_FOLLOWUP_STATUSES = new Set([
   "already_completed",
   "not_eligible",
 ]);
+
+async function processNotEligibleBackfill(
+  supabase: SupabaseClient,
+  result: AutoNotInterestedResult,
+): Promise<void> {
+  const { data: testimonialRows, error: tErr } = await supabase
+    .from("candidates")
+    .select("id, followup_count")
+    .eq("is_deleted", false)
+    .eq("followup_status", "not_eligible");
+
+  if (tErr) {
+    result.errors.push(tErr.message);
+  } else {
+    for (const row of testimonialRows ?? []) {
+      const err = await markNotInterested({
+        supabase,
+        table: "candidates",
+        id: row.id,
+        reason: NOT_ELIGIBLE_NOT_INTERESTED_REASON,
+        followupCount: row.followup_count,
+        insertLog: false,
+        candidateId: row.id,
+      });
+      if (err) result.errors.push(err);
+      else result.testimonialsNotEligible++;
+    }
+  }
+
+  const { data: projectRows, error: pErr } = await supabase
+    .from("project_candidates")
+    .select("id, followup_count")
+    .eq("is_deleted", false)
+    .eq("followup_status", "not_eligible");
+
+  if (pErr) {
+    result.errors.push(pErr.message);
+  } else {
+    for (const row of projectRows ?? []) {
+      const err = await markNotInterested({
+        supabase,
+        table: "project_candidates",
+        id: row.id,
+        reason: NOT_ELIGIBLE_NOT_INTERESTED_REASON,
+        followupCount: row.followup_count,
+        insertLog: false,
+        projectCandidateId: row.id,
+      });
+      if (err) result.errors.push(err);
+      else result.projectsNotEligible++;
+    }
+  }
+}
 
 async function processMaxAttemptsBackfill(
   supabase: SupabaseClient,
@@ -388,8 +444,12 @@ export async function runAutoNotInterestedFollowups(
     projectsMaxAttempts: 0,
     testimonialsStale: 0,
     projectsStale: 0,
+    testimonialsNotEligible: 0,
+    projectsNotEligible: 0,
     errors: [],
   };
+
+  await processNotEligibleBackfill(supabase, result);
 
   const { data: logs, error: logErr } = await supabase
     .from("followup_log")
