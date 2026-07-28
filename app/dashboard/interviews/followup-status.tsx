@@ -1,6 +1,10 @@
 import { format, parseISO } from "date-fns";
 
 import { MAX_FOLLOWUP_ATTEMPTS } from "@/lib/followup-constants";
+import {
+  getLatestFollowupLog,
+  resolveEffectiveFollowupCount,
+} from "@/lib/followup-count";
 
 import type { FollowupStatus } from "./types";
 
@@ -45,17 +49,9 @@ export function getFollowUpStatus(
   logs: FollowupLogStatusRow[],
 ): FollowupStatusSnapshot | null {
   if (!logs.length) return null;
-  const sorted = [...logs].sort((a, b) => {
-    const byAttempt = (b.attempt_number ?? 0) - (a.attempt_number ?? 0);
-    if (byAttempt !== 0) return byAttempt;
-    return (b.created_at ?? "").localeCompare(a.created_at ?? "");
-  });
-  const latest = sorted[0];
-  const followup_count = Math.max(
-    0,
-    ...logs.map((row) => Number(row.attempt_number ?? 0)),
-    logs.length,
-  );
+  const latest = getLatestFollowupLog(logs);
+  if (!latest) return null;
+  const followup_count = resolveEffectiveFollowupCount(logs);
   const latestStatus = normalizeFollowupStatus(latest.status);
   const followup_status =
     latestStatus === "no_answer" && followup_count < MAX_FOLLOWUP_ATTEMPTS

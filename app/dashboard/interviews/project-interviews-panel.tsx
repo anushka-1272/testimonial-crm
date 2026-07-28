@@ -42,6 +42,7 @@ import {
   canMoveToPostProduction,
   POST_PRODUCTION_ELIGIBILITY_TOOLTIP,
 } from "@/lib/post-production-eligibility";
+import { syncAutoNotInterestedFollowups } from "@/lib/sync-auto-not-interested-followups";
 import {
   fetchTeamRosterNames,
   mergeRosterWithCurrent,
@@ -736,6 +737,7 @@ export function ProjectInterviewsPanel({
     (role === "admin" || role === "interviewer" || role === "operations");
 
   const loadProjectData = useCallback(async () => {
+    await syncAutoNotInterestedFollowups(supabase);
     const { data: pc, error: eCandidates } = await supabase
       .from("project_candidates")
       .select(

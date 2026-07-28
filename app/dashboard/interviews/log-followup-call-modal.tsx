@@ -13,6 +13,10 @@ import {
 import {
   shouldAutoNotInterestedForMaxAttempts,
 } from "@/lib/followup-auto-not-interested";
+import {
+  resolveEffectiveFollowupCount,
+  type FollowupLogCountRow,
+} from "@/lib/followup-count";
 import { getUserSafe } from "@/lib/supabase-auth";
 import { slackEmailForTeamMember } from "@/lib/slack-contacts";
 import { modalOverlayClass, modalPanelClass } from "@/lib/modal-responsive";
@@ -217,6 +221,9 @@ export function LogFollowupCallModal({
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [historicalLogs, setHistoricalLogs] = useState<FollowupLogCountRow[]>(
+    [],
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -225,14 +232,38 @@ export function LogFollowupCallModal({
     setNotInterestedReason("");
     setNotes("");
     setError(null);
+    setHistoricalLogs([]);
   }, [open, candidate?.id, projectCandidate?.id]);
+
+  useEffect(() => {
+    if (!open || (!candidate && !projectCandidate)) return;
+    void (async () => {
+      const query = projectCandidate
+        ? supabase
+            .from("followup_log")
+            .select("attempt_number, status, created_at, callback_datetime")
+            .eq("project_candidate_id", projectCandidate.id)
+            .order("created_at", { ascending: true })
+        : supabase
+            .from("followup_log")
+            .select("attempt_number, status, created_at, callback_datetime")
+            .eq("candidate_id", candidate!.id)
+            .order("created_at", { ascending: true });
+      const { data } = await query;
+      setHistoricalLogs((data ?? []) as FollowupLogCountRow[]);
+    })();
+  }, [open, candidate?.id, projectCandidate?.id, projectCandidate, candidate, supabase]);
 
   if (!open || (!candidate && !projectCandidate)) return null;
 
   const row = projectCandidate ?? candidate!;
   const isProject = Boolean(projectCandidate);
 
-  const nextAttempt = row.followup_count + 1;
+  const effectiveFollowupCount = resolveEffectiveFollowupCount(
+    historicalLogs,
+    row.followup_count,
+  );
+  const nextAttempt = effectiveFollowupCount + 1;
   const phone = row.whatsapp_number?.trim() || "—";
   const displayName = row.full_name?.trim() || row.email;
   const emailLine = row.email?.trim() || "";
@@ -260,7 +291,7 @@ export function LogFollowupCallModal({
         ? new Date(callbackLocal).toISOString()
         : null;
 
-    let newCount = row.followup_count + 1;
+    let newCount = effectiveFollowupCount + 1;
     let newStatus = row.followup_status;
     let newCallbackAt: string | null = row.callback_datetime;
     let newReason: string | null = row.not_interested_reason;
@@ -482,7 +513,8 @@ export function LogFollowupCallModal({
   };
 
   const showFinalWarning =
-    outcome === "no_answer" && row.followup_count >= MAX_FOLLOWUP_ATTEMPTS - 1;
+    outcome === "no_answer" &&
+    effectiveFollowupCount >= MAX_FOLLOWUP_ATTEMPTS - 1;
 
   return (
     <div className={modalOverlayClass}>

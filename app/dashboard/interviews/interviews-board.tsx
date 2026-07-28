@@ -16,6 +16,7 @@ import { CandidateDetailModal } from "@/components/candidate-detail-modal";
 import { ZoomDetailsModal } from "@/components/ZoomDetailsModal";
 import { logActivity } from "@/lib/activity-logger";
 import { MAX_FOLLOWUP_ATTEMPTS } from "@/lib/followup-constants";
+import { syncAutoNotInterestedFollowups } from "@/lib/sync-auto-not-interested-followups";
 import { buildNoShowRevertPatch } from "@/lib/interview-no-show";
 import {
   buildInterviewerSelectOptions,
@@ -835,6 +836,7 @@ export function InterviewsBoard() {
 
   const loadData = useCallback(async () => {
     if (!supabase) return;
+    await syncAutoNotInterestedFollowups(supabase);
     const { data: elig, error: e1 } = await supabase
       .from("candidates")
       .select(

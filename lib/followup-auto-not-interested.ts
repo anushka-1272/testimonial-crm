@@ -7,6 +7,12 @@ import {
   FOLLOWUP_INACTIVE_MONTHS,
   MAX_FOLLOWUP_ATTEMPTS,
 } from "./followup-constants";
+import {
+  groupFollowupLogsByEntity,
+  resolveEffectiveFollowupCount,
+  shouldBackfillMaxAttemptsNotInterested,
+  type FollowupLogCountRow,
+} from "./followup-count";
 
 type FollowupEntityRow = {
   id: string;
@@ -23,6 +29,8 @@ export function shouldAutoNotInterestedForMaxAttempts(
 ): boolean {
   return outcome === "no_answer" && newCount >= MAX_FOLLOWUP_ATTEMPTS;
 }
+
+export { resolveEffectiveFollowupCount } from "./followup-count";
 
 export function resolveLastFollowupActivityAt(row: {
   created_at?: string | null;
@@ -53,15 +61,10 @@ export function isStaleInactiveFollowup(row: {
   if (row.lastActivityAt > subMonths(now, FOLLOWUP_INACTIVE_MONTHS)) {
     return false;
   }
-  const { followup_status, followup_count } = row;
+  const { followup_status } = row;
   if (followup_status === "pending") return true;
   if (followup_status === "wrong_number") return true;
-  if (
-    followup_status === "no_answer" &&
-    followup_count >= MAX_FOLLOWUP_ATTEMPTS
-  ) {
-    return true;
-  }
+  if (followup_status === "no_answer") return true;
   return false;
 }
 
@@ -74,7 +77,11 @@ export type AutoNotInterestedResult = {
 };
 
 function buildLastLogMap(
-  logs: { candidate_id: string | null; project_candidate_id: string | null; created_at: string }[],
+  logs: {
+    candidate_id: string | null;
+    project_candidate_id: string | null;
+    created_at: string;
+  }[],
 ): { testimonials: Map<string, string>; projects: Map<string, string> } {
   const testimonials = new Map<string, string>();
   const projects = new Map<string, string>();
@@ -110,6 +117,7 @@ async function markNotInterested(opts: {
     .from(opts.table)
     .update({
       followup_status: "not_interested",
+      followup_count: opts.followupCount,
       not_interested_reason: opts.reason,
       not_interested_at: now,
       callback_datetime: null,
@@ -175,28 +183,48 @@ async function getActiveProjectCandidateIds(
   );
 }
 
+const TERMINAL_FOLLOWUP_STATUSES = new Set([
+  "not_interested",
+  "already_completed",
+  "not_eligible",
+]);
+
 async function processMaxAttemptsBackfill(
   supabase: SupabaseClient,
   result: AutoNotInterestedResult,
+  logGroups: ReturnType<typeof groupFollowupLogsByEntity>,
 ): Promise<void> {
   const { data: testimonialRows, error: tErr } = await supabase
     .from("candidates")
-    .select("id, followup_count")
+    .select("id, followup_status, followup_count")
     .eq("is_deleted", false)
-    .eq("eligibility_status", "eligible")
-    .eq("followup_status", "no_answer")
-    .gte("followup_count", MAX_FOLLOWUP_ATTEMPTS);
+    .eq("eligibility_status", "eligible");
 
   if (tErr) {
     result.errors.push(tErr.message);
   } else {
     for (const row of testimonialRows ?? []) {
+      if (TERMINAL_FOLLOWUP_STATUSES.has(row.followup_status)) continue;
+      const logs = logGroups.testimonials.get(row.id) ?? [];
+      if (
+        !shouldBackfillMaxAttemptsNotInterested({
+          logs,
+          followup_status: row.followup_status,
+          followup_count: row.followup_count,
+        })
+      ) {
+        continue;
+      }
+      const effectiveCount = resolveEffectiveFollowupCount(
+        logs,
+        row.followup_count,
+      );
       const err = await markNotInterested({
         supabase,
         table: "candidates",
         id: row.id,
         reason: AUTO_NOT_INTERESTED_MAX_ATTEMPTS_REASON,
-        followupCount: row.followup_count,
+        followupCount: effectiveCount,
         insertLog: false,
         candidateId: row.id,
       });
@@ -207,21 +235,34 @@ async function processMaxAttemptsBackfill(
 
   const { data: projectRows, error: pErr } = await supabase
     .from("project_candidates")
-    .select("id, followup_count")
-    .eq("is_deleted", false)
-    .eq("followup_status", "no_answer")
-    .gte("followup_count", MAX_FOLLOWUP_ATTEMPTS);
+    .select("id, followup_status, followup_count")
+    .eq("is_deleted", false);
 
   if (pErr) {
     result.errors.push(pErr.message);
   } else {
     for (const row of projectRows ?? []) {
+      if (TERMINAL_FOLLOWUP_STATUSES.has(row.followup_status)) continue;
+      const logs = logGroups.projects.get(row.id) ?? [];
+      if (
+        !shouldBackfillMaxAttemptsNotInterested({
+          logs,
+          followup_status: row.followup_status,
+          followup_count: row.followup_count,
+        })
+      ) {
+        continue;
+      }
+      const effectiveCount = resolveEffectiveFollowupCount(
+        logs,
+        row.followup_count,
+      );
       const err = await markNotInterested({
         supabase,
         table: "project_candidates",
         id: row.id,
         reason: AUTO_NOT_INTERESTED_MAX_ATTEMPTS_REASON,
-        followupCount: row.followup_count,
+        followupCount: effectiveCount,
         insertLog: false,
         projectCandidateId: row.id,
       });
@@ -235,6 +276,7 @@ async function processStaleInactive(
   supabase: SupabaseClient,
   result: AutoNotInterestedResult,
   lastLogs: ReturnType<typeof buildLastLogMap>,
+  logGroups: ReturnType<typeof groupFollowupLogsByEntity>,
   now: Date,
 ): Promise<void> {
   const activeTestimonials = await getActiveTestimonialCandidateIds(supabase);
@@ -254,6 +296,11 @@ async function processStaleInactive(
   } else {
     for (const row of (testimonialRows ?? []) as FollowupEntityRow[]) {
       if (activeTestimonials.has(row.id)) continue;
+      const logs = logGroups.testimonials.get(row.id) ?? [];
+      const effectiveCount = resolveEffectiveFollowupCount(
+        logs,
+        row.followup_count,
+      );
       const lastActivityAt = resolveLastFollowupActivityAt({
         created_at: row.created_at,
         assigned_at: row.assigned_at,
@@ -263,7 +310,7 @@ async function processStaleInactive(
       if (
         !isStaleInactiveFollowup({
           followup_status: row.followup_status,
-          followup_count: row.followup_count,
+          followup_count: effectiveCount,
           lastActivityAt,
           now,
         })
@@ -275,7 +322,7 @@ async function processStaleInactive(
         table: "candidates",
         id: row.id,
         reason: AUTO_NOT_INTERESTED_STALE_REASON,
-        followupCount: row.followup_count,
+        followupCount: effectiveCount,
         insertLog: true,
         candidateId: row.id,
       });
@@ -297,6 +344,11 @@ async function processStaleInactive(
   } else {
     for (const row of (projectRows ?? []) as FollowupEntityRow[]) {
       if (activeProjects.has(row.id)) continue;
+      const logs = logGroups.projects.get(row.id) ?? [];
+      const effectiveCount = resolveEffectiveFollowupCount(
+        logs,
+        row.followup_count,
+      );
       const lastActivityAt = resolveLastFollowupActivityAt({
         created_at: row.created_at,
         assigned_at: row.assigned_at,
@@ -306,7 +358,7 @@ async function processStaleInactive(
       if (
         !isStaleInactiveFollowup({
           followup_status: row.followup_status,
-          followup_count: row.followup_count,
+          followup_count: effectiveCount,
           lastActivityAt,
           now,
         })
@@ -318,7 +370,7 @@ async function processStaleInactive(
         table: "project_candidates",
         id: row.id,
         reason: AUTO_NOT_INTERESTED_STALE_REASON,
-        followupCount: row.followup_count,
+        followupCount: effectiveCount,
         insertLog: true,
         projectCandidateId: row.id,
       });
@@ -339,19 +391,28 @@ export async function runAutoNotInterestedFollowups(
     errors: [],
   };
 
-  await processMaxAttemptsBackfill(supabase, result);
-
   const { data: logs, error: logErr } = await supabase
     .from("followup_log")
-    .select("candidate_id, project_candidate_id, created_at");
+    .select(
+      "candidate_id, project_candidate_id, created_at, status, attempt_number, callback_datetime",
+    );
 
   if (logErr) {
     result.errors.push(logErr.message);
     return result;
   }
 
-  const lastLogs = buildLastLogMap(logs ?? []);
-  await processStaleInactive(supabase, result, lastLogs, new Date());
+  const logRows = (logs ?? []) as (FollowupLogCountRow & {
+    candidate_id: string | null;
+    project_candidate_id: string | null;
+    created_at: string;
+  })[];
+  const logGroups = groupFollowupLogsByEntity(logRows);
+
+  await processMaxAttemptsBackfill(supabase, result, logGroups);
+
+  const lastLogs = buildLastLogMap(logRows);
+  await processStaleInactive(supabase, result, lastLogs, logGroups, new Date());
 
   return result;
 }
