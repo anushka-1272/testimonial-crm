@@ -110,3 +110,11 @@ export function canFinalizeDispatch(
   if (rewardItem?.trim() === "No Dispatch") return false;
   return status === "posts_confirmed" || status === "dispatch_ready";
 }
+
+/** True when dispatch was already finalized (ready + row exists in dispatch). */
+export function isDispatchAlreadyFinalized(
+  status: PostContentStatus | null | undefined,
+  entityInDispatch: boolean,
+): boolean {
+  return status === "dispatch_ready" && entityInDispatch;
+}

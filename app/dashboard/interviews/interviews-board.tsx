@@ -45,6 +45,7 @@ import {
 import {
   canConfirmSocialPosts,
   canFinalizeDispatch,
+  isDispatchAlreadyFinalized,
   matchesPostContentStageFilter,
   postContentStatusBadgeClass,
   postContentStatusLabel,
@@ -3320,7 +3321,12 @@ export function InterviewsBoard() {
                                           i.post_content_status,
                                           i.reward_item,
                                         ) ||
-                                        dispatchCandidateIds.has(i.candidate_id)
+                                        isDispatchAlreadyFinalized(
+                                          i.post_content_status,
+                                          dispatchCandidateIds.has(
+                                            i.candidate_id,
+                                          ),
+                                        )
                                       }
                                       className="rounded-lg border border-[#bbf7d0] bg-[#f0fdf4] px-2.5 py-1 text-xs font-medium text-[#16a34a] hover:bg-[#dcfce7] disabled:cursor-not-allowed disabled:opacity-40"
                                       onMouseDown={(e) => e.stopPropagation()}
