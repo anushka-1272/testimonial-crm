@@ -9,6 +9,7 @@ import {
   FolderKanban,
   History,
   LayoutDashboard,
+  MapPin,
   Menu,
   Package,
   Settings,
@@ -51,13 +52,20 @@ const NAV = [
     icon: Calendar,
     isActive: (p: string) =>
       p.startsWith("/dashboard/interviews") &&
-      !p.startsWith("/dashboard/project-interviews"),
+      !p.startsWith("/dashboard/project-interviews") &&
+      !p.startsWith("/dashboard/physical-interviews"),
   },
   {
     href: "/dashboard/project-interviews",
     label: "Project Interviews",
     icon: FolderKanban,
     isActive: (p: string) => p.startsWith("/dashboard/project-interviews"),
+  },
+  {
+    href: "/dashboard/physical-interviews",
+    label: "Physical Interviews",
+    icon: MapPin,
+    isActive: (p: string) => p.startsWith("/dashboard/physical-interviews"),
   },
   {
     href: "/dashboard/dispatch",
@@ -157,6 +165,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   function scopeFromPath(path: string): AccessScope {
     if (path.startsWith("/dashboard/analytics")) return "analytics";
     if (path.startsWith("/dashboard/eligibility")) return "eligibility";
+    if (path.startsWith("/dashboard/physical-interviews")) return "interviews";
     if (path.startsWith("/dashboard/project-interviews")) return "interviews";
     if (path.startsWith("/dashboard/interviews")) return "interviews";
     if (path.startsWith("/dashboard/dispatch")) return "dispatch";

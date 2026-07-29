@@ -14,9 +14,6 @@ import { logActivity } from "@/lib/activity-logger";
 import { buildNoShowRevertPatch } from "@/lib/interview-no-show";
 import {
   normalizePhysicalInterviewStatus,
-  PHYSICAL_INTERVIEW_DISPATCH_COMMENT,
-  PHYSICAL_INTERVIEW_REWARD_ITEM,
-  physicalInterviewStatusLabel,
   type PhysicalInterviewCity,
   type PhysicalInterviewStatus,
 } from "@/lib/physical-interview-track";
@@ -511,51 +508,6 @@ function dedupeProjectInterviewRows(
 
 const REWARD_NO_DISPATCH = "No Dispatch";
 
-function physicalInterviewPipelineBadge(status: PhysicalInterviewStatus | null) {
-  if (!status) return <span className="text-muted">—</span>;
-  switch (status) {
-    case "pending":
-      return (
-        <span className="inline-flex rounded-full bg-[#f3e8ff] px-2.5 py-1 text-xs font-medium text-[#7c3aed]">
-          {physicalInterviewStatusLabel(status)}
-        </span>
-      );
-    case "completed":
-      return (
-        <span className="inline-flex rounded-full bg-[#dbeafe] px-2.5 py-1 text-xs font-medium text-[#1d4ed8]">
-          {physicalInterviewStatusLabel(status)}
-        </span>
-      );
-    case "eligible":
-      return (
-        <span className="inline-flex rounded-full bg-[#f0fdf4] px-2.5 py-1 text-xs font-medium text-[#16a34a]">
-          {physicalInterviewStatusLabel(status)}
-        </span>
-      );
-    case "not_eligible":
-      return (
-        <span className="inline-flex rounded-full bg-[#fef2f2] px-2.5 py-1 text-xs font-medium text-[#dc2626]">
-          {physicalInterviewStatusLabel(status)}
-        </span>
-      );
-    default:
-      return <span className="text-muted">—</span>;
-  }
-}
-
-function physicalInterviewTrackColumnBadge(city: string | null | undefined) {
-  return (
-    <div className="flex flex-col gap-1">
-      <span className="inline-flex w-fit rounded-full bg-[#f3e8ff] px-2.5 py-1 text-xs font-medium text-[#7c3aed]">
-        Physical interview
-      </span>
-      {city?.trim() ? (
-        <span className="text-xs text-muted">{city.trim()}</span>
-      ) : null}
-    </div>
-  );
-}
-
 
 function postInterviewEligibleBadge(
   v: boolean | null,
@@ -703,7 +655,6 @@ export function ProjectInterviewsPanel({
   >(null);
   const [physicalInterviewCityFor, setPhysicalInterviewCityFor] =
     useState<ProjectCandidateRow | null>(null);
-  const [physicalInterviewListPage, setPhysicalInterviewListPage] = useState(0);
   const [revertBusyId, setRevertBusyId] = useState<string | null>(null);
   const [addZoomFor, setAddZoomFor] =
     useState<ProjectInterviewWithProjectCandidate | null>(null);
@@ -1386,11 +1337,6 @@ export function ProjectInterviewsPanel({
     ],
   );
 
-  const physicalInterviewTrackFiltered = useMemo(
-    () => candidates.filter((c) => Boolean(c.physical_interview_track)),
-    [candidates],
-  );
-
   const paginate = <T,>(rows: T[], page: number) => {
     const start = page * PAGE_SIZE;
     return {
@@ -1403,10 +1349,6 @@ export function ProjectInterviewsPanel({
   const pendingPage = useMemo(
     () => paginate(pendingQueue, filters.pending.page),
     [pendingQueue, filters.pending.page],
-  );
-  const physicalInterviewPage = useMemo(
-    () => paginate(physicalInterviewTrackFiltered, physicalInterviewListPage),
-    [physicalInterviewTrackFiltered, physicalInterviewListPage],
   );
   const scheduledPage = useMemo(
     () => paginate(scheduledFiltered, filters.scheduled.page),
@@ -1616,6 +1558,8 @@ export function ProjectInterviewsPanel({
         physical_interview_track: true,
         physical_interview_status: "pending",
         physical_interview_city: city,
+        physical_interview_added_at: new Date().toISOString(),
+        physical_interview_sheet_updated: false,
       })
       .eq("id", pc.id)
       .eq("is_deleted", false);
@@ -1642,138 +1586,6 @@ export function ProjectInterviewsPanel({
     setPhysicalInterviewCityFor(null);
     await loadProjectData();
     onPipelineChanged();
-  };
-
-  const setProjectPhysicalInterviewStatus = async (
-    pc: ProjectCandidateRow,
-    next: PhysicalInterviewStatus,
-    logDescription: string,
-  ) => {
-    if (!canEditScheduledTab) return;
-    setPhysicalInterviewBusyId(pc.id);
-    const { error: uErr } = await supabase
-      .from("project_candidates")
-      .update({ physical_interview_status: next })
-      .eq("id", pc.id)
-      .eq("is_deleted", false);
-    setPhysicalInterviewBusyId(null);
-    if (uErr) {
-      onError(uErr.message);
-      return;
-    }
-    onError(null);
-    const actor = await getUserSafe(supabase);
-    const display = projectDisplayName(pc);
-    const label = display === "—" ? pc.email : display;
-    if (actor) {
-      await logActivity({
-        supabase,
-        user: actor,
-        action_type: "interviews",
-        entity_type: "project_candidate",
-        entity_id: pc.id,
-        candidate_name: label,
-        description: logDescription,
-      });
-    }
-    await loadProjectData();
-    onPipelineChanged();
-  };
-
-  const revokeProjectPhysicalInterviewTrack = async (pc: ProjectCandidateRow) => {
-    if (!canEditScheduledTab) return;
-    const confirmed = window.confirm(
-      "Revoke physical interview track for this candidate?\n\nThey will move back to the meeting interview scheduling queue.",
-    );
-    if (!confirmed) return;
-    setPhysicalInterviewBusyId(pc.id);
-    const { error: uErr } = await supabase
-      .from("project_candidates")
-      .update({
-        physical_interview_track: false,
-        physical_interview_status: "pending",
-        physical_interview_city: null,
-      })
-      .eq("id", pc.id)
-      .eq("is_deleted", false);
-    setPhysicalInterviewBusyId(null);
-    if (uErr) {
-      onError(uErr.message);
-      return;
-    }
-    onError(null);
-    const actor = await getUserSafe(supabase);
-    const display = projectDisplayName(pc);
-    const label = display === "—" ? pc.email : display;
-    if (actor) {
-      await logActivity({
-        supabase,
-        user: actor,
-        action_type: "interviews",
-        entity_type: "project_candidate",
-        entity_id: pc.id,
-        candidate_name: label,
-        description: `Physical interview track: revoked ${label} back to interview queue`,
-      });
-    }
-    await loadProjectData();
-    onPipelineChanged();
-  };
-
-  const markProjectPhysicalInterviewEligibleWithDispatch = async (
-    pc: ProjectCandidateRow,
-  ) => {
-    if (!canEditScheduledTab) return;
-    if (pc.physical_interview_status === "eligible") return;
-    setPhysicalInterviewBusyId(pc.id);
-    const prevStatus: PhysicalInterviewStatus =
-      pc.physical_interview_status ?? "pending";
-    const { error: uErr } = await supabase
-      .from("project_candidates")
-      .update({ physical_interview_status: "eligible" })
-      .eq("id", pc.id)
-      .eq("is_deleted", false);
-    if (uErr) {
-      setPhysicalInterviewBusyId(null);
-      onError(uErr.message);
-      return;
-    }
-    const { error: dErr } = await supabase.from("project_dispatch").insert({
-      project_candidate_id: pc.id,
-      shipping_address: null,
-      dispatch_status: "pending",
-      reward_item: PHYSICAL_INTERVIEW_REWARD_ITEM,
-      special_comments: PHYSICAL_INTERVIEW_DISPATCH_COMMENT,
-    });
-    if (dErr) {
-      await supabase
-        .from("project_candidates")
-        .update({ physical_interview_status: prevStatus })
-        .eq("id", pc.id)
-        .eq("is_deleted", false);
-      setPhysicalInterviewBusyId(null);
-      onError(dErr.message);
-      return;
-    }
-    onError(null);
-    const actor = await getUserSafe(supabase);
-    const display = projectDisplayName(pc);
-    const label = display === "—" ? pc.email : display;
-    if (actor) {
-      await logActivity({
-        supabase,
-        user: actor,
-        action_type: "interviews",
-        entity_type: "project_candidate",
-        entity_id: pc.id,
-        candidate_name: label,
-        description: `Physical interview track: marked ${label} eligible — ${PHYSICAL_INTERVIEW_REWARD_ITEM} dispatch created`,
-      });
-    }
-    setPhysicalInterviewBusyId(null);
-    await loadProjectData();
-    onPipelineChanged();
-    onToast?.("Dispatch created for physical interview reward");
   };
 
   const handlePocChange = async (pc: ProjectCandidateRow, value: string) => {
@@ -1874,9 +1686,6 @@ export function ProjectInterviewsPanel({
   const tdProjTitle = `${tdBase} min-w-[180px] text-left text-muted`;
   const thTrack = `${thBase} min-w-[130px] text-left`;
   const tdTrack = `${tdBase} min-w-[130px] text-left align-top`;
-  const thPhysicalInterviewStatus = `${thBase} min-w-[160px] text-left`;
-  const tdPhysicalInterviewStatus = `${tdBase} min-w-[160px] text-left align-top`;
-  const thCity = `${thBase} min-w-[100px] text-left`;
   const tdCity = `${tdBase} min-w-[100px] text-left text-muted`;
   const thPoc = `${thBase} min-w-[160px] text-left`;
   const thAssignedOn = `${thBase} min-w-[140px] text-left`;
@@ -2334,180 +2143,6 @@ export function ProjectInterviewsPanel({
                   </div>
                 </div>
               ) : null}
-            </div>
-          ) : null}
-
-          {physicalInterviewTrackFiltered.length > 0 ? (
-            <div className="space-y-3">
-              <div>
-                <h2 className="text-base font-semibold text-foreground">
-                  Physical interview track
-                </h2>
-                <p className="mt-1 text-xs text-muted">
-                  These candidates are no longer in the meeting scheduling queue.
-                  Conduct the in-person interview, then mark completion and
-                  reward eligibility below.
-                </p>
-              </div>
-              <div className={tableWrap}>
-                <div className="w-full overflow-x-auto">
-                  <table className="w-full min-w-[980px] table-auto border-collapse">
-                    <thead>
-                      <tr>
-                        <th className={thName}>Name</th>
-                        <th className={thEmail}>Email</th>
-                        <th className={thProjTitle}>Project title</th>
-                        <th className={thTrack}>Track</th>
-                        <th className={thCity}>City</th>
-                        <th className={thPhysicalInterviewStatus}>
-                          Interview status
-                        </th>
-                        <th className={thActions}>Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {physicalInterviewPage.slice.map((c) => {
-                        const st = c.physical_interview_status ?? "pending";
-                        const display = projectDisplayName(c);
-                        const label = display === "—" ? c.email : display;
-                        const busy = physicalInterviewBusyId === c.id;
-                        return (
-                          <tr key={c.id}>
-                            <td className={tdName}>
-                              <button
-                                type="button"
-                                className={nameLinkBtn}
-                                onClick={() => setDetail(c)}
-                              >
-                                {display}
-                              </button>
-                            </td>
-                            <td className={tdEmail}>{c.email}</td>
-                            <td className={tdProjTitle}>
-                              {c.project_title?.trim() || "—"}
-                            </td>
-                            <td className={tdTrack}>
-                              {physicalInterviewTrackColumnBadge(
-                                c.physical_interview_city,
-                              )}
-                            </td>
-                            <td className={tdCity}>
-                              {c.physical_interview_city?.trim() || "—"}
-                            </td>
-                            <td className={tdPhysicalInterviewStatus}>
-                              {physicalInterviewPipelineBadge(st)}
-                            </td>
-                            <td className={tdActions}>
-                              <div className="flex flex-wrap items-center justify-end gap-1.5">
-                                {st === "pending" ? (
-                                  <button
-                                    type="button"
-                                    disabled={busy || !canEditScheduledTab}
-                                    className="rounded-lg border border-border bg-elevated px-2.5 py-1.5 text-xs font-medium text-foreground hover:bg-background disabled:opacity-50"
-                                    onClick={() =>
-                                      void setProjectPhysicalInterviewStatus(
-                                        c,
-                                        "completed",
-                                        `Physical interview track: marked ${label} interview completed`,
-                                      )
-                                    }
-                                  >
-                                    Mark interview completed
-                                  </button>
-                                ) : null}
-                                {st === "completed" ? (
-                                  <>
-                                    <button
-                                      type="button"
-                                      disabled={busy || !canEditScheduledTab}
-                                      className="rounded-lg bg-[#16a34a] px-2.5 py-1.5 text-xs font-medium text-white hover:bg-[#15803d] disabled:opacity-50"
-                                      onClick={() =>
-                                        void markProjectPhysicalInterviewEligibleWithDispatch(
-                                          c,
-                                        )
-                                      }
-                                    >
-                                      Mark eligible & dispatch
-                                    </button>
-                                    <button
-                                      type="button"
-                                      disabled={busy || !canEditScheduledTab}
-                                      className="rounded-lg bg-[#dc2626] px-2.5 py-1.5 text-xs font-medium text-white hover:bg-[#b91c1c] disabled:opacity-50"
-                                      onClick={() =>
-                                        void setProjectPhysicalInterviewStatus(
-                                          c,
-                                          "not_eligible",
-                                          `Physical interview track: marked ${label} not eligible`,
-                                        )
-                                      }
-                                    >
-                                      Mark not eligible
-                                    </button>
-                                  </>
-                                ) : null}
-                                {st === "eligible" || st === "not_eligible" ? (
-                                  <span className="text-xs text-muted/80">
-                                    —
-                                  </span>
-                                ) : null}
-                                <button
-                                  type="button"
-                                  disabled={busy || !canEditScheduledTab}
-                                  className="rounded-lg border border-border bg-elevated px-2.5 py-1.5 text-xs font-medium text-muted hover:bg-background disabled:opacity-50"
-                                  onClick={() =>
-                                    void revokeProjectPhysicalInterviewTrack(c)
-                                  }
-                                >
-                                  Revoke
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-                {physicalInterviewPage.total > 0 ? (
-                  <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border-subtle bg-background/60 px-4 py-3 text-xs text-muted">
-                    <span>
-                      Showing {physicalInterviewListPage * PAGE_SIZE + 1}–
-                      {Math.min(
-                        (physicalInterviewListPage + 1) * PAGE_SIZE,
-                        physicalInterviewPage.total,
-                      )}{" "}
-                      of {physicalInterviewPage.total}
-                    </span>
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        disabled={physicalInterviewListPage <= 0}
-                        className="rounded-lg border border-border bg-elevated px-3 py-1.5 font-medium text-foreground transition-colors hover:bg-background disabled:cursor-not-allowed disabled:opacity-40"
-                        onClick={() =>
-                          setPhysicalInterviewListPage((p) =>
-                            Math.max(0, p - 1),
-                          )
-                        }
-                      >
-                        Previous
-                      </button>
-                      <button
-                        type="button"
-                        disabled={
-                          physicalInterviewListPage >=
-                          physicalInterviewPage.totalPages - 1
-                        }
-                        className="rounded-lg border border-border bg-elevated px-3 py-1.5 font-medium text-foreground transition-colors hover:bg-background disabled:cursor-not-allowed disabled:opacity-40"
-                        onClick={() =>
-                          setPhysicalInterviewListPage((p) => p + 1)
-                        }
-                      >
-                        Next
-                      </button>
-                    </div>
-                  </div>
-                ) : null}
-              </div>
             </div>
           ) : null}
         </section>

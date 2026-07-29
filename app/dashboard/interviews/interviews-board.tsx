@@ -38,9 +38,6 @@ import { slackEmailForTeamMember } from "@/lib/slack-contacts";
 import { voidSlackNotify } from "@/lib/slack-client";
 import {
   normalizePhysicalInterviewStatus,
-  PHYSICAL_INTERVIEW_DISPATCH_COMMENT,
-  PHYSICAL_INTERVIEW_REWARD_ITEM,
-  physicalInterviewStatusLabel,
   type PhysicalInterviewCity,
   type PhysicalInterviewStatus,
 } from "@/lib/physical-interview-track";
@@ -331,51 +328,6 @@ function truncateWithTooltip(text: string | null | undefined, maxLen: number) {
 }
 
 const REWARD_NO_DISPATCH = "No Dispatch";
-
-function physicalInterviewPipelineBadge(status: PhysicalInterviewStatus | null) {
-  if (!status) return <span className="text-muted">—</span>;
-  switch (status) {
-    case "pending":
-      return (
-        <span className="inline-flex rounded-full bg-[#f3e8ff] px-2.5 py-1 text-xs font-medium text-[#7c3aed]">
-          {physicalInterviewStatusLabel(status)}
-        </span>
-      );
-    case "completed":
-      return (
-        <span className="inline-flex rounded-full bg-[#dbeafe] px-2.5 py-1 text-xs font-medium text-[#1d4ed8]">
-          {physicalInterviewStatusLabel(status)}
-        </span>
-      );
-    case "eligible":
-      return (
-        <span className="inline-flex rounded-full bg-[#f0fdf4] px-2.5 py-1 text-xs font-medium text-[#16a34a]">
-          {physicalInterviewStatusLabel(status)}
-        </span>
-      );
-    case "not_eligible":
-      return (
-        <span className="inline-flex rounded-full bg-[#fef2f2] px-2.5 py-1 text-xs font-medium text-[#dc2626]">
-          {physicalInterviewStatusLabel(status)}
-        </span>
-      );
-    default:
-      return <span className="text-muted">—</span>;
-  }
-}
-
-function physicalInterviewTrackColumnBadge(city: string | null | undefined) {
-  return (
-    <div className="flex flex-col gap-1">
-      <span className="inline-flex w-fit rounded-full bg-[#f3e8ff] px-2.5 py-1 text-xs font-medium text-[#7c3aed]">
-        Physical interview
-      </span>
-      {city?.trim() ? (
-        <span className="text-xs text-muted">{city.trim()}</span>
-      ) : null}
-    </div>
-  );
-}
 
 function postInterviewEligibleBadge(
   v: boolean | null,
@@ -820,7 +772,6 @@ export function InterviewsBoard() {
   const [liBusyId, setLiBusyId] = useState<string | null>(null);
   const [physicalInterviewCityFor, setPhysicalInterviewCityFor] =
     useState<EligibleCandidate | null>(null);
-  const [physicalInterviewListPage, setPhysicalInterviewListPage] = useState(0);
   const [pocRoster, setPocRoster] = useState<string[]>([]);
   const [interviewerRoster, setInterviewerRoster] = useState<
     InterviewerSelectOption[]
@@ -1266,21 +1217,6 @@ export function InterviewsBoard() {
     [eligibleFiltered],
   );
 
-  const physicalInterviewTrackFiltered = useMemo(
-    () => eligibleFiltered.filter((c) => c.physical_interview_track),
-    [eligibleFiltered],
-  );
-
-  useEffect(() => {
-    setPhysicalInterviewListPage(0);
-  }, [
-    filters.eligible.search,
-    filters.eligible.interviewType,
-    filters.eligible.poc,
-    filters.eligible.interviewer,
-    physicalInterviewTrackFiltered.length,
-  ]);
-
   const scheduledFiltered = useMemo(
     () =>
       [...filterInterviews(byStatus.scheduled, filters.scheduled)].sort(
@@ -1358,16 +1294,6 @@ export function InterviewsBoard() {
     () => paginate(interviewEligibleFiltered, filters.eligible.page),
     [interviewEligibleFiltered, filters.eligible.page],
   );
-
-  const physicalInterviewPageData = useMemo(() => {
-    const start = physicalInterviewListPage * PAGE_SIZE;
-    const total = physicalInterviewTrackFiltered.length;
-    return {
-      slice: physicalInterviewTrackFiltered.slice(start, start + PAGE_SIZE),
-      totalPages: Math.max(1, Math.ceil(total / PAGE_SIZE)),
-      total,
-    };
-  }, [physicalInterviewTrackFiltered, physicalInterviewListPage]);
 
   const scheduledPage = useMemo(
     () => paginate(scheduledFiltered, filters.scheduled.page),
@@ -1768,6 +1694,8 @@ export function InterviewsBoard() {
         physical_interview_track: true,
         physical_interview_status: "pending",
         physical_interview_city: city,
+        physical_interview_added_at: new Date().toISOString(),
+        physical_interview_sheet_updated: false,
       })
       .eq("id", c.id)
       .eq("is_deleted", false);
@@ -1793,128 +1721,6 @@ export function InterviewsBoard() {
     void loadData();
   };
 
-  const setPhysicalInterviewPipelineStatus = async (
-    c: EligibleCandidate,
-    next: PhysicalInterviewStatus,
-    logDescription: string,
-  ) => {
-    if (!supabase) return;
-    setLiBusyId(c.id);
-    const { error: uErr } = await supabase
-      .from("candidates")
-      .update({ physical_interview_status: next })
-      .eq("id", c.id)
-      .eq("is_deleted", false);
-    setLiBusyId(null);
-    if (uErr) {
-      setError(uErr.message);
-      return;
-    }
-    const display = c.full_name?.trim() || c.email || "Candidate";
-    const authS = await getUserSafe(supabase);
-    if (authS) {
-      await logActivity({
-        supabase,
-        user: authS,
-        action_type: "interviews",
-        entity_type: "candidate",
-        entity_id: c.id,
-        candidate_name: display,
-        description: logDescription,
-      });
-    }
-    void loadData();
-  };
-
-  const revokePhysicalInterviewTrack = async (c: EligibleCandidate) => {
-    if (!supabase) return;
-    const confirmed = window.confirm(
-      "Revoke physical interview track for this candidate?\n\nThey will move back to the meeting interview scheduling queue.",
-    );
-    if (!confirmed) return;
-    setLiBusyId(c.id);
-    const { error: uErr } = await supabase
-      .from("candidates")
-      .update({
-        physical_interview_track: false,
-        physical_interview_status: "pending",
-        physical_interview_city: null,
-      })
-      .eq("id", c.id)
-      .eq("is_deleted", false);
-    setLiBusyId(null);
-    if (uErr) {
-      setError(uErr.message);
-      return;
-    }
-    const display = c.full_name?.trim() || c.email || "Candidate";
-    const authUser = await getUserSafe(supabase);
-    if (authUser) {
-      await logActivity({
-        supabase,
-        user: authUser,
-        action_type: "interviews",
-        entity_type: "candidate",
-        entity_id: c.id,
-        candidate_name: display,
-        description: `Physical interview track: revoked ${display} back to interview queue`,
-      });
-    }
-    void loadData();
-  };
-
-  const markPhysicalInterviewEligibleWithDispatch = async (
-    c: EligibleCandidate,
-  ) => {
-    if (!supabase) return;
-    if (c.physical_interview_status === "eligible") return;
-    setLiBusyId(c.id);
-    const prevStatus: PhysicalInterviewStatus =
-      c.physical_interview_status ?? "pending";
-    const { error: uErr } = await supabase
-      .from("candidates")
-      .update({ physical_interview_status: "eligible" })
-      .eq("id", c.id)
-      .eq("is_deleted", false);
-    if (uErr) {
-      setLiBusyId(null);
-      setError(uErr.message);
-      return;
-    }
-    const { error: dErr } = await supabase.from("dispatch").insert({
-      candidate_id: c.id,
-      shipping_address: null,
-      dispatch_status: "pending",
-      reward_item: PHYSICAL_INTERVIEW_REWARD_ITEM,
-      special_comments: PHYSICAL_INTERVIEW_DISPATCH_COMMENT,
-    });
-    if (dErr) {
-      await supabase
-        .from("candidates")
-        .update({ physical_interview_status: prevStatus })
-        .eq("id", c.id)
-        .eq("is_deleted", false);
-      setLiBusyId(null);
-      setError(dErr.message);
-      return;
-    }
-    const display = c.full_name?.trim() || c.email || "Candidate";
-    const authE = await getUserSafe(supabase);
-    if (authE) {
-      await logActivity({
-        supabase,
-        user: authE,
-        action_type: "interviews",
-        entity_type: "candidate",
-        entity_id: c.id,
-        candidate_name: display,
-        description: `Physical interview track: marked ${display} eligible — ${PHYSICAL_INTERVIEW_REWARD_ITEM} dispatch created`,
-      });
-    }
-    setLiBusyId(null);
-    void loadData();
-  };
-
   // tableWrap, thBase, tdBase imported from ui-theme-classes
 
   const thName = `${thBase} min-w-[180px] text-left`;
@@ -1922,7 +1728,6 @@ export function InterviewsBoard() {
   const thInterviewType = `${thBase} min-w-[150px] text-center`;
   const thLanguage = `${thBase} min-w-[120px] text-center`;
   const thTrack = `${thBase} min-w-[130px] text-left`;
-  const thPhysicalInterviewStatus = `${thBase} min-w-[160px] text-left`;
   const thCity = `${thBase} min-w-[100px] text-left`;
   const thPocAssigned = `${thBase} min-w-[160px] text-left`;
   const thAssignedOn = `${thBase} min-w-[140px] text-left`;
@@ -2509,185 +2314,6 @@ export function InterviewsBoard() {
                         </div>
                       </div>
                     ) : null}
-                  </div>
-                ) : null}
-
-                {physicalInterviewTrackFiltered.length > 0 ? (
-                  <div className="mt-10 space-y-3">
-                    <div>
-                      <h2 className="text-base font-semibold text-foreground">
-                        Physical interview track
-                      </h2>
-                      <p className="mt-1 text-xs text-muted">
-                        These candidates are no longer in the meeting scheduling
-                        queue. Conduct the in-person interview, then mark
-                        completion and reward eligibility below.
-                      </p>
-                    </div>
-                    <div className={tableWrap}>
-                      <div className="w-full min-w-0 max-w-full overflow-x-auto">
-                        <table className="w-full min-w-[980px] table-auto border-collapse">
-                          <thead>
-                            <tr>
-                              <th className={thName}>Name</th>
-                              <th className={thEmail}>Email</th>
-                              <th className={thInterviewType}>
-                                Interview type
-                              </th>
-                              <th className={thTrack}>Track</th>
-                              <th className={thCity}>City</th>
-                              <th className={thPhysicalInterviewStatus}>
-                                Interview status
-                              </th>
-                              <th className={thActions}>Actions</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {physicalInterviewPageData.slice.map((c) => {
-                              const st = c.physical_interview_status;
-                              const display =
-                                c.full_name?.trim() || c.email || "Candidate";
-                              const busy = liBusyId === c.id;
-                              return (
-                                <tr key={c.id}>
-                                  <td className={tdName}>
-                                    <button
-                                      type="button"
-                                      className={nameLinkBtn}
-                                      onClick={() =>
-                                        setDetailCandidateId(c.id)
-                                      }
-                                    >
-                                      {c.full_name?.trim() || "—"}
-                                    </button>
-                                  </td>
-                                  <td className={tdEmail}>{c.email}</td>
-                                  <td className={tdInterviewType}>
-                                    <div className="flex items-center justify-center">
-                                      {interviewTypeBadge(c.interview_type)}
-                                    </div>
-                                  </td>
-                                  <td className={tdTrack}>
-                                    {physicalInterviewTrackColumnBadge(
-                                      c.physical_interview_city,
-                                    )}
-                                  </td>
-                                  <td className={tdCity}>
-                                    {c.physical_interview_city?.trim() || "—"}
-                                  </td>
-                                  <td className={tdPhysicalInterviewStatus}>
-                                    {physicalInterviewPipelineBadge(st)}
-                                  </td>
-                                  <td className={tdActions}>
-                                    <div className="flex flex-wrap items-center justify-end gap-1.5">
-                                      {st === "pending" ? (
-                                        <button
-                                          type="button"
-                                          disabled={busy}
-                                          className="rounded-lg border border-border bg-elevated px-2.5 py-1.5 text-xs font-medium text-foreground hover:bg-background disabled:opacity-50"
-                                          onClick={() =>
-                                            void setPhysicalInterviewPipelineStatus(
-                                              c,
-                                              "completed",
-                                              `Physical interview track: marked ${display} interview completed`,
-                                            )
-                                          }
-                                        >
-                                          Mark interview completed
-                                        </button>
-                                      ) : null}
-                                      {st === "completed" ? (
-                                        <>
-                                          <button
-                                            type="button"
-                                            disabled={busy}
-                                            className="rounded-lg bg-[#16a34a] px-2.5 py-1.5 text-xs font-medium text-white hover:bg-[#15803d] disabled:opacity-50"
-                                            onClick={() =>
-                                              void markPhysicalInterviewEligibleWithDispatch(
-                                                c,
-                                              )
-                                            }
-                                          >
-                                            Mark eligible & dispatch
-                                          </button>
-                                          <button
-                                            type="button"
-                                            disabled={busy}
-                                            className="rounded-lg bg-[#dc2626] px-2.5 py-1.5 text-xs font-medium text-white hover:bg-[#b91c1c] disabled:opacity-50"
-                                            onClick={() =>
-                                              void setPhysicalInterviewPipelineStatus(
-                                                c,
-                                                "not_eligible",
-                                                `Physical interview track: marked ${display} not eligible`,
-                                              )
-                                            }
-                                          >
-                                            Mark not eligible
-                                          </button>
-                                        </>
-                                      ) : null}
-                                      {st === "eligible" ||
-                                      st === "not_eligible" ? (
-                                        <span className="text-xs text-muted/80">
-                                          —
-                                        </span>
-                                      ) : null}
-                                      <button
-                                        type="button"
-                                        disabled={busy}
-                                        className="rounded-lg border border-border bg-elevated px-2.5 py-1.5 text-xs font-medium text-muted hover:bg-background disabled:opacity-50"
-                                        onClick={() =>
-                                          void revokePhysicalInterviewTrack(c)
-                                        }
-                                      >
-                                        Revoke
-                                      </button>
-                                    </div>
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                      {physicalInterviewPageData.total > 0 ? (
-                        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border-subtle bg-background/60 px-4 py-3 text-xs text-muted">
-                          <span>
-                            Showing {physicalInterviewListPage * PAGE_SIZE + 1}–
-                            {Math.min(
-                              (physicalInterviewListPage + 1) * PAGE_SIZE,
-                              physicalInterviewPageData.total,
-                            )}{" "}
-                            of {physicalInterviewPageData.total}
-                          </span>
-                          <div className="flex gap-2">
-                            <button
-                              type="button"
-                              disabled={physicalInterviewListPage <= 0}
-                              className="rounded-lg border border-border bg-elevated px-3 py-1.5 font-medium text-foreground transition-colors hover:bg-background disabled:cursor-not-allowed disabled:opacity-40"
-                              onClick={() =>
-                                setPhysicalInterviewListPage((p) => Math.max(0, p - 1))
-                              }
-                            >
-                              Previous
-                            </button>
-                            <button
-                              type="button"
-                              disabled={
-                                physicalInterviewListPage >=
-                                physicalInterviewPageData.totalPages - 1
-                              }
-                              className="rounded-lg border border-border bg-elevated px-3 py-1.5 font-medium text-foreground transition-colors hover:bg-background disabled:cursor-not-allowed disabled:opacity-40"
-                              onClick={() =>
-                                setPhysicalInterviewListPage((p) => p + 1)
-                              }
-                            >
-                              Next
-                            </button>
-                          </div>
-                        </div>
-                      ) : null}
-                    </div>
                   </div>
                 ) : null}
               </section>
