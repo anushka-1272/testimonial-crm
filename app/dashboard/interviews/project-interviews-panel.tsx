@@ -739,7 +739,11 @@ export function ProjectInterviewsPanel({
         .from("project_interviews")
         .select(PROJECT_INTERVIEW_COLUMNS_WITHOUT_PLANNED_CONTENT)
         .order("created_at", { ascending: true });
-      projectInterviewRows = withoutPlanned;
+      projectInterviewRows =
+        withoutPlanned?.map((row) => ({
+          ...row,
+          planned_content_type: null,
+        })) ?? null;
       projectInterviewError = withoutPlannedErr;
     }
     if (
@@ -761,6 +765,7 @@ export function ProjectInterviewsPanel({
           blog_post_url: null,
           posts_confirmed_at: null,
           skip_social_posts: false,
+          planned_content_type: null,
           no_show_reason: null,
           no_show_at: null,
         })) ?? null;
