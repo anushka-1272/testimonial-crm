@@ -371,6 +371,14 @@ function trimOrNull(v: string | null | undefined): string | null {
   return t.length > 0 ? t : null;
 }
 
+/** When the interview was taken (`scheduled_date`), not when it was marked completed. */
+function interviewTakenAt(
+  scheduledDate: string | null | undefined,
+  completedAt: string | null | undefined,
+): string | null {
+  return trimOrNull(scheduledDate) ?? trimOrNull(completedAt);
+}
+
 function truncateText(value: string, max: number): { text: string; truncated: boolean } {
   if (value.length <= max) return { text: value, truncated: false };
   return { text: `${value.slice(0, max)}...`, truncated: true };
@@ -946,8 +954,7 @@ export function PostProductionDashboard() {
       const c = r.candidates;
       const cand = Array.isArray(c) ? c[0] : c;
       if (!cand) continue;
-      const dateIso =
-        r.completed_at?.trim() || r.scheduled_date?.trim() || null;
+      const dateIso = interviewTakenAt(r.scheduled_date, r.completed_at);
       const interviewer = String(r.interviewer ?? "").trim() || "—";
       const prev = tMap.get(cid);
       if (
@@ -1004,8 +1011,7 @@ export function PostProductionDashboard() {
         (local.length > 0
           ? local.charAt(0).toUpperCase() + local.slice(1)
           : "—");
-      const dateIso =
-        r.completed_at?.trim() || r.scheduled_date?.trim() || null;
+      const dateIso = interviewTakenAt(r.scheduled_date, r.completed_at);
       const prev = pMap.get(pcid);
       if (
         !prev ||
@@ -1241,10 +1247,11 @@ export function PostProductionDashboard() {
       [row.id]: {
         loading: false,
         date: isProject
-          ? trimOrNull(projectInterview?.completed_at) ??
-            trimOrNull(projectInterview?.scheduled_date)
-          : trimOrNull(interview?.completed_at) ??
-            trimOrNull(interview?.scheduled_date),
+          ? interviewTakenAt(
+              projectInterview?.scheduled_date,
+              projectInterview?.completed_at,
+            )
+          : interviewTakenAt(interview?.scheduled_date, interview?.completed_at),
         interviewer: isProject
           ? trimOrNull(projectInterview?.interviewer)
           : trimOrNull(interview?.interviewer),

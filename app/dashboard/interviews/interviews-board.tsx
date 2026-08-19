@@ -56,6 +56,10 @@ import {
   POST_PRODUCTION_ELIGIBILITY_TOOLTIP,
 } from "@/lib/post-production-eligibility";
 import {
+  isPlannedContentType,
+  type PlannedContentType,
+} from "@/lib/planned-content-type";
+import {
   fetchTeamRosterNames,
   mergeRosterWithCurrent,
 } from "@/lib/team-roster";
@@ -99,7 +103,8 @@ import type {
 
 const PAGE_SIZE = 20;
 
-const INTERVIEW_SELECT = `id, candidate_id, scheduled_date, previous_scheduled_date, reschedule_reason, completed_at, interviewer, interviewer_assigned_at, zoom_link, zoom_account, not_eligible_recording_link, language, interview_language, invitation_sent, poc, remarks, reminder_count, interview_status, post_interview_eligible, reward_item, category, funnel, comments, interview_type, post_content_status, linkedin_post_url, blog_post_url, posts_confirmed_at, skip_social_posts, no_show_reason, no_show_at, candidates ( id, created_at, full_name, email, whatsapp_number, poc_assigned, is_deleted )`;
+const INTERVIEW_SELECT = `id, candidate_id, scheduled_date, previous_scheduled_date, reschedule_reason, completed_at, interviewer, interviewer_assigned_at, zoom_link, zoom_account, not_eligible_recording_link, language, interview_language, invitation_sent, poc, remarks, reminder_count, interview_status, post_interview_eligible, reward_item, category, funnel, comments, interview_type, post_content_status, linkedin_post_url, blog_post_url, posts_confirmed_at, skip_social_posts, planned_content_type, no_show_reason, no_show_at, candidates ( id, created_at, full_name, email, whatsapp_number, poc_assigned, is_deleted )`;
+const INTERVIEW_SELECT_WITHOUT_PLANNED_CONTENT = `id, candidate_id, scheduled_date, previous_scheduled_date, reschedule_reason, completed_at, interviewer, interviewer_assigned_at, zoom_link, zoom_account, not_eligible_recording_link, language, interview_language, invitation_sent, poc, remarks, reminder_count, interview_status, post_interview_eligible, reward_item, category, funnel, comments, interview_type, post_content_status, linkedin_post_url, blog_post_url, posts_confirmed_at, skip_social_posts, no_show_reason, no_show_at, candidates ( id, created_at, full_name, email, whatsapp_number, poc_assigned, is_deleted )`;
 const INTERVIEW_SELECT_LEGACY = `id, candidate_id, scheduled_date, previous_scheduled_date, reschedule_reason, completed_at, interviewer, interviewer_assigned_at, zoom_link, zoom_account, language, interview_language, invitation_sent, poc, remarks, reminder_count, interview_status, post_interview_eligible, reward_item, category, funnel, comments, interview_type, candidates ( id, created_at, full_name, email, whatsapp_number, poc_assigned, is_deleted )`;
 
 
@@ -626,6 +631,11 @@ function normalizeInterviewRow(
     blog_post_url: (r.blog_post_url as string | null) ?? null,
     posts_confirmed_at: (r.posts_confirmed_at as string | null) ?? null,
     skip_social_posts: Boolean(r.skip_social_posts),
+    planned_content_type: isPlannedContentType(
+      r.planned_content_type as string | null | undefined,
+    )
+      ? (r.planned_content_type as PlannedContentType)
+      : null,
     no_show_reason: (r.no_show_reason as string | null) ?? null,
     no_show_at: (r.no_show_at as string | null) ?? null,
     candidates: candidate,
@@ -801,6 +811,14 @@ export function InterviewsBoard() {
       .select(INTERVIEW_SELECT);
     let interviewRows = (inv as Record<string, unknown>[] | null) ?? null;
     let interviewError = e2;
+    if (interviewError?.message?.includes("planned_content_type")) {
+      const { data: withoutPlanned, error: withoutPlannedErr } = await supabase
+        .from("interviews")
+        .select(INTERVIEW_SELECT_WITHOUT_PLANNED_CONTENT);
+      interviewRows =
+        (withoutPlanned as Record<string, unknown>[] | null) ?? null;
+      interviewError = withoutPlannedErr;
+    }
     if (
       interviewError?.message?.includes(
         "column interviews.not_eligible_recording_link does not exist",
@@ -2829,7 +2847,7 @@ export function InterviewsBoard() {
 
                 <div className={tableWrap}>
                   <div className="w-full min-w-0 max-w-full overflow-x-auto">
-                    <table className="w-full min-w-[1640px] table-auto border-collapse">
+                    <table className="w-full min-w-[1760px] table-auto border-collapse">
                       <thead>
                         <tr>
                           <th className={thName}>Name</th>
@@ -2837,6 +2855,7 @@ export function InterviewsBoard() {
                           <th className={thInterviewType}>Interview type</th>
                           <th className={thLanguage}>Language</th>
                           <th className={thInterviewer}>Interviewer</th>
+                          <th className={thPocInterview}>POC</th>
                           <th className={thCompletedOn}>Completed on</th>
                           <th className={thPostInterview}>
                             Post-interview eligible
@@ -2857,7 +2876,7 @@ export function InterviewsBoard() {
                       <tbody>
                         {completedPage.slice.length === 0 ? (
                           <tr>
-                            <td className={tdBase} colSpan={13}>
+                            <td className={tdBase} colSpan={14}>
                               {emptyState}
                             </td>
                           </tr>
@@ -2893,6 +2912,9 @@ export function InterviewsBoard() {
                                 </td>
                                 <td className={tdInterviewer}>
                                   {formatInterviewerStoredForUi(i.interviewer)}
+                                </td>
+                                <td className={tdPocInterview}>
+                                  {effectivePocForInterview(i) || "—"}
                                 </td>
                                 <td className={tdCompletedOn}>
                                   {formatDateTime(i.completed_at)}
@@ -3018,6 +3040,15 @@ export function InterviewsBoard() {
                                           Post-interview details
                                         </p>
                                         <dl className="mt-3 space-y-3 text-sm">
+                                          <div>
+                                            <dt className="text-xs text-muted/80">
+                                              POC
+                                            </dt>
+                                            <dd className="mt-0.5 text-foreground">
+                                              {effectivePocForInterview(i) ||
+                                                "—"}
+                                            </dd>
+                                          </div>
                                           <div>
                                             <dt className="text-xs text-muted/80">
                                               Post-interview eligible
@@ -3156,13 +3187,14 @@ export function InterviewsBoard() {
                 </div>
                 <div className={tableWrap}>
                   <div className="w-full min-w-0 max-w-full overflow-x-auto">
-                    <table className="w-full min-w-[1100px] table-auto border-collapse">
+                    <table className="w-full min-w-[1220px] table-auto border-collapse">
                       <thead>
                         <tr>
                           <th className={thName}>Name</th>
                           <th className={thEmail}>Email</th>
                           <th className={thDateTime}>Scheduled for</th>
                           <th className={thInterviewer}>Interviewer</th>
+                          <th className={thPocInterview}>POC</th>
                           <th className={thCommentsCol}>No-show reason</th>
                           <th className={thCompletedOn}>Marked at</th>
                           <th className={thActions}>Actions</th>
@@ -3171,7 +3203,7 @@ export function InterviewsBoard() {
                       <tbody>
                         {noShowPage.slice.length === 0 ? (
                           <tr>
-                            <td className={tdBase} colSpan={7}>
+                            <td className={tdBase} colSpan={8}>
                               {emptyState}
                             </td>
                           </tr>
@@ -3189,6 +3221,9 @@ export function InterviewsBoard() {
                               </td>
                               <td className={tdInterviewer}>
                                 {formatInterviewerStoredForUi(i.interviewer)}
+                              </td>
+                              <td className={tdPocInterview}>
+                                {effectivePocForInterview(i) || "—"}
                               </td>
                               <td className={tdCommentsCol}>
                                 <CommentTableCell value={i.no_show_reason} />
@@ -3350,7 +3385,7 @@ export function InterviewsBoard() {
 
                 <div className={tableWrap}>
                   <div className="w-full min-w-0 max-w-full overflow-x-auto">
-                    <table className="w-full min-w-[1540px] table-auto border-collapse">
+                    <table className="w-full min-w-[1660px] table-auto border-collapse">
                       <thead>
                         <tr>
                           <th className={thName}>Name</th>
@@ -3358,6 +3393,7 @@ export function InterviewsBoard() {
                           <th className={thInterviewType}>Interview type</th>
                           <th className={thCompletedOn}>Completed on</th>
                           <th className={thInterviewer}>Interviewer</th>
+                          <th className={thPocInterview}>POC</th>
                           <th className={thZoomStatus}>Meeting</th>
                           <th className={thCommentsCol}>Recording</th>
                           <th className={thCommentsCol}>Comments</th>
@@ -3366,7 +3402,7 @@ export function InterviewsBoard() {
                       <tbody>
                         {notEligiblePage.slice.length === 0 ? (
                           <tr>
-                            <td className={tdBase} colSpan={8}>
+                            <td className={tdBase} colSpan={9}>
                               {emptyState}
                             </td>
                           </tr>
@@ -3404,6 +3440,9 @@ export function InterviewsBoard() {
                                 </td>
                                 <td className={tdInterviewer}>
                                   {formatInterviewerStoredForUi(i.interviewer)}
+                                </td>
+                                <td className={tdPocInterview}>
+                                  {effectivePocForInterview(i) || "—"}
                                 </td>
                                 <td className={tdZoomStatus}>
                                   <div className="flex flex-col items-start gap-2">

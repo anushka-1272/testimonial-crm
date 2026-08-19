@@ -1,4 +1,5 @@
 import type { TestimonialInterviewType } from "@/lib/testimonial-interview-type";
+import type { PlannedContentType } from "@/lib/planned-content-type";
 
 export type InterviewColumnStatus =
   | "draft"
@@ -44,6 +45,7 @@ export type InterviewWithCandidate = {
   blog_post_url: string | null;
   posts_confirmed_at: string | null;
   skip_social_posts: boolean;
+  planned_content_type: PlannedContentType | null;
   no_show_reason: string | null;
   no_show_at: string | null;
   candidates: {
@@ -198,6 +200,7 @@ export type ProjectInterviewWithProjectCandidate = {
   blog_post_url: string | null;
   posts_confirmed_at: string | null;
   skip_social_posts: boolean;
+  planned_content_type: PlannedContentType | null;
   no_show_reason: string | null;
   no_show_at: string | null;
   project_candidates: ProjectCandidateRow | null;

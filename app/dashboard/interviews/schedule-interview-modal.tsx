@@ -23,6 +23,10 @@ import { modalOverlayClass, modalPanelClass } from "@/lib/modal-responsive";
 import { voidSlackNotify } from "@/lib/slack-client";
 import { fetchTeamRosterNames } from "@/lib/team-roster";
 import {
+  PLANNED_CONTENT_OPTIONS,
+  type PlannedContentType,
+} from "@/lib/planned-content-type";
+import {
   isTestimonialInterviewType,
   TESTIMONIAL_INTERVIEW_TYPE_OPTIONS,
   testimonialInterviewTypeLabel,
@@ -49,7 +53,7 @@ export type ScheduleProjectCandidate = {
 
 const SLACK_ANUSHKA_EMAIL = POC_INTERVIEWER_SLACK_EMAILS.Anushka;
 
-const LANG_CARD_ORDER: { key: InterviewLangPreset | "other"; label: string }[] =
+const LANGUAGE_OPTIONS: { key: InterviewLangPreset | "other"; label: string }[] =
   [
     { key: "english", label: "English" },
     { key: "hindi", label: "Hindi" },
@@ -60,7 +64,7 @@ const LANG_CARD_ORDER: { key: InterviewLangPreset | "other"; label: string }[] =
     { key: "other", label: "Other" },
   ];
 
-type LangCardKey = (typeof LANG_CARD_ORDER)[number]["key"];
+type LangOptionKey = (typeof LANGUAGE_OPTIONS)[number]["key"];
 
 type Props = {
   open: boolean;
@@ -88,8 +92,10 @@ export function ScheduleInterviewModal({
   const [interviewType, setInterviewType] = useState<TestimonialInterviewType>(
     "testimonial",
   );
-  const [langPreset, setLangPreset] = useState<LangCardKey>("english");
+  const [langPreset, setLangPreset] = useState<LangOptionKey>("english");
   const [otherLanguageText, setOtherLanguageText] = useState("");
+  const [plannedContentType, setPlannedContentType] =
+    useState<PlannedContentType | null>(null);
   const [zoomLink, setZoomLink] = useState("");
   const [poc, setPoc] = useState("");
   const [remarks, setRemarks] = useState("");
@@ -100,6 +106,7 @@ export function ScheduleInterviewModal({
     if (!open) return;
     setLangPreset("english");
     setOtherLanguageText("");
+    setPlannedContentType(null);
     if (projectCandidate) {
       setInterviewType("project");
       setPoc(projectCandidate.poc_assigned?.trim() ?? "");
@@ -165,6 +172,10 @@ export function ScheduleInterviewModal({
       setError(langSubmit.error);
       return;
     }
+    if (!plannedContentType) {
+      setError("Select Blog post, LinkedIn Post, or Both.");
+      return;
+    }
     const languageDisplay = interviewLanguageDisplayString(
       langPreset,
       otherLanguageText,
@@ -189,6 +200,7 @@ export function ScheduleInterviewModal({
             interview_type: "project" as const,
             interview_status: "draft" as const,
             invitation_sent: false,
+            planned_content_type: plannedContentType,
           }
         : {
             candidate_id: candidate!.id,
@@ -208,17 +220,31 @@ export function ScheduleInterviewModal({
             interview_type: interviewType,
             interview_status: "draft" as const,
             invitation_sent: false,
+            planned_content_type: plannedContentType,
           };
 
       const table = isProject ? "project_interviews" : "interviews";
-      const { data: row, error: insErr } = await supabase
+      let { data: row, error: insErr } = await supabase
         .from(table)
         .insert(insertPayload)
         .select("id")
         .single();
 
-      if (insErr) {
-        setError(insErr.message);
+      if (insErr?.message?.includes("planned_content_type")) {
+        const { planned_content_type: _omit, ...withoutPlanned } =
+          insertPayload;
+        void _omit;
+        const retry = await supabase
+          .from(table)
+          .insert(withoutPlanned)
+          .select("id")
+          .single();
+        row = retry.data;
+        insErr = retry.error;
+      }
+
+      if (insErr || !row) {
+        setError(insErr?.message ?? "Could not save interview.");
         setSubmitting(false);
         return;
       }
@@ -247,7 +273,11 @@ export function ScheduleInterviewModal({
             entity_id: row.id,
             candidate_name: candDisplay,
             description: `Drafted ${typeWord} interview for ${candDisplay} on ${dateLabel}`,
-            metadata: { time: timeLabel, project: true },
+            metadata: {
+              time: timeLabel,
+              project: true,
+              planned_content_type: plannedContentType,
+            },
           });
         } else {
           await logActivity({
@@ -258,7 +288,11 @@ export function ScheduleInterviewModal({
             entity_id: row.id,
             candidate_name: candDisplay,
             description: `POC ${actorName} drafted interview for ${candDisplay} on ${dateLabel}`,
-            metadata: { time: timeLabel, project: false },
+            metadata: {
+              time: timeLabel,
+              project: false,
+              planned_content_type: plannedContentType,
+            },
           });
         }
       }
@@ -279,6 +313,7 @@ export function ScheduleInterviewModal({
         setRemarks("");
         setLangPreset("english");
         setOtherLanguageText("");
+        setPlannedContentType(null);
         onCreated();
         onClose();
         setSubmitting(false);
@@ -299,6 +334,7 @@ export function ScheduleInterviewModal({
       setRemarks("");
       setLangPreset("english");
       setOtherLanguageText("");
+      setPlannedContentType(null);
       onCreated();
       onClose();
     } catch {
@@ -415,32 +451,23 @@ export function ScheduleInterviewModal({
             </label>
           ) : null}
 
-          <div className="block text-sm">
+          <label className="block text-sm">
             <span className={lab}>Interview language</span>
-            <div className="mt-2 grid grid-cols-3 gap-2">
-              {LANG_CARD_ORDER.map(({ key, label }) => {
-                const selected = langPreset === key;
-                return (
-                  <button
-                    key={key}
-                    type="button"
-                    onClick={() => {
-                      setLangPreset(key);
-                      if (key !== "other") setOtherLanguageText("");
-                    }}
-                    className={`flex flex-col items-center justify-center rounded-xl border p-3 text-center transition-colors ${
-                      selected
-                        ? "border-black bg-black text-background"
-                        : "border-border bg-elevated text-foreground/80 hover:border-gray-300"
-                    }`}
-                  >
-                    <span className="text-[11px] font-medium leading-tight">
-                      {label}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
+            <select
+              className={inp}
+              value={langPreset}
+              onChange={(e) => {
+                const next = e.target.value as LangOptionKey;
+                setLangPreset(next);
+                if (next !== "other") setOtherLanguageText("");
+              }}
+            >
+              {LANGUAGE_OPTIONS.map(({ key, label }) => (
+                <option key={key} value={key}>
+                  {label}
+                </option>
+              ))}
+            </select>
             {langPreset === "other" ? (
               <input
                 type="text"
@@ -451,7 +478,31 @@ export function ScheduleInterviewModal({
                 autoComplete="off"
               />
             ) : null}
-          </div>
+          </label>
+
+          <fieldset className="block text-sm">
+            <legend className={lab}>Content after interview</legend>
+            <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:gap-4">
+              {PLANNED_CONTENT_OPTIONS.map(({ value, label }) => (
+                <label
+                  key={value}
+                  className="inline-flex items-center gap-2 text-sm text-foreground"
+                >
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 rounded border-border"
+                    checked={plannedContentType === value}
+                    onChange={() =>
+                      setPlannedContentType((prev) =>
+                        prev === value ? null : value,
+                      )
+                    }
+                  />
+                  {label}
+                </label>
+              ))}
+            </div>
+          </fieldset>
 
           <label className="block text-sm">
             <span className={lab}>POC (assigned)</span>

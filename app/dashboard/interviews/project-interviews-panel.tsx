@@ -39,6 +39,10 @@ import {
   canMoveToPostProduction,
   POST_PRODUCTION_ELIGIBILITY_TOOLTIP,
 } from "@/lib/post-production-eligibility";
+import {
+  isPlannedContentType,
+  type PlannedContentType,
+} from "@/lib/planned-content-type";
 import { syncAutoNotInterestedFollowups } from "@/lib/sync-auto-not-interested-followups";
 import {
   fetchTeamRosterNames,
@@ -70,7 +74,8 @@ import type {
 const PAGE_SIZE = 20;
 
 /** Interview rows only — join `project_candidates` client-side so a failed embed never blocks loading candidates. */
-const PROJECT_INTERVIEW_COLUMNS = `id, created_at, project_candidate_id, scheduled_date, previous_scheduled_date, reschedule_reason, completed_at, interviewer, interviewer_assigned_at, zoom_link, zoom_account, not_eligible_recording_link, language, invitation_sent, poc, remarks, reminder_count, interview_status, post_interview_eligible, reward_item, category, funnel, comments, interview_type, post_content_status, linkedin_post_url, blog_post_url, posts_confirmed_at, skip_social_posts, no_show_reason, no_show_at`;
+const PROJECT_INTERVIEW_COLUMNS = `id, created_at, project_candidate_id, scheduled_date, previous_scheduled_date, reschedule_reason, completed_at, interviewer, interviewer_assigned_at, zoom_link, zoom_account, not_eligible_recording_link, language, invitation_sent, poc, remarks, reminder_count, interview_status, post_interview_eligible, reward_item, category, funnel, comments, interview_type, post_content_status, linkedin_post_url, blog_post_url, posts_confirmed_at, skip_social_posts, planned_content_type, no_show_reason, no_show_at`;
+const PROJECT_INTERVIEW_COLUMNS_WITHOUT_PLANNED_CONTENT = `id, created_at, project_candidate_id, scheduled_date, previous_scheduled_date, reschedule_reason, completed_at, interviewer, interviewer_assigned_at, zoom_link, zoom_account, not_eligible_recording_link, language, invitation_sent, poc, remarks, reminder_count, interview_status, post_interview_eligible, reward_item, category, funnel, comments, interview_type, post_content_status, linkedin_post_url, blog_post_url, posts_confirmed_at, skip_social_posts, no_show_reason, no_show_at`;
 const PROJECT_INTERVIEW_COLUMNS_LEGACY = `id, created_at, project_candidate_id, scheduled_date, previous_scheduled_date, reschedule_reason, completed_at, interviewer, interviewer_assigned_at, zoom_link, zoom_account, language, invitation_sent, poc, remarks, reminder_count, interview_status, post_interview_eligible, reward_item, category, funnel, comments, interview_type`;
 
 type ProjectSubTab = "pending" | "scheduled" | "completed" | "notEligible" | "noShow";
@@ -287,6 +292,11 @@ function normalizeProjectInterviewRow(
     blog_post_url: (r.blog_post_url as string | null) ?? null,
     posts_confirmed_at: (r.posts_confirmed_at as string | null) ?? null,
     skip_social_posts: Boolean(r.skip_social_posts),
+    planned_content_type: isPlannedContentType(
+      r.planned_content_type as string | null | undefined,
+    )
+      ? (r.planned_content_type as PlannedContentType)
+      : null,
     no_show_reason: (r.no_show_reason as string | null) ?? null,
     no_show_at: (r.no_show_at as string | null) ?? null,
     project_candidates: pc,
@@ -724,6 +734,14 @@ export function ProjectInterviewsPanel({
       .order("created_at", { ascending: true });
     let projectInterviewRows = pi;
     let projectInterviewError = eInterviews;
+    if (projectInterviewError?.message?.includes("planned_content_type")) {
+      const { data: withoutPlanned, error: withoutPlannedErr } = await supabase
+        .from("project_interviews")
+        .select(PROJECT_INTERVIEW_COLUMNS_WITHOUT_PLANNED_CONTENT)
+        .order("created_at", { ascending: true });
+      projectInterviewRows = withoutPlanned;
+      projectInterviewError = withoutPlannedErr;
+    }
     if (
       projectInterviewError?.message?.includes(
         "column project_interviews.not_eligible_recording_link does not exist",
@@ -2506,13 +2524,14 @@ export function ProjectInterviewsPanel({
           </div>
           <div className={tableWrap}>
             <div className="w-full overflow-x-auto">
-              <table className="w-full min-w-[1320px] table-auto border-collapse">
+              <table className="w-full min-w-[1440px] table-auto border-collapse">
                 <thead>
                   <tr>
                     <th className={thName}>Name</th>
                     <th className={thEmail}>Email</th>
                     <th className={thProjTitle}>Project title</th>
                     <th className={thInterviewer}>Interviewer</th>
+                    <th className={thPoc}>POC</th>
                     <th className={thCompletedOn}>Completed on</th>
                     <th className={thPostInterview}>
                       Post-interview eligible
@@ -2533,7 +2552,7 @@ export function ProjectInterviewsPanel({
                 <tbody>
                   {completedPage.slice.length === 0 ? (
                     <tr>
-                      <td className={tdBase} colSpan={11}>
+                      <td className={tdBase} colSpan={13}>
                         {emptyState}
                       </td>
                     </tr>
@@ -2563,6 +2582,9 @@ export function ProjectInterviewsPanel({
                           </td>
                           <td className={tdInterviewer}>
                             {formatInterviewerStoredForUi(i.interviewer)}
+                          </td>
+                          <td className={tdPoc}>
+                            {effectivePocForProjectInterview(i) || "—"}
                           </td>
                           <td className={tdCompletedOn}>
                             {formatDateTime(i.completed_at)}
@@ -2712,6 +2734,15 @@ export function ProjectInterviewsPanel({
                                   <dl className="mt-3 space-y-3 text-sm">
                                     <div>
                                       <dt className="text-xs text-muted/80">
+                                        POC
+                                      </dt>
+                                      <dd className="mt-0.5 text-foreground">
+                                        {effectivePocForProjectInterview(i) ||
+                                          "—"}
+                                      </dd>
+                                    </div>
+                                    <div>
+                                      <dt className="text-xs text-muted/80">
                                         Post-interview eligible
                                       </dt>
                                       <dd className="mt-0.5 text-foreground">
@@ -2822,13 +2853,14 @@ export function ProjectInterviewsPanel({
           </label>
           <div className={tableWrap}>
             <div className="w-full overflow-x-auto">
-              <table className="w-full min-w-[1000px] table-auto border-collapse">
+              <table className="w-full min-w-[1120px] table-auto border-collapse">
                 <thead>
                   <tr>
                     <th className={thName}>Name</th>
                     <th className={thEmail}>Email</th>
                     <th className={thCompletedOn}>Scheduled for</th>
                     <th className={thInterviewer}>Interviewer</th>
+                    <th className={thPoc}>POC</th>
                     <th className={thCommentsCol}>No-show reason</th>
                     <th className={thCompletedOn}>Marked at</th>
                     <th className={thActions}>Actions</th>
@@ -2837,7 +2869,7 @@ export function ProjectInterviewsPanel({
                 <tbody>
                   {noShowPage.slice.length === 0 ? (
                     <tr>
-                      <td className={tdBase} colSpan={7}>
+                      <td className={tdBase} colSpan={8}>
                         No entries here yet
                       </td>
                     </tr>
@@ -2854,6 +2886,9 @@ export function ProjectInterviewsPanel({
                           </td>
                           <td className={tdInterviewer}>
                             {formatInterviewerStoredForUi(i.interviewer)}
+                          </td>
+                          <td className={tdPoc}>
+                            {effectivePocForProjectInterview(i) || "—"}
                           </td>
                           <td className={tdCommentsCol}>
                             <CommentTableCell value={i.no_show_reason} />
@@ -2985,13 +3020,14 @@ export function ProjectInterviewsPanel({
           </div>
           <div className={tableWrap}>
             <div className="w-full overflow-x-auto">
-              <table className="w-full min-w-[1480px] table-auto border-collapse">
+              <table className="w-full min-w-[1600px] table-auto border-collapse">
                 <thead>
                   <tr>
                     <th className={thName}>Name</th>
                     <th className={thEmail}>Email</th>
                     <th className={thProjTitle}>Project title</th>
                     <th className={thInterviewer}>Interviewer</th>
+                    <th className={thPoc}>POC</th>
                     <th className={thCompletedOn}>Completed on</th>
                     <th className={thZoomStatus}>Meeting</th>
                     <th className={thCommentsCol}>Recording</th>
@@ -3002,7 +3038,7 @@ export function ProjectInterviewsPanel({
                 <tbody>
                   {notEligiblePage.slice.length === 0 ? (
                     <tr>
-                      <td className={tdBase} colSpan={9}>
+                      <td className={tdBase} colSpan={10}>
                         {emptyState}
                       </td>
                     </tr>
@@ -3036,6 +3072,9 @@ export function ProjectInterviewsPanel({
                           </td>
                           <td className={tdInterviewer}>
                             {formatInterviewerStoredForUi(i.interviewer)}
+                          </td>
+                          <td className={tdPoc}>
+                            {effectivePocForProjectInterview(i) || "—"}
                           </td>
                           <td className={tdCompletedOn}>
                             {formatDateTime(i.completed_at)}
