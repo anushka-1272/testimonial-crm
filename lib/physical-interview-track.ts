@@ -1,5 +1,11 @@
 /** Interview city options for physical interview track. */
-export type PhysicalInterviewCity = "Delhi" | "Bengaluru" | "Mumbai" | "Pune";
+export type PhysicalInterviewCity =
+  | "Delhi"
+  | "Bengaluru"
+  | "Mumbai"
+  | "Pune"
+  | "Kolkata"
+  | "Hyderabad";
 
 export const PHYSICAL_INTERVIEW_CITY_OPTIONS: readonly {
   value: PhysicalInterviewCity;
@@ -9,6 +15,8 @@ export const PHYSICAL_INTERVIEW_CITY_OPTIONS: readonly {
   { value: "Bengaluru", label: "Bengaluru" },
   { value: "Mumbai", label: "Mumbai" },
   { value: "Pune", label: "Pune" },
+  { value: "Kolkata", label: "Kolkata" },
+  { value: "Hyderabad", label: "Hyderabad" },
 ] as const;
 
 /** Pipeline state for in-person interview track (testimonial + project). */
