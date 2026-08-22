@@ -18,6 +18,8 @@ import {
 import { logActivity } from "@/lib/activity-logger";
 import { displayNameFromUser, getUserSafe } from "@/lib/supabase-auth";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
+import { sendWatiNotification } from "@/lib/wati-client";
+import { nameOnlyParams, WATI_TEMPLATES } from "@/lib/wati-templates";
 
 type EligibilityStatus = "pending_review" | "eligible" | "not_eligible";
 
@@ -366,6 +368,21 @@ export function EligibilityDashboard() {
       setError(uErr.message);
       return;
     }
+    if (r.eligibility_status !== "eligible") {
+      const waName = r.full_name?.trim() || r.email || "there";
+      void (async () => {
+        if (!r.whatsapp_number?.trim()) return;
+        const ok = await sendWatiNotification(
+          supabase,
+          r.whatsapp_number,
+          WATI_TEMPLATES.eligibleTestimonial,
+          nameOnlyParams(waName),
+        );
+        if (!ok) {
+          console.error("WATI eligible_testimonial failed");
+        }
+      })();
+    }
     const actor = await getUserSafe(supabase);
     if (actor) {
       const display = r.full_name?.trim() || r.email || "Candidate";
@@ -529,6 +546,20 @@ export function EligibilityDashboard() {
           if (!row) continue;
           const display =
             row.full_name?.trim() || row.email || "Candidate";
+          if (row.eligibility_status !== "eligible") {
+            void (async () => {
+              if (!row.whatsapp_number?.trim()) return;
+              const ok = await sendWatiNotification(
+                supabase,
+                row.whatsapp_number,
+                WATI_TEMPLATES.eligibleTestimonial,
+                nameOnlyParams(display),
+              );
+              if (!ok) {
+                console.error("WATI eligible_testimonial failed");
+              }
+            })();
+          }
           await logActivity({
             supabase,
             user: actorBulk,

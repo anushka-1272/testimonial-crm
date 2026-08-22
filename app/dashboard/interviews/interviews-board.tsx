@@ -57,6 +57,7 @@ import {
 } from "@/lib/post-production-eligibility";
 import {
   isPlannedContentType,
+  plannedContentTypeLabel,
   type PlannedContentType,
 } from "@/lib/planned-content-type";
 import {
@@ -1363,6 +1364,8 @@ export function InterviewsBoard() {
       "Interviewer",
       "POC",
       "Completed On",
+      "LinkedIn / Blog",
+      "Remarks",
       "Post-Interview Eligible",
       "Category",
       "Funnel",
@@ -1385,6 +1388,8 @@ export function InterviewsBoard() {
         formatInterviewerStoredForUi(i.interviewer),
         i.poc?.trim() || i.candidates?.poc_assigned?.trim() || "",
         formatDateTime(i.completed_at),
+        plannedContentTypeLabel(i.planned_content_type),
+        i.remarks?.trim() || "",
         postEligible,
         interviewCategoryLines(i.category).join(" | "),
         i.funnel?.trim() || "",
@@ -2847,7 +2852,7 @@ export function InterviewsBoard() {
 
                 <div className={tableWrap}>
                   <div className="w-full min-w-0 max-w-full overflow-x-auto">
-                    <table className="w-full min-w-[1760px] table-auto border-collapse">
+                    <table className="w-full min-w-[2040px] table-auto border-collapse">
                       <thead>
                         <tr>
                           <th className={thName}>Name</th>
@@ -2857,6 +2862,8 @@ export function InterviewsBoard() {
                           <th className={thInterviewer}>Interviewer</th>
                           <th className={thPocInterview}>POC</th>
                           <th className={thCompletedOn}>Completed on</th>
+                          <th className={thPostInterview}>LinkedIn / blog</th>
+                          <th className={thCommentsCol}>Remarks</th>
                           <th className={thPostInterview}>
                             Post-interview eligible
                           </th>
@@ -2876,7 +2883,7 @@ export function InterviewsBoard() {
                       <tbody>
                         {completedPage.slice.length === 0 ? (
                           <tr>
-                            <td className={tdBase} colSpan={14}>
+                            <td className={tdBase} colSpan={16}>
                               {emptyState}
                             </td>
                           </tr>
@@ -2918,6 +2925,12 @@ export function InterviewsBoard() {
                                 </td>
                                 <td className={tdCompletedOn}>
                                   {formatDateTime(i.completed_at)}
+                                </td>
+                                <td className={tdPostInterview}>
+                                  {plannedContentTypeLabel(i.planned_content_type)}
+                                </td>
+                                <td className={tdCommentsCol}>
+                                  <CommentTableCell value={i.remarks} />
                                 </td>
                                 <td className={tdPostInterview}>
                                   {postInterviewEligibleBadge(
@@ -3047,6 +3060,24 @@ export function InterviewsBoard() {
                                             <dd className="mt-0.5 text-foreground">
                                               {effectivePocForInterview(i) ||
                                                 "—"}
+                                            </dd>
+                                          </div>
+                                          <div>
+                                            <dt className="text-xs text-muted/80">
+                                              LinkedIn / blog
+                                            </dt>
+                                            <dd className="mt-0.5 text-foreground">
+                                              {plannedContentTypeLabel(
+                                                i.planned_content_type,
+                                              )}
+                                            </dd>
+                                          </div>
+                                          <div>
+                                            <dt className="text-xs text-muted/80">
+                                              Remarks
+                                            </dt>
+                                            <dd className="mt-0.5 whitespace-pre-wrap break-words text-foreground">
+                                              {i.remarks?.trim() || "—"}
                                             </dd>
                                           </div>
                                           <div>

@@ -41,6 +41,7 @@ import {
 } from "@/lib/post-production-eligibility";
 import {
   isPlannedContentType,
+  plannedContentTypeLabel,
   type PlannedContentType,
 } from "@/lib/planned-content-type";
 import { syncAutoNotInterestedFollowups } from "@/lib/sync-auto-not-interested-followups";
@@ -2529,7 +2530,7 @@ export function ProjectInterviewsPanel({
           </div>
           <div className={tableWrap}>
             <div className="w-full overflow-x-auto">
-              <table className="w-full min-w-[1440px] table-auto border-collapse">
+              <table className="w-full min-w-[1720px] table-auto border-collapse">
                 <thead>
                   <tr>
                     <th className={thName}>Name</th>
@@ -2538,6 +2539,8 @@ export function ProjectInterviewsPanel({
                     <th className={thInterviewer}>Interviewer</th>
                     <th className={thPoc}>POC</th>
                     <th className={thCompletedOn}>Completed on</th>
+                    <th className={thPostInterview}>LinkedIn / blog</th>
+                    <th className={thCommentsCol}>Remarks</th>
                     <th className={thPostInterview}>
                       Post-interview eligible
                     </th>
@@ -2557,7 +2560,7 @@ export function ProjectInterviewsPanel({
                 <tbody>
                   {completedPage.slice.length === 0 ? (
                     <tr>
-                      <td className={tdBase} colSpan={13}>
+                      <td className={tdBase} colSpan={15}>
                         {emptyState}
                       </td>
                     </tr>
@@ -2593,6 +2596,12 @@ export function ProjectInterviewsPanel({
                           </td>
                           <td className={tdCompletedOn}>
                             {formatDateTime(i.completed_at)}
+                          </td>
+                          <td className={tdPostInterview}>
+                            {plannedContentTypeLabel(i.planned_content_type)}
+                          </td>
+                          <td className={tdCommentsCol}>
+                            <CommentTableCell value={i.remarks} />
                           </td>
                           <td className={tdPostInterview}>
                             {postInterviewEligibleBadge(
@@ -2744,6 +2753,24 @@ export function ProjectInterviewsPanel({
                                       <dd className="mt-0.5 text-foreground">
                                         {effectivePocForProjectInterview(i) ||
                                           "—"}
+                                      </dd>
+                                    </div>
+                                    <div>
+                                      <dt className="text-xs text-muted/80">
+                                        LinkedIn / blog
+                                      </dt>
+                                      <dd className="mt-0.5 text-foreground">
+                                        {plannedContentTypeLabel(
+                                          i.planned_content_type,
+                                        )}
+                                      </dd>
+                                    </div>
+                                    <div>
+                                      <dt className="text-xs text-muted/80">
+                                        Remarks
+                                      </dt>
+                                      <dd className="mt-0.5 whitespace-pre-wrap break-words text-foreground">
+                                        {i.remarks?.trim() || "—"}
                                       </dd>
                                     </div>
                                     <div>

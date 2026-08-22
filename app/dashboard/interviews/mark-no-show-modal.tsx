@@ -8,6 +8,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { logActivity } from "@/lib/activity-logger";
 import { modalOverlayClass, modalPanelClass } from "@/lib/modal-responsive";
 import { getUserSafe } from "@/lib/supabase-auth";
+import { sendWatiNotification } from "@/lib/wati-client";
+import { noShowInterviewParams, WATI_TEMPLATES } from "@/lib/wati-templates";
 
 import {
   type InterviewWithCandidate,
@@ -114,6 +116,22 @@ export function MarkNoShowModal({
           : `Marked no show for ${label}`,
       });
     }
+
+    const waPhone = isProject
+      ? interview.project_candidates?.whatsapp_number
+      : interview.candidates?.whatsapp_number;
+    void (async () => {
+      if (!waPhone?.trim()) return;
+      const ok = await sendWatiNotification(
+        supabase,
+        waPhone,
+        WATI_TEMPLATES.interviewNoShow,
+        noShowInterviewParams(label, slot ?? "your scheduled interview"),
+      );
+      if (!ok) {
+        console.error("WATI interview_noshow_ failed");
+      }
+    })();
 
     setSubmitting(false);
     onSaved();

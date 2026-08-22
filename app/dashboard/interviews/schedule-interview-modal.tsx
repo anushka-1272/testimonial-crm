@@ -22,6 +22,11 @@ import {
 import { modalOverlayClass, modalPanelClass } from "@/lib/modal-responsive";
 import { voidSlackNotify } from "@/lib/slack-client";
 import { fetchTeamRosterNames } from "@/lib/team-roster";
+import { sendWatiNotification } from "@/lib/wati-client";
+import {
+  nameDateTimeParams,
+  scheduledDraftTemplateName,
+} from "@/lib/wati-templates";
 import {
   PLANNED_CONTENT_OPTIONS,
   type PlannedContentType,
@@ -296,6 +301,28 @@ export function ScheduleInterviewModal({
           });
         }
       }
+
+      const waPhone = isProject
+        ? projectCandidate!.whatsapp_number
+        : candidate!.whatsapp_number;
+      const waName = isProject
+        ? projectCandidate!.project_title?.trim() ||
+          projectCandidate!.email ||
+          candDisplay
+        : candidate!.full_name?.trim() || candidate!.email || candDisplay;
+      void (async () => {
+        if (!waPhone?.trim()) return;
+        const templateName = scheduledDraftTemplateName(plannedContentType);
+        const ok = await sendWatiNotification(
+          supabase,
+          waPhone,
+          templateName,
+          nameDateTimeParams(waName, dateLabel, timeLabel),
+        );
+        if (!ok) {
+          console.error(`WATI ${templateName} failed`);
+        }
+      })();
 
       if (!isProject) {
         const anushkaMsg =
