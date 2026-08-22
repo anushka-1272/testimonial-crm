@@ -3338,6 +3338,7 @@ export function ProjectInterviewsPanel({
           void loadProjectData();
           onPipelineChanged();
         }}
+        onToast={onToast}
       />
 
       <ConfirmSocialPostsModal

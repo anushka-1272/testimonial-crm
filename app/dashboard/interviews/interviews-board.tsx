@@ -3725,6 +3725,7 @@ export function InterviewsBoard() {
         supabase={supabase}
         onClose={() => setNoShowFor(null)}
         onSaved={() => void loadData()}
+        onToast={(msg) => setToastMessage(msg)}
       />
 
       <ConfirmSocialPostsModal

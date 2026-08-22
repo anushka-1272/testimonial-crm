@@ -54,3 +54,11 @@ export function noShowInterviewParams(
     { name: "2", value: scheduledSlot },
   ];
 }
+
+/** Alternate param sets — WATI rejects the request if the count does not match the template. */
+export function noShowInterviewParamAttempts(
+  name: string,
+  scheduledSlot: string,
+): WatiTemplateParameter[][] {
+  return [nameOnlyParams(name), noShowInterviewParams(name, scheduledSlot)];
+}

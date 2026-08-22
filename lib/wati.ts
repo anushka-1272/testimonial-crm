@@ -48,6 +48,16 @@ export async function sendWatiMessage(
       console.error("WATI error:", data);
       return { success: false, error: data };
     }
+
+    // WATI often returns HTTP 200 with result:false when the template/params are rejected.
+    if (data && typeof data === "object") {
+      const result = (data as { result?: unknown }).result;
+      if (result === false || result === "false" || result === 0) {
+        console.error("WATI rejected template:", template_name, data);
+        return { success: false, error: data };
+      }
+    }
+
     console.log("WATI success:", template_name, formattedPhone);
     return { success: true, data };
   } catch (err) {

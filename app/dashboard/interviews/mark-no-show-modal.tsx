@@ -9,7 +9,10 @@ import { logActivity } from "@/lib/activity-logger";
 import { modalOverlayClass, modalPanelClass } from "@/lib/modal-responsive";
 import { getUserSafe } from "@/lib/supabase-auth";
 import { sendWatiNotification } from "@/lib/wati-client";
-import { noShowInterviewParams, WATI_TEMPLATES } from "@/lib/wati-templates";
+import {
+  noShowInterviewParamAttempts,
+  WATI_TEMPLATES,
+} from "@/lib/wati-templates";
 
 import {
   type InterviewWithCandidate,
@@ -23,7 +26,21 @@ type Props = {
   supabase: SupabaseClient;
   onClose: () => void;
   onSaved: () => void;
+  onToast?: (message: string) => void;
 };
+
+function whatsappFromNested(
+  value:
+    | { whatsapp_number?: string | null }
+    | { whatsapp_number?: string | null }[]
+    | null
+    | undefined,
+): string | null {
+  if (!value) return null;
+  const row = Array.isArray(value) ? value[0] : value;
+  const phone = row?.whatsapp_number?.trim();
+  return phone || null;
+}
 
 function displayName(
   interview: InterviewWithCandidate | ProjectInterviewWithProjectCandidate,
@@ -55,6 +72,7 @@ export function MarkNoShowModal({
   supabase,
   onClose,
   onSaved,
+  onToast,
 }: Props) {
   const [reason, setReason] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -117,21 +135,54 @@ export function MarkNoShowModal({
       });
     }
 
-    const waPhone = isProject
-      ? interview.project_candidates?.whatsapp_number
-      : interview.candidates?.whatsapp_number;
-    void (async () => {
-      if (!waPhone?.trim()) return;
-      const ok = await sendWatiNotification(
-        supabase,
-        waPhone,
-        WATI_TEMPLATES.interviewNoShow,
-        noShowInterviewParams(label, slot ?? "your scheduled interview"),
-      );
-      if (!ok) {
-        console.error("WATI interview_noshow_ failed");
+    let waPhone = isProject
+      ? whatsappFromNested(interview.project_candidates)
+      : whatsappFromNested(interview.candidates);
+
+    if (!waPhone) {
+      if (isProject) {
+        const projectCandidateId = interview.project_candidate_id;
+        if (projectCandidateId) {
+          const { data } = await supabase
+            .from("project_candidates")
+            .select("whatsapp_number")
+            .eq("id", projectCandidateId)
+            .maybeSingle();
+          waPhone = data?.whatsapp_number?.trim() || null;
+        }
+      } else {
+        const { data } = await supabase
+          .from("candidates")
+          .select("whatsapp_number")
+          .eq("id", interview.candidate_id)
+          .maybeSingle();
+        waPhone = data?.whatsapp_number?.trim() || null;
       }
-    })();
+    }
+
+    if (!waPhone) {
+      onToast?.(
+        "Marked no show, but WhatsApp was not sent — no phone number on this candidate.",
+      );
+    } else {
+      const slotLabel = slot ?? "your scheduled interview";
+      let sent = false;
+      for (const params of noShowInterviewParamAttempts(label, slotLabel)) {
+        sent = await sendWatiNotification(
+          supabase,
+          waPhone,
+          WATI_TEMPLATES.interviewNoShow,
+          params,
+        );
+        if (sent) break;
+      }
+      if (!sent) {
+        console.error("WATI Interview_no_show failed");
+        onToast?.(
+          "Marked no show, but the WhatsApp no-show message failed to send.",
+        );
+      }
+    }
 
     setSubmitting(false);
     onSaved();
