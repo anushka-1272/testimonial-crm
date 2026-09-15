@@ -646,7 +646,8 @@ export function EligibilityDashboard() {
           Authorization: `Bearer ${session.access_token}`,
         },
       });
-      const j = (await res.json()) as {
+      const raw = await res.text();
+      let j: {
         error?: string;
         total_rows?: number;
         new_inserted?: number;
@@ -656,8 +657,19 @@ export function EligibilityDashboard() {
         failed?: number;
         scoring_queued?: number;
         skipped_empty_email?: number;
+        already_in_crm?: number;
         errors?: string[];
-      };
+      } = {};
+      try {
+        j = raw ? (JSON.parse(raw) as typeof j) : {};
+      } catch {
+        setError(
+          res.ok
+            ? "Sheet sync returned an unexpected response."
+            : `Sheet sync failed (${res.status}). The request may have timed out — try again.`,
+        );
+        return;
+      }
       if (!res.ok) {
         setError(j.error ?? "Sheet sync failed.");
         return;
@@ -665,7 +677,7 @@ export function EligibilityDashboard() {
       const inserted = j.new_inserted ?? 0;
       const updated = j.updated_rows ?? 0;
       const skippedEmail = j.skipped_empty_email ?? 0;
-      const upserted = j.upserted ?? inserted + updated;
+      const alreadyInCrm = j.already_in_crm ?? 0;
       const scoringQueued = j.scoring_queued ?? 0;
       const scored = j.scored ?? 0;
       const failedAi = j.failed ?? 0;
@@ -675,14 +687,14 @@ export function EligibilityDashboard() {
           : scored > 0 || failedAi > 0
             ? ` AI scored: ${scored}, failed: ${failedAi}.`
             : "";
+      setSheetSyncBusy(false);
+      void Promise.all([loadRows(), loadStats()]);
       alert(
-        `Synced ${inserted} new, ${updated} updated (${upserted} upserted), ${skippedEmail} rows without email (from ${j.total_rows ?? 0} sheet rows).${scoringNote}`,
+        `Synced ${inserted} new candidate(s), ${alreadyInCrm} already in CRM, ${skippedEmail} rows without email (from ${j.total_rows ?? 0} sheet rows).${updated > 0 ? ` Updated ${updated}.` : ""}${scoringNote}`,
       );
       if (j.errors?.length) {
         setError(j.errors.slice(0, 5).join(" · "));
       }
-      await loadRows();
-      await loadStats();
     } catch {
       setError("Sheet sync request failed.");
     } finally {
@@ -743,7 +755,7 @@ export function EligibilityDashboard() {
 
   return (
     <>
-      <header className="sticky top-14 z-30 bg-background/90 px-4 py-4 backdrop-blur-md sm:px-6 sm:py-5 lg:top-0 lg:px-8 lg:py-6">
+      <header className="sticky top-14 z-30 bg-background/90 px-4 py-4 backdrop-blur-md sm:px-6 sm:py-5 lg:top-0 lg:pl-8 lg:pr-20 lg:py-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h1 className="text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
@@ -762,7 +774,7 @@ export function EligibilityDashboard() {
             type="button"
             disabled={!canEditCurrentPage || sheetSyncBusy || !supabase}
             onClick={() => void syncSheet()}
-            className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl border border-border bg-elevated px-4 py-2 text-sm font-medium text-foreground transition-all hover:bg-background disabled:opacity-50"
+            className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl border border-border bg-elevated px-4 py-2 text-sm font-medium text-foreground transition-all hover:bg-background disabled:cursor-not-allowed disabled:opacity-50"
           >
             {sheetSyncBusy ? (
               <Loader2 className="h-4 w-4 animate-spin" aria-hidden />

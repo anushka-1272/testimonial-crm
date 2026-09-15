@@ -14,10 +14,36 @@ export const maxDuration = 300;
 const SHEET_ID = "1tw4h3C1wYi1Nyt2CjXaf_eRSHV1-pV9g8i8-r2J5_F0";
 const TAB_NAME = "Responses 8-4";
 const RANGE_FIRST_ROW = 1956;
-/** gviz range: testimonial responses from this row through column Z. */
-const SHEET_RANGE = `${TAB_NAME}!A${RANGE_FIRST_ROW}:Z`;
+/** How far back to re-read when the CRM already has newer form dates. */
+const INCREMENTAL_LOOKBACK_MS = 30 * 24 * 60 * 60 * 1000;
+const INSERT_CHUNK = 150;
 
-const SHEET_GVIZ_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&range=${encodeURIComponent(SHEET_RANGE)}`;
+function pad2(n: number): string {
+  return String(n).padStart(2, "0");
+}
+
+function toGvizDateTime(d: Date): string {
+  return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())} ${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())}:${pad2(d.getUTCSeconds())}`;
+}
+
+function sheetGvizUrl(tq: string): string {
+  const params = new URLSearchParams({
+    tqx: "out:json",
+    sheet: TAB_NAME,
+    tq,
+  });
+  return `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?${params.toString()}`;
+}
+
+function buildSheetDataUrl(since: Date | null): string {
+  if (since) {
+    return sheetGvizUrl(
+      `select * where A >= datetime '${toGvizDateTime(since)}'`,
+    );
+  }
+  const range = encodeURIComponent(`${TAB_NAME}!A${RANGE_FIRST_ROW}:Z`);
+  return `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&range=${range}`;
+}
 
 type GvizCell = { v?: unknown; f?: string | null } | null | undefined;
 type GvizRow = { c?: GvizCell[] };
@@ -150,13 +176,13 @@ type SheetColumnKey =
   | "instagram"
   | "declaration";
 
-type SheetColumnMap = Record<SheetColumnKey, number>;
+type SheetColumnMap = Record<SheetColumnKey, number[]>;
 
-const HEADER_RANGE = `${TAB_NAME}!A1:AA1`;
+const HEADER_RANGE = `${TAB_NAME}!A1:AZ1`;
 const HEADER_GVIZ_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&range=${encodeURIComponent(HEADER_RANGE)}`;
 
 /** Legacy fixed indices before optional "Current City of Residence" column. */
-const LEGACY_COLUMN_MAP: SheetColumnMap = {
+const LEGACY_COLUMN_INDICES: Record<SheetColumnKey, number> = {
   timestamp: 0,
   email: 1,
   full_name: 2,
@@ -176,20 +202,32 @@ const LEGACY_COLUMN_MAP: SheetColumnMap = {
 
 const COLUMN_HEADER_MATCHERS: Record<SheetColumnKey, string[]> = {
   timestamp: ["timestamp"],
-  email: ["email address", "email"],
+  email: ["email address"],
   full_name: ["full name"],
-  whatsapp: ["whatsapp"],
-  city: ["current city of residence"],
-  domain: ["select your domain", "domain"],
+  whatsapp: ["registered whatsapp number", "whatsapp"],
+  city: [
+    "current city of residence:\nplease mention the city where you currently live",
+    "current city of residence",
+  ],
+  domain: ["select your domain"],
   job_role: ["current job role"],
-  achievement_type: ["select your achievement type", "achievement type"],
-  achievement_title: ["enter achievement title", "achievement title"],
-  achievement_summary: ["enter achievement summary", "achievement summary"],
-  quantified_result: ["mention quantified result", "quantified result"],
-  proof: ["upload proof document", "proof document"],
-  linkedin: ["linkedin profile", "linkedin"],
-  instagram: ["instagram profile", "instagram"],
-  declaration: ["declaration"],
+  achievement_type: ["select your achievement type"],
+  achievement_title: [
+    "enter achievement title (one-line summary)",
+    "enter achievement title",
+  ],
+  achievement_summary: [
+    "tell us the story behind this achievement",
+    "enter achievement summary",
+  ],
+  quantified_result: [
+    "mention quantified result (numbers only)",
+    "mention quantified result",
+  ],
+  proof: ["upload proof document"],
+  linkedin: ["add your linkedin profile url", "linkedin profile"],
+  instagram: ["add your instagram profile url", "instagram profile"],
+  declaration: ["declaration checkbox"],
 };
 
 function normalizeHeaderLabel(label: string): string {
@@ -200,45 +238,87 @@ function normalizeHeaderLabel(label: string): string {
     .replace(/:$/, "");
 }
 
-function findColumnIndex(headers: string[], matchers: string[]): number {
-  const normalizedHeaders = headers.map((h) => normalizeHeaderLabel(h));
-  for (const matcher of matchers) {
-    const m = normalizeHeaderLabel(matcher);
-    const idx = normalizedHeaders.findIndex(
-      (h) => h === m || h.startsWith(m) || m.startsWith(h) || h.includes(m),
-    );
-    if (idx >= 0) return idx;
-  }
-  return -1;
+function headerMatches(header: string, matcher: string): boolean {
+  const h = normalizeHeaderLabel(header);
+  const m = normalizeHeaderLabel(matcher);
+  if (!h || !m) return false;
+  return h === m || h.startsWith(m) || h.includes(m);
 }
 
-function buildColumnMap(headers: string[]): SheetColumnMap {
-  const map = { ...LEGACY_COLUMN_MAP };
-  for (const key of Object.keys(COLUMN_HEADER_MATCHERS) as SheetColumnKey[]) {
-    const idx = findColumnIndex(headers, COLUMN_HEADER_MATCHERS[key]);
-    if (idx >= 0) map[key] = idx;
+function findAllColumnIndices(headers: string[], matchers: string[]): number[] {
+  const found = new Set<number>();
+  headers.forEach((header, idx) => {
+    if (matchers.some((matcher) => headerMatches(header, matcher))) {
+      found.add(idx);
+    }
+  });
+  return [...found].sort((a, b) => a - b);
+}
+
+function legacyColumnMap(): SheetColumnMap {
+  const map = {} as SheetColumnMap;
+  for (const key of Object.keys(LEGACY_COLUMN_INDICES) as SheetColumnKey[]) {
+    const idx = LEGACY_COLUMN_INDICES[key];
+    map[key] = idx >= 0 ? [idx] : [];
   }
   return map;
 }
 
+function buildColumnMap(headers: string[]): SheetColumnMap {
+  const map = legacyColumnMap();
+  for (const key of Object.keys(COLUMN_HEADER_MATCHERS) as SheetColumnKey[]) {
+    const idxs = findAllColumnIndices(headers, COLUMN_HEADER_MATCHERS[key]);
+    if (idxs.length > 0) map[key] = idxs;
+  }
+  return map;
+}
+
+/** Prefer the newest matching column that actually has a value (Forms appends new questions on the right). */
 function cellAt(c: GvizCell[], map: SheetColumnMap, key: SheetColumnKey): GvizCell {
-  const idx = map[key];
-  if (idx < 0) return null;
-  return c[idx] ?? null;
+  const idxs = map[key] ?? [];
+  let fallback: GvizCell = null;
+  for (let i = idxs.length - 1; i >= 0; i--) {
+    const idx = idxs[i];
+    if (idx < 0) continue;
+    const cell = c[idx] ?? null;
+    if (cellToString(cell)) return cell;
+    if (cell != null && fallback == null) fallback = cell;
+  }
+  return fallback;
+}
+
+async function fetchGviz(url: string): Promise<Response> {
+  return fetch(url, { cache: "no-store", next: { revalidate: 0 } });
 }
 
 async function fetchSheetColumnMap(): Promise<SheetColumnMap> {
   try {
-    const res = await fetch(HEADER_GVIZ_URL, { next: { revalidate: 0 } });
-    if (!res.ok) return LEGACY_COLUMN_MAP;
+    const res = await fetchGviz(HEADER_GVIZ_URL);
+    if (!res.ok) return legacyColumnMap();
     const parsed = extractGvizJson(await res.text());
     const headerCells = parsed.table?.rows?.[0]?.c ?? [];
     const headers = headerCells.map((cell) => cellToString(cell));
-    if (headers.length === 0) return LEGACY_COLUMN_MAP;
+    if (headers.length === 0) return legacyColumnMap();
     return buildColumnMap(headers);
   } catch {
-    return LEGACY_COLUMN_MAP;
+    return legacyColumnMap();
   }
+}
+
+async function getLatestFormFilledAt(
+  supabase: SupabaseAdmin,
+): Promise<Date | null> {
+  const { data, error } = await supabase
+    .from("candidates")
+    .select("form_filled_date")
+    .eq("is_deleted", false)
+    .not("form_filled_date", "is", null)
+    .order("form_filled_date", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error || !data?.form_filled_date) return null;
+  const d = parseISO(String(data.form_filled_date));
+  return isValid(d) ? d : null;
 }
 
 function rowFromSheetCells(
@@ -281,25 +361,27 @@ type ExistingCandidate = {
   is_deleted: boolean;
 };
 
-/** Preload emails so sync does not issue one SELECT per sheet row. */
-async function loadExistingCandidates(supabase: SupabaseAdmin): Promise<{
+/** Look up only the emails present in this sync batch. */
+async function loadExistingByEmails(
+  supabase: SupabaseAdmin,
+  emails: string[],
+): Promise<{
   byEmail: Map<string, ExistingCandidate>;
   error: string | null;
 }> {
   const byEmail = new Map<string, ExistingCandidate>();
-  let rangeStart = 0;
-  const pageSize = 1000;
-  for (;;) {
+  const unique = [...new Set(emails.filter(Boolean))];
+  const pageSize = 150;
+  for (let i = 0; i < unique.length; i += pageSize) {
+    const chunk = unique.slice(i, i + pageSize);
     const { data: batch, error } = await supabase
       .from("candidates")
       .select("id, email, is_deleted")
-      .order("id", { ascending: true })
-      .range(rangeStart, rangeStart + pageSize - 1);
+      .in("email", chunk);
     if (error) {
       return { byEmail, error: error.message };
     }
-    const chunk = batch ?? [];
-    for (const r of chunk) {
+    for (const r of batch ?? []) {
       const email = String(r.email ?? "")
         .trim()
         .toLowerCase();
@@ -309,8 +391,6 @@ async function loadExistingCandidates(supabase: SupabaseAdmin): Promise<{
         is_deleted: Boolean(r.is_deleted),
       });
     }
-    if (chunk.length < pageSize) break;
-    rangeStart += pageSize;
   }
   return { byEmail, error: null };
 }
@@ -387,6 +467,7 @@ export async function POST(request: Request) {
   let totalRows = 0;
   let newInserted = 0;
   let updatedRows = 0;
+  let alreadyInCrm = 0;
   let skippedEmptyEmail = 0;
 
   try {
@@ -397,7 +478,21 @@ export async function POST(request: Request) {
 
     console.log("Syncing TESTIMONIAL sheet:", SHEET_ID, "Tab:", TAB_NAME);
 
-    const res = await fetch(SHEET_GVIZ_URL, { next: { revalidate: 0 } });
+    const supabase = createSupabaseAdmin();
+    const latestTsPromise = getLatestFormFilledAt(supabase);
+    const columnMapPromise = fetchSheetColumnMap();
+    const latestTs = await latestTsPromise;
+    const since =
+      latestTs != null
+        ? new Date(latestTs.getTime() - INCREMENTAL_LOOKBACK_MS)
+        : null;
+    const sheetUrl = buildSheetDataUrl(since);
+
+    const [res, columnMap] = await Promise.all([
+      fetchGviz(sheetUrl),
+      columnMapPromise,
+    ]);
+    console.log("[sync-sheet] column map", columnMap);
     if (!res.ok) {
       return NextResponse.json(
         {
@@ -456,9 +551,9 @@ export async function POST(request: Request) {
       );
     }
 
-    const rows = parsed.table?.rows ?? [];
-    const columnMap = await fetchSheetColumnMap();
-    if (rows.length === 0) {
+    const dataRows = parsed.table?.rows ?? [];
+    totalRows = dataRows.length;
+    if (dataRows.length === 0) {
       return NextResponse.json({
         total_rows: 0,
         new_inserted: 0,
@@ -471,13 +566,17 @@ export async function POST(request: Request) {
       });
     }
 
-    /** Range `A1956:Z` returns rows starting at sheet row 1956 (no separate header skip). */
-    const dataRows = rows;
-    totalRows = dataRows.length;
+    const sheetEmails: string[] = [];
+    for (const row of dataRows) {
+      const emailRaw = cellToString(
+        cellAt(row.c ?? [], columnMap, "email"),
+      ).trim();
+      if (!emailRaw) continue;
+      sheetEmails.push(emailRaw, emailRaw.toLowerCase());
+    }
 
-    const supabase = createSupabaseAdmin();
     const { byEmail: existingByEmail, error: existingLoadErr } =
-      await loadExistingCandidates(supabase);
+      await loadExistingByEmails(supabase, sheetEmails);
     if (existingLoadErr) {
       return NextResponse.json(
         {
@@ -495,12 +594,17 @@ export async function POST(request: Request) {
       );
     }
 
-    /** Candidate rows successfully written this run (insert or update). */
+    /** New candidate ids written this run (existing rows are left unchanged). */
     const syncedCandidateIds = new Set<string>();
+    const pendingInserts: {
+      sheetRowNum: number;
+      emailNormalized: string;
+      insertRow: Record<string, unknown>;
+    }[] = [];
 
     for (let idx = 0; idx < dataRows.length; idx++) {
       const row = dataRows[idx];
-      const sheetRowNum = RANGE_FIRST_ROW + idx;
+      const sheetRowNum = since ? idx + 1 : RANGE_FIRST_ROW + idx;
       const c = row.c ?? [];
 
       const emailRaw = cellToString(cellAt(c, columnMap, "email")).trim();
@@ -510,7 +614,6 @@ export async function POST(request: Request) {
       }
 
       const emailNormalized = emailRaw.toLowerCase();
-      const payload = rowFromSheetCells(c, emailNormalized, columnMap);
       const existing = existingByEmail.get(emailNormalized);
 
       if (existing?.is_deleted) {
@@ -520,74 +623,92 @@ export async function POST(request: Request) {
         continue;
       }
 
+      // Already in CRM — skip the per-row UPDATE. Rewriting 1000+ existing
+      // candidates on every click is what made Sync Sheet time out.
       if (existing?.id) {
-        const { created_at: _omitCreated, ...updateFields } = payload;
-        const { error: upErr } = await supabase
-          .from("candidates")
-          .update(updateFields)
-          .eq("id", existing.id)
-          .eq("is_deleted", false);
-
-        if (upErr) {
-          errors.push(`Row ${sheetRowNum}: ${upErr.message}`);
-          continue;
-        }
-        syncedCandidateIds.add(existing.id);
-        updatedRows++;
+        alreadyInCrm++;
         continue;
       }
 
+      const payload = rowFromSheetCells(c, emailNormalized, columnMap);
       const { created_at, ...restPayload } = payload;
-      const insertRow = {
-        ...restPayload,
-        ...(created_at ? { created_at } : {}),
-        eligibility_status: "pending_review" as const,
-        congratulation_call_pending: false,
-      };
+      pendingInserts.push({
+        sheetRowNum,
+        emailNormalized,
+        insertRow: {
+          ...restPayload,
+          ...(created_at ? { created_at } : {}),
+          eligibility_status: "pending_review" as const,
+          congratulation_call_pending: false,
+        },
+      });
+    }
 
+    const uniqueInserts = new Map<string, (typeof pendingInserts)[number]>();
+    for (const item of pendingInserts) {
+      uniqueInserts.set(item.emailNormalized, item);
+    }
+    const insertList = [...uniqueInserts.values()];
+
+    const insertChunk = async (
+      chunk: (typeof insertList)[number][],
+    ): Promise<void> => {
       const { data: inserted, error: insErr } = await supabase
         .from("candidates")
-        .insert(insertRow)
-        .select("id")
-        .single();
+        .insert(chunk.map((item) => item.insertRow))
+        .select("id, email");
 
-      if (insErr) {
-        if (isUniqueViolation(insErr)) {
-          const clash = existingByEmail.get(emailNormalized);
-          if (clash?.is_deleted) {
-            errors.push(
-              `Row ${sheetRowNum}: skipped (deleted candidate with same email — not restored)`,
-            );
-            continue;
+      if (!insErr) {
+        for (const row of inserted ?? []) {
+          const email = String(row.email ?? "")
+            .trim()
+            .toLowerCase();
+          if (email) {
+            existingByEmail.set(email, {
+              id: String(row.id),
+              is_deleted: false,
+            });
           }
-          if (clash?.id) {
-            const { created_at: _omitCreated, ...updateFields } = payload;
-            const { error: upErr } = await supabase
-              .from("candidates")
-              .update(updateFields)
-              .eq("id", clash.id)
-              .eq("is_deleted", false);
-            if (upErr) {
-              errors.push(`Row ${sheetRowNum}: ${upErr.message}`);
-              continue;
-            }
-            syncedCandidateIds.add(clash.id);
-            updatedRows++;
-            continue;
-          }
+          syncedCandidateIds.add(String(row.id));
+          newInserted++;
         }
-        errors.push(`Row ${sheetRowNum}: ${insErr.message}`);
-        continue;
+        return;
       }
 
-      if (inserted?.id) {
-        existingByEmail.set(emailNormalized, {
-          id: String(inserted.id),
-          is_deleted: false,
-        });
-        syncedCandidateIds.add(inserted.id);
-        newInserted++;
+      for (const item of chunk) {
+        const { data: one, error: oneErr } = await supabase
+          .from("candidates")
+          .insert(item.insertRow)
+          .select("id")
+          .single();
+
+        if (oneErr) {
+          if (isUniqueViolation(oneErr)) {
+            continue;
+          }
+          errors.push(`Row ${item.sheetRowNum}: ${oneErr.message}`);
+          continue;
+        }
+        if (one?.id) {
+          existingByEmail.set(item.emailNormalized, {
+            id: String(one.id),
+            is_deleted: false,
+          });
+          syncedCandidateIds.add(String(one.id));
+          newInserted++;
+        }
       }
+    };
+
+    const chunks: (typeof insertList)[number][][] = [];
+    for (let i = 0; i < insertList.length; i += INSERT_CHUNK) {
+      chunks.push(insertList.slice(i, i + INSERT_CHUNK));
+    }
+    const PARALLEL_INSERTS = 3;
+    for (let i = 0; i < chunks.length; i += PARALLEL_INSERTS) {
+      await Promise.all(
+        chunks.slice(i, i + PARALLEL_INSERTS).map((chunk) => insertChunk(chunk)),
+      );
     }
 
     const idsSynced = [...syncedCandidateIds];
@@ -605,6 +726,7 @@ export async function POST(request: Request) {
       total_rows: totalRows,
       new_inserted: newInserted,
       updated_rows: updatedRows,
+      already_in_crm: alreadyInCrm,
       upserted,
       scored: 0,
       failed: 0,

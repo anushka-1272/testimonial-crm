@@ -68,6 +68,7 @@ function normalizeFormPayload(raw: Record<string, unknown>): {
     "currentCityOfResidence",
     "Current City of Residence:",
     "current city of residence",
+    "Current City of Residence",
   ]);
   const role_before_program = firstString(raw, [
     "role_before_program",
@@ -93,6 +94,13 @@ function normalizeFormPayload(raw: Record<string, unknown>): {
     "achievement_title",
     "achievementTitle",
     "achievement_title_one_line_summary",
+    "Enter Achievement Title (One-line Summary)",
+  ]);
+  const achievement_summary = firstString(raw, [
+    "achievement_summary",
+    "achievementSummary",
+    "tell_us_the_story_behind_this_achievement",
+    "Tell us the story behind this achievement.",
   ]);
   const quantified_result = firstString(raw, [
     "quantified_result",
@@ -121,8 +129,18 @@ function normalizeFormPayload(raw: Record<string, unknown>): {
     "proofDescription",
     "description_of_the_proof_uploaded_above",
   ]);
-  const linkedin_url = firstString(raw, ["linkedin_url", "linkedinUrl"]);
-  const instagram_url = firstString(raw, ["instagram_url", "instagramUrl"]);
+  const linkedin_url = firstString(raw, [
+    "linkedin_url",
+    "linkedinUrl",
+    "Add your LinkedIn Profile URL",
+    "linkedin",
+  ]);
+  const instagram_url = firstString(raw, [
+    "instagram_url",
+    "instagramUrl",
+    "Add your Instagram Profile URL",
+    "instagram",
+  ]);
 
   const achieved_on_date =
     parseOptionalDate(
@@ -167,6 +185,7 @@ function normalizeFormPayload(raw: Record<string, unknown>): {
     primary_goal,
     achievement_type,
     achievement_title,
+    achievement_summary,
     achieved_on_date,
     program_joined_date,
     quantified_result,
