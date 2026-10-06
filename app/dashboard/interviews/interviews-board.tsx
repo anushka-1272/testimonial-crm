@@ -7,7 +7,7 @@ import {
   parseISO,
   startOfDay,
 } from "date-fns";
-import { Loader2, Pencil } from "lucide-react";
+import { Pencil } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { CommentTableCell } from "@/components/comment-display";
@@ -33,6 +33,7 @@ import {
 } from "@/lib/interview-language";
 import { getUserSafe } from "@/lib/supabase-auth";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
+import { reactivateFollowupCandidate } from "@/lib/reactivate-followup";
 import { requestRevertInterview } from "@/lib/revert-interview-client";
 import { slackEmailForTeamMember } from "@/lib/slack-contacts";
 import { voidSlackNotify } from "@/lib/slack-client";
@@ -42,9 +43,6 @@ import {
   type PhysicalInterviewStatus,
 } from "@/lib/physical-interview-track";
 import {
-  canConfirmSocialPosts,
-  canFinalizeDispatch,
-  isDispatchAlreadyFinalized,
   matchesPostContentStageFilter,
   postContentStatusBadgeClass,
   postContentStatusLabel,
@@ -80,8 +78,6 @@ import {
 } from "@/lib/ui-theme-classes";
 
 import { PostInterviewDrawer } from "./post-interview-drawer";
-import { ConfirmSocialPostsModal } from "./confirm-social-posts-modal";
-import { FinalizeDispatchModal } from "./finalize-dispatch-modal";
 import { MarkNoShowModal } from "./mark-no-show-modal";
 import { RescheduleInterviewModal } from "./reschedule-interview-modal";
 import { ScheduledInterviewRowActions } from "./scheduled-interview-row-actions";
@@ -254,8 +250,10 @@ function filterCompletedInterviews(
   rows: InterviewWithCandidate[],
   f: CompletedTabFilters,
   dispatchCandidateIds: Set<string>,
+  addressCandidateIds: Set<string>,
 ): InterviewWithCandidate[] {
   return rows.filter((i) => {
+    if (!addressCandidateIds.has(i.candidate_id)) return false;
     if (
       !matchesPostContentStageFilter(
         { ...i, candidate_id: i.candidate_id },
@@ -760,17 +758,15 @@ export function InterviewsBoard() {
   const [dispatchCandidateIds, setDispatchCandidateIds] = useState<Set<string>>(
     () => new Set(),
   );
+  const [addressCandidateIds, setAddressCandidateIds] = useState<Set<string>>(
+    () => new Set(),
+  );
   const [noShowFor, setNoShowFor] = useState<InterviewWithCandidate | null>(
     null,
   );
-  const [confirmPostsFor, setConfirmPostsFor] =
-    useState<InterviewWithCandidate | null>(null);
-  const [finalizeDispatchFor, setFinalizeDispatchFor] =
-    useState<InterviewWithCandidate | null>(null);
   const [noShowRevertBusyId, setNoShowRevertBusyId] = useState<string | null>(
     null,
   );
-  const [postProdBusyId, setPostProdBusyId] = useState<string | null>(null);
   const [notEligibleRecordingBusyId, setNotEligibleRecordingBusyId] = useState<
     string | null
   >(null);
@@ -778,7 +774,6 @@ export function InterviewsBoard() {
     id: string;
     value: string;
   } | null>(null);
-  const [incompleteBusyId, setIncompleteBusyId] = useState<string | null>(null);
   const [revertBusyId, setRevertBusyId] = useState<string | null>(null);
   const [liBusyId, setLiBusyId] = useState<string | null>(null);
   const [physicalInterviewCityFor, setPhysicalInterviewCityFor] =
@@ -840,14 +835,17 @@ export function InterviewsBoard() {
 
     const { data: dispatchRows } = await supabase
       .from("dispatch")
-      .select("candidate_id");
-    setDispatchCandidateIds(
-      new Set(
-        (dispatchRows ?? [])
-          .map((d) => String(d.candidate_id ?? "").trim())
-          .filter(Boolean),
-      ),
-    );
+      .select("candidate_id, shipping_address");
+    const dispatchIds = new Set<string>();
+    const addressIds = new Set<string>();
+    for (const row of dispatchRows ?? []) {
+      const id = String(row.candidate_id ?? "").trim();
+      if (!id) continue;
+      dispatchIds.add(id);
+      if (String(row.shipping_address ?? "").trim()) addressIds.add(id);
+    }
+    setDispatchCandidateIds(dispatchIds);
+    setAddressCandidateIds(addressIds);
 
     const list = dedupeInterviewRows(
       (interviewRows ?? [])
@@ -1058,14 +1056,16 @@ export function InterviewsBoard() {
     () => ({
       eligible: eligibleQueue.length,
       scheduled: byStatus.scheduled.length,
-      completed: byStatus.completed.length,
+      completed: byStatus.completed.filter((i) =>
+        addressCandidateIds.has(i.candidate_id),
+      ).length,
       notEligible: byStatus.notEligible.length,
       noShow: byStatus.noShow.length,
       interviewsCompleted:
         byStatus.completed.length + byStatus.notEligible.length,
       inDispatch: dispatchCandidateIds.size,
     }),
-    [eligibleQueue.length, byStatus, dispatchCandidateIds.size],
+    [eligibleQueue.length, byStatus, dispatchCandidateIds.size, addressCandidateIds],
   );
 
   const pocFilterNames = useMemo(() => {
@@ -1252,12 +1252,13 @@ export function InterviewsBoard() {
   const completedCategoryOptions = useMemo(() => {
     const set = new Set<string>();
     for (const i of byStatus.completed) {
+      if (!addressCandidateIds.has(i.candidate_id)) continue;
       for (const line of interviewCategoryLines(i.category)) {
         set.add(line);
       }
     }
     return [...set].sort((a, b) => a.localeCompare(b));
-  }, [byStatus.completed]);
+  }, [byStatus.completed, addressCandidateIds]);
 
   const completedFiltered = useMemo(
     () =>
@@ -1266,6 +1267,7 @@ export function InterviewsBoard() {
           byStatus.completed,
           completedFilters,
           dispatchCandidateIds,
+          addressCandidateIds,
         ),
       ].sort((a, b) => {
           const dateA = new Date(a.completed_at || 0).getTime();
@@ -1273,7 +1275,7 @@ export function InterviewsBoard() {
           const cmp = dateB - dateA;
           return cmp !== 0 ? cmp : a.id.localeCompare(b.id);
       }),
-    [byStatus.completed, completedFilters, dispatchCandidateIds],
+    [byStatus.completed, completedFilters, dispatchCandidateIds, addressCandidateIds],
   );
 
   const noShowFiltered = useMemo(
@@ -1409,56 +1411,6 @@ export function InterviewsBoard() {
     URL.revokeObjectURL(url);
   }, [completedFiltered]);
 
-  const addCompletedToPostProduction = useCallback(
-    async (i: InterviewWithCandidate) => {
-      if (!supabase || !canMoveToPostProduction(i)) return;
-      setPostProdBusyId(i.id);
-      setError(null);
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      const token = session?.access_token;
-      if (!token) {
-        setPostProdBusyId(null);
-        setError("You must be signed in.");
-        return;
-      }
-      let res: Response;
-      try {
-        res = await fetch("/api/post-production/create-entry", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            source: "testimonial",
-            interview_id: i.id,
-          }),
-        });
-      } catch (e) {
-        console.error("Post production insert failed", e);
-        setPostProdBusyId(null);
-        setError("Network error while adding to post production.");
-        return;
-      }
-      const json = (await res.json().catch(() => ({}))) as { error?: string };
-      setPostProdBusyId(null);
-      if (!res.ok) {
-        console.error("Post production insert failed", {
-          status: res.status,
-          body: json,
-          interview_id: i.id,
-        });
-        setError(json.error ?? "Could not add to post production.");
-        return;
-      }
-      setToastMessage("Added to post production.");
-      void loadData();
-    },
-    [supabase, loadData],
-  );
-
   const saveNotEligibleRecordingLink = useCallback(
     async (interviewId: string, rawValue: string) => {
       if (!supabase || !canEditCompletedTab) return;
@@ -1494,50 +1446,6 @@ export function InterviewsBoard() {
     setSelectedInterview(interview);
     setIsCompleteModalOpen(true);
   }, []);
-
-  const handleMarkIncomplete = useCallback(
-    async (interview: InterviewWithCandidate) => {
-      if (!supabase) return;
-      const ok = window.confirm(
-        "Mark this interview as incomplete and move it back to Scheduled?\n\nThis will clear post-interview details.",
-      );
-      if (!ok) return;
-      setError(null);
-      setIncompleteBusyId(interview.id);
-      try {
-        const {
-          data: { session },
-        } = await supabase.auth.getSession();
-        const token = session?.access_token;
-        if (!token) {
-          setError("You must be signed in.");
-          return;
-        }
-        const response = await fetch(`/api/interviews/${interview.id}/incomplete`, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
-        const payload = (await response.json().catch(() => ({}))) as {
-          error?: string;
-        };
-        if (!response.ok) {
-          setError(payload.error ?? "Could not mark interview incomplete.");
-          return;
-        }
-        setToastMessage("Interview moved back to scheduled.");
-        setCompletedPopoverId(null);
-        await loadData();
-      } catch (e) {
-        console.error("Mark incomplete failed", e);
-        setError("Network error while marking interview incomplete.");
-      } finally {
-        setIncompleteBusyId(null);
-      }
-    },
-    [supabase, loadData],
-  );
 
   const handlePocChange = async (candidate: EligibleCandidate, value: string) => {
     if (!supabase) return;
@@ -1670,22 +1578,17 @@ export function InterviewsBoard() {
   };
 
   const handleMarkNotInterestedActive = async (c: EligibleCandidate) => {
-    if (!supabase) return;
+    if (!supabase || !canEditEligibleTab) return;
     setRestoringNotInterestedId(c.id);
-    const { error: uErr } = await supabase
-      .from("candidates")
-      .update({
-        followup_status: "pending",
-        followup_count: 0,
-        callback_datetime: null,
-        not_interested_reason: null,
-        not_interested_at: null,
-      })
-      .eq("id", c.id)
-      .eq("is_deleted", false);
+    setError(null);
+    const { error: uErr } = await reactivateFollowupCandidate({
+      supabase,
+      table: "candidates",
+      id: c.id,
+    });
     setRestoringNotInterestedId(null);
     if (uErr) {
-      setError(uErr.message);
+      setError(uErr);
       return;
     }
     const display = c.full_name?.trim() || c.email || "Candidate";
@@ -1702,6 +1605,7 @@ export function InterviewsBoard() {
         metadata: { followup: true },
       });
     }
+    setToastMessage(`${display} marked active.`);
     void loadData();
   };
 
@@ -2884,7 +2788,10 @@ export function InterviewsBoard() {
                         {completedPage.slice.length === 0 ? (
                           <tr>
                             <td className={tdBase} colSpan={16}>
-                              {emptyState}
+                              <div className="py-16 text-center text-sm text-muted/80">
+                                No completed interviews with a shipping address
+                                yet.
+                              </div>
                             </td>
                           </tr>
                         ) : (
@@ -2962,71 +2869,6 @@ export function InterviewsBoard() {
                                     className="relative flex flex-wrap items-center justify-end gap-2"
                                     data-completed-popover-root
                                   >
-                                    <button
-                                      type="button"
-                                      disabled={
-                                        !canEditCompletedTab ||
-                                        !canConfirmSocialPosts(i.post_content_status)
-                                      }
-                                      className="rounded-lg border border-[#bfdbfe] bg-[#eff6ff] px-2.5 py-1 text-xs font-medium text-[#2563eb] hover:bg-[#dbeafe] disabled:cursor-not-allowed disabled:opacity-40"
-                                      onMouseDown={(e) => e.stopPropagation()}
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setConfirmPostsFor(i);
-                                      }}
-                                    >
-                                      Confirm posts
-                                    </button>
-                                    <button
-                                      type="button"
-                                      disabled={
-                                        !canEditCompletedTab ||
-                                        !canFinalizeDispatch(
-                                          i.post_content_status,
-                                          i.reward_item,
-                                        ) ||
-                                        isDispatchAlreadyFinalized(
-                                          i.post_content_status,
-                                          dispatchCandidateIds.has(
-                                            i.candidate_id,
-                                          ),
-                                        )
-                                      }
-                                      className="rounded-lg border border-[#bbf7d0] bg-[#f0fdf4] px-2.5 py-1 text-xs font-medium text-[#16a34a] hover:bg-[#dcfce7] disabled:cursor-not-allowed disabled:opacity-40"
-                                      onMouseDown={(e) => e.stopPropagation()}
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setFinalizeDispatchFor(i);
-                                      }}
-                                    >
-                                      Finalize dispatch
-                                    </button>
-                                    <button
-                                      type="button"
-                                      disabled={
-                                        !canMoveToPostProduction(i) ||
-                                        postProdBusyId === i.id
-                                      }
-                                      title={
-                                        !canMoveToPostProduction(i)
-                                          ? POST_PRODUCTION_ELIGIBILITY_TOOLTIP
-                                          : undefined
-                                      }
-                                      className="rounded-lg bg-foreground px-2.5 py-1 text-xs font-medium text-background hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
-                                      onMouseDown={(e) => e.stopPropagation()}
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        void addCompletedToPostProduction(i);
-                                      }}
-                                    >
-                                      {postProdBusyId === i.id ? (
-                                        <Loader2
-                                          className="h-3.5 w-3.5 animate-spin"
-                                          aria-hidden
-                                        />
-                                      ) : null}{" "}
-                                      Add to Post Production
-                                    </button>
                                     <button
                                       type="button"
                                       className="text-sm font-medium text-[#3b82f6] hover:text-[#2563eb]"
@@ -3141,33 +2983,6 @@ export function InterviewsBoard() {
                                           </div>
                                         </dl>
                                         <div className="mt-4 flex flex-wrap items-center gap-2">
-                                          <button
-                                            type="button"
-                                            disabled={!canEditCompletedTab}
-                                            className="rounded-lg border border-border bg-elevated px-2.5 py-1 text-xs font-medium text-foreground hover:bg-background/80 disabled:cursor-not-allowed disabled:opacity-40"
-                                            onClick={() => {
-                                              if (!canEditCompletedTab) return;
-                                              setCompletedPopoverId(null);
-                                              openCompleteModal(i);
-                                            }}
-                                          >
-                                            Edit Details
-                                          </button>
-                                          <button
-                                            type="button"
-                                            disabled={
-                                              !canEditCompletedTab ||
-                                              incompleteBusyId === i.id
-                                            }
-                                            className="rounded-lg bg-[#dc2626] px-2.5 py-1 text-xs font-medium text-white hover:bg-[#b91c1c] disabled:cursor-not-allowed disabled:opacity-40"
-                                            onClick={() =>
-                                              void handleMarkIncomplete(i)
-                                            }
-                                          >
-                                            {incompleteBusyId === i.id
-                                              ? "Reverting..."
-                                              : "Mark Incomplete"}
-                                          </button>
                                           <button
                                             type="button"
                                             className="text-xs font-medium text-[#3b82f6] hover:text-[#2563eb]"
@@ -3726,22 +3541,6 @@ export function InterviewsBoard() {
         onClose={() => setNoShowFor(null)}
         onSaved={() => void loadData()}
         onToast={(msg) => setToastMessage(msg)}
-      />
-
-      <ConfirmSocialPostsModal
-        open={!!confirmPostsFor}
-        interview={confirmPostsFor}
-        supabase={supabase}
-        onClose={() => setConfirmPostsFor(null)}
-        onSaved={() => void loadData()}
-      />
-
-      <FinalizeDispatchModal
-        open={!!finalizeDispatchFor}
-        interview={finalizeDispatchFor}
-        supabase={supabase}
-        onClose={() => setFinalizeDispatchFor(null)}
-        onSaved={() => void loadData()}
       />
 
       <PostInterviewDrawer

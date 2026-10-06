@@ -2,7 +2,7 @@
 
 import { endOfDay, parseISO, startOfDay } from "date-fns";
 import { Check, Loader2, RefreshCw, Trash2, X } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useAccessControl } from "@/components/access-control-context";
 import {
@@ -128,6 +128,16 @@ function matchesEmailOrPhoneSearch(
   return false;
 }
 
+/** Newest submission first. `id` keeps same-timestamp rows from reshuffling after an update. */
+function compareCandidatesNewestFirst(a: CandidateRow, b: CandidateRow): number {
+  const aMs = Date.parse(a.created_at);
+  const bMs = Date.parse(b.created_at);
+  const aTime = Number.isNaN(aMs) ? 0 : aMs;
+  const bTime = Number.isNaN(bMs) ? 0 : bMs;
+  if (aTime !== bTime) return bTime - aTime;
+  return a.id.localeCompare(b.id);
+}
+
 function interviewTypeTableCell(t: InterviewTrack | null | undefined) {
   if (t === "testimonial") {
     return (
@@ -201,20 +211,28 @@ export function EligibilityDashboard() {
       return null;
     }
   }, []);
+  const rowsRequestId = useRef(0);
 
   const loadRows = useCallback(async () => {
     if (!supabase) return;
+    const requestId = ++rowsRequestId.current;
     const { data, error: qErr } = await supabase
       .from("candidates")
       .select(SELECT_COLUMNS)
       .eq("is_deleted", false)
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: true });
 
+    if (requestId !== rowsRequestId.current) return;
     if (qErr) {
       setError(qErr.message);
       return;
     }
-    setRows((data ?? []) as CandidateRow[]);
+    setRows(
+      ((data ?? []) as CandidateRow[])
+        .slice()
+        .sort(compareCandidatesNewestFirst),
+    );
     setError(null);
   }, [supabase]);
 
@@ -303,28 +321,31 @@ export function EligibilityDashboard() {
   }, [rows]);
 
   const filteredRows = useMemo(() => {
-    return rows.filter((r) => {
-      if (statusFilter && r.eligibility_status !== statusFilter) {
-        return false;
-      }
-      if (industryFilter && (r.role_before_program ?? "") !== industryFilter) {
-        return false;
-      }
-      if (dateFrom) {
-        const created = parseISO(r.created_at);
-        const from = startOfDay(parseISO(dateFrom));
-        if (created < from) return false;
-      }
-      if (dateTo) {
-        const created = parseISO(r.created_at);
-        const to = endOfDay(parseISO(dateTo));
-        if (created > to) return false;
-      }
-      if (!matchesEmailOrPhoneSearch(r.email, r.whatsapp_number, contactSearch)) {
-        return false;
-      }
-      return true;
-    });
+    return rows
+      .filter((r) => {
+        if (statusFilter && r.eligibility_status !== statusFilter) {
+          return false;
+        }
+        if (industryFilter && (r.role_before_program ?? "") !== industryFilter) {
+          return false;
+        }
+        if (dateFrom) {
+          const created = parseISO(r.created_at);
+          const from = startOfDay(parseISO(dateFrom));
+          if (created < from) return false;
+        }
+        if (dateTo) {
+          const created = parseISO(r.created_at);
+          const to = endOfDay(parseISO(dateTo));
+          if (created > to) return false;
+        }
+        if (!matchesEmailOrPhoneSearch(r.email, r.whatsapp_number, contactSearch)) {
+          return false;
+        }
+        return true;
+      })
+      .slice()
+      .sort(compareCandidatesNewestFirst);
   }, [rows, statusFilter, industryFilter, dateFrom, dateTo, contactSearch]);
 
   const toggleSelect = (id: string) => {
@@ -368,6 +389,18 @@ export function EligibilityDashboard() {
       setError(uErr.message);
       return;
     }
+    setRows((prev) =>
+      prev.map((row) =>
+        row.id === r.id
+          ? {
+              ...row,
+              eligibility_status: "eligible",
+              congratulation_call_pending: true,
+              interview_type: interviewType,
+            }
+          : row,
+      ),
+    );
     if (r.eligibility_status !== "eligible") {
       const waName = r.full_name?.trim() || r.email || "there";
       void (async () => {
@@ -483,6 +516,11 @@ export function EligibilityDashboard() {
       setError(uErr.message);
       return;
     }
+    setRows((prev) =>
+      prev.map((row) =>
+        row.id === r.id ? { ...row, eligibility_status: "not_eligible" } : row,
+      ),
+    );
     try {
       const res = await fetch("/api/send-email", {
         method: "POST",
@@ -539,6 +577,19 @@ export function EligibilityDashboard() {
     setBulkBusy(false);
     if (uErr) setError(uErr.message);
     else {
+      const idSet = new Set(ids);
+      setRows((prev) =>
+        prev.map((row) =>
+          idSet.has(row.id)
+            ? {
+                ...row,
+                eligibility_status: "eligible",
+                congratulation_call_pending: true,
+                interview_type: "testimonial",
+              }
+            : row,
+        ),
+      );
       const actorBulk = await getUserSafe(supabase);
       if (actorBulk) {
         for (const id of ids) {
@@ -590,6 +641,12 @@ export function EligibilityDashboard() {
       setError(uErr.message);
       return;
     }
+    const idSet = new Set(ids);
+    setRows((prev) =>
+      prev.map((row) =>
+        idSet.has(row.id) ? { ...row, eligibility_status: "not_eligible" } : row,
+      ),
+    );
     const toEmail = rows.filter((r) => ids.includes(r.id));
     for (const r of toEmail) {
       try {

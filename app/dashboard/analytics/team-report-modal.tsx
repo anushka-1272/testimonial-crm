@@ -7,6 +7,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { useAccessControl } from "@/components/access-control-context";
 import { modalOverlayClass, modalPanelWideClass } from "@/lib/modal-responsive";
+import { FOLLOWUP_CYCLE_RESET_STATUS } from "@/lib/followup-constants";
 import { teamMemberDisplayName } from "@/lib/team-roster";
 
 import { TeamReportRatingsTab } from "./team-report-ratings-tab";
@@ -246,6 +247,7 @@ export function TeamReportModal({ open, supabase, onClose }: TeamReportModalProp
     let callback = 0;
 
     for (const r of followRes.rows) {
+      if ((r.status ?? "").trim() === FOLLOWUP_CYCLE_RESET_STATUS) continue;
       const key = followupActorKey(r);
       increment(byActor, key);
       const label = followupPersonLabel(r, emailToName);

@@ -3,6 +3,7 @@ import { format, parseISO } from "date-fns";
 import { MAX_FOLLOWUP_ATTEMPTS } from "@/lib/followup-constants";
 import {
   getLatestFollowupLog,
+  logsInCurrentFollowupCycle,
   resolveEffectiveFollowupCount,
 } from "@/lib/followup-count";
 
@@ -48,8 +49,9 @@ function normalizeFollowupStatus(value: string | null | undefined): FollowupStat
 export function getFollowUpStatus(
   logs: FollowupLogStatusRow[],
 ): FollowupStatusSnapshot | null {
-  if (!logs.length) return null;
-  const latest = getLatestFollowupLog(logs);
+  const cycleLogs = logsInCurrentFollowupCycle(logs);
+  if (!cycleLogs.length) return null;
+  const latest = getLatestFollowupLog(cycleLogs);
   if (!latest) return null;
   const followup_count = resolveEffectiveFollowupCount(logs);
   const latestStatus = normalizeFollowupStatus(latest.status);

@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { logActivity } from "@/lib/activity-logger";
+import { plannedContentTypeLabel } from "@/lib/planned-content-type";
 import { resolvePostContentStatusOnComplete } from "@/lib/post-interview-content";
 import { getUserSafe } from "@/lib/supabase-auth";
 import { SLACK_RIANKA_EMAIL } from "@/lib/slack-contacts";
@@ -50,6 +51,8 @@ const NO_DISPATCH_COMMENT_NOTE =
   "Eligible; no physical dispatch (reward item: No Dispatch).";
 
 type RewardChoice = "airpods" | "jbl" | "other" | "no_dispatch";
+
+type WrittenPostAnswer = "yes" | "no" | "not_applicable";
 
 function parseStoredCategories(raw: string | null): string[] {
   if (!raw?.trim()) return [];
@@ -111,8 +114,11 @@ function resolveRewardItemForDb(
     }
 }
 
-function shippingRequired(choice: RewardChoice): boolean {
-  return choice !== "no_dispatch";
+function writtenPostLabel(value: WrittenPostAnswer | null): string {
+  if (value === "yes") return "Yes";
+  if (value === "no") return "No";
+  if (value === "not_applicable") return "Not applicable";
+  return "—";
 }
 
 function rewardFieldsValid(choice: RewardChoice, otherText: string): boolean {
@@ -256,7 +262,9 @@ export function PostInterviewDrawer({
   const [dispatchHydrated, setDispatchHydrated] = useState(false);
   const [rewardChoice, setRewardChoice] = useState<RewardChoice>("airpods");
   const [rewardOtherText, setRewardOtherText] = useState("");
-  const [skipSocialPosts, setSkipSocialPosts] = useState(false);
+  const [writtenPost, setWrittenPost] = useState<WrittenPostAnswer | null>(
+    null,
+  );
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -289,7 +297,7 @@ export function PostInterviewDrawer({
       choice = "jbl";
     setRewardChoice(choice);
     setRewardOtherText(hydrated.otherText);
-    setSkipSocialPosts(Boolean(interview.skip_social_posts));
+    setWrittenPost(null);
     setCategoryMenuOpen(false);
     setCategorySearch("");
   }, [open, interview?.id]);
@@ -377,12 +385,11 @@ export function PostInterviewDrawer({
   const rewardCards = rewardCardsForInterview(interview);
 
   const needsShippingOnComplete =
-    eligible === true &&
-    rewardChoice !== "no_dispatch" &&
-    (isEditMode || skipSocialPosts);
+    eligible === true && rewardChoice !== "no_dispatch";
 
   const eligibleYesRequirementsMet =
     funnel.trim() !== "" &&
+    writtenPost !== null &&
     rewardFieldsValid(rewardChoice, rewardOtherText) &&
     (!needsShippingOnComplete || shippingAddress.trim() !== "") &&
     (isProject || selectedCategories.length > 0);
@@ -412,8 +419,12 @@ export function PostInterviewDrawer({
         setError("Specify the reward item for “Other”.");
         return;
       }
+      if (!writtenPost) {
+        setError("Select whether the written post was completed.");
+        return;
+      }
       if (needsShippingOnComplete && !shippingAddress.trim()) {
-        setError("Shipping address is required when skipping posts or editing dispatch.");
+        setError("Shipping address is required.");
         return;
       }
     }
@@ -442,10 +453,14 @@ export function PostInterviewDrawer({
           ? interview.completed_at.trim()
           : new Date().toISOString();
       const table = isProject ? "project_interviews" : "interviews";
+      const finalizeDispatch =
+        eligible === true &&
+        rewardChoice !== "no_dispatch" &&
+        Boolean(shippingAddress.trim());
       const postContentStatus = resolvePostContentStatusOnComplete({
         eligible,
-        skipSocialPosts: isEditMode ? Boolean(interview.skip_social_posts) : skipSocialPosts,
         rewardIsNoDispatch: rewardChoice === "no_dispatch",
+        finalizeDispatch,
       });
       const updatePayload: Record<string, unknown> = {
         interview_status: "completed",
@@ -457,15 +472,26 @@ export function PostInterviewDrawer({
           : serializeCategories(selectedCategories),
         funnel: funnel.trim() || null,
         comments: commentsToSave,
+        post_content_status: postContentStatus,
+        skip_social_posts: writtenPost === "not_applicable",
+        posts_confirmed_at:
+          writtenPost === "yes" ? new Date().toISOString() : null,
+        written_post_status: writtenPost,
       };
-      if (!isEditMode) {
-        updatePayload.post_content_status = postContentStatus;
-        updatePayload.skip_social_posts = skipSocialPosts;
-      }
-      const { error: upErr } = await supabase
+      let { error: upErr } = await supabase
         .from(table)
         .update(updatePayload)
         .eq("id", interview.id);
+      if (upErr?.message?.includes("written_post_status")) {
+        const { written_post_status: _omit, ...withoutWrittenPost } =
+          updatePayload;
+        void _omit;
+        const retry = await supabase
+          .from(table)
+          .update(withoutWrittenPost)
+          .eq("id", interview.id);
+        upErr = retry.error;
+      }
 
       if (upErr) {
         setError(upErr.message);
@@ -492,7 +518,7 @@ export function PostInterviewDrawer({
           entity_type: "interview",
           entity_id: interview.id,
           candidate_name: candDisplay,
-          description: `Completed interview for ${candDisplay} — Post-eligible: ${postLabel}, Reward: ${rewardLog}`,
+          description: `Completed interview for ${candDisplay} — Post-eligible: ${postLabel}, Written post: ${writtenPostLabel(writtenPost)}, LinkedIn/blog: ${plannedContentTypeLabel(interview.planned_content_type)}, Reward: ${rewardLog}`,
         });
       }
 
@@ -544,8 +570,7 @@ export function PostInterviewDrawer({
         eligible === true &&
         rewardChoice !== "no_dispatch" &&
         shippingAddress.trim() &&
-        rewardItemForDb &&
-        (isEditMode || skipSocialPosts)
+        rewardItemForDb
       ) {
         const dispatchFields = {
           shipping_address: shippingAddress.trim(),
@@ -638,7 +663,7 @@ export function PostInterviewDrawer({
       setFunnel("");
       setComments("");
       setShippingAddress("");
-      setSkipSocialPosts(false);
+      setWrittenPost(null);
       setRewardChoice("airpods");
       setRewardOtherText("");
       onSaved();
@@ -925,25 +950,48 @@ export function PostInterviewDrawer({
               ) : null}
             </div>
 
-            {eligible === true &&
-            rewardChoice !== "no_dispatch" &&
-            !isEditMode ? (
-              <label className="flex items-start gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  className="mt-1"
-                  checked={skipSocialPosts}
-                  onChange={(e) => setSkipSocialPosts(e.target.checked)}
-                />
-                <span>
-                  Skip LinkedIn/blog post — move directly to dispatch
-                  <span className="mt-0.5 block text-xs text-muted">
-                    When unchecked, the candidate goes to Awaiting posts after
-                    completion. Add shipping address later from the Completed
-                    tab.
+            {eligible === true ? (
+              <div className="rounded-xl border border-border-subtle bg-background px-3 py-2.5">
+                <p className="text-xs font-medium uppercase tracking-widest text-muted/80">
+                  LinkedIn / blog
+                </p>
+                <p className="mt-1 text-sm font-medium text-foreground">
+                  {plannedContentTypeLabel(interview.planned_content_type)}
+                </p>
+                <p className="mt-0.5 text-xs text-muted">
+                  From the draft interview.
+                </p>
+              </div>
+            ) : null}
+
+            {eligible === true ? (
+              <fieldset>
+                <legend className="text-xs font-medium uppercase tracking-widest text-muted/80">
+                  Completed written post?
+                  <span className="ml-1 font-normal normal-case text-[#dc2626]">
+                    *
                   </span>
-                </span>
-              </label>
+                </legend>
+                <div className="mt-2 flex flex-wrap gap-4">
+                  {(
+                    [
+                      ["yes", "Yes"],
+                      ["no", "No"],
+                      ["not_applicable", "Not applicable"],
+                    ] as const
+                  ).map(([value, label]) => (
+                    <label key={value} className="flex items-center gap-2 text-sm">
+                      <input
+                        type="radio"
+                        name="written-post"
+                        checked={writtenPost === value}
+                        onChange={() => setWrittenPost(value)}
+                      />
+                      {label}
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
             ) : null}
 
             {needsShippingOnComplete ? (
@@ -961,12 +1009,11 @@ export function PostInterviewDrawer({
                   value={shippingAddress}
                   onChange={(e) => setShippingAddress(e.target.value)}
                 />
+                <span className="mt-1 block text-xs text-muted">
+                  Saving this marks the interview complete and moves it to
+                  dispatch.
+                </span>
               </label>
-            ) : eligible === true && rewardChoice !== "no_dispatch" && !isEditMode ? (
-              <p className="rounded-xl border border-border-subtle bg-background px-3 py-2 text-xs text-muted">
-                Shipping address will be collected after LinkedIn or blog post
-                is confirmed.
-              </p>
             ) : null}
           </div>
 

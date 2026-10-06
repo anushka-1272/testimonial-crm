@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { FOLLOWUP_CYCLE_RESET_STATUS } from "@/lib/followup-constants";
 import { followupOutcomeDisplayLabel } from "@/lib/followup-outcome-display";
 import { modalOverlayClass, modalPanel3xlClass } from "@/lib/modal-responsive";
 
@@ -121,7 +122,11 @@ export function FollowupHistoryModal({
               <tbody>
                 {rows.map((r) => (
                   <tr key={r.id}>
-                    <td className={td}>{r.attempt_number}</td>
+                    <td className={td}>
+                      {r.status === FOLLOWUP_CYCLE_RESET_STATUS
+                        ? "—"
+                        : r.attempt_number}
+                    </td>
                     <td className={td}>{formatWhen(r.created_at)}</td>
                     <td className={td}>
                       {statusDisplay(r.status)}

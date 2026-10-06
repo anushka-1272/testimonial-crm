@@ -20,6 +20,8 @@ export function followupOutcomeDisplayLabel(status: string): string {
       return "Wrong number";
     case "pending":
       return "Pending";
+    case "reactivated":
+      return "Marked active";
     case "scheduled":
       return "Interview scheduled";
     default:

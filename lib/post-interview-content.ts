@@ -58,12 +58,11 @@ export function postContentStatusBadgeClass(
 
 export function resolvePostContentStatusOnComplete(input: {
   eligible: boolean;
-  skipSocialPosts: boolean;
   rewardIsNoDispatch: boolean;
+  finalizeDispatch: boolean;
 }): PostContentStatus {
-  if (!input.eligible) return "not_applicable";
-  if (input.rewardIsNoDispatch) return "not_applicable";
-  if (input.skipSocialPosts) return "dispatch_ready";
+  if (!input.eligible || input.rewardIsNoDispatch) return "not_applicable";
+  if (input.finalizeDispatch) return "dispatch_ready";
   return "awaiting_posts";
 }
 

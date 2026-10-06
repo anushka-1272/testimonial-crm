@@ -17,6 +17,7 @@ import {
   type PhysicalInterviewCity,
   type PhysicalInterviewStatus,
 } from "@/lib/physical-interview-track";
+import { reactivateFollowupCandidate } from "@/lib/reactivate-followup";
 import { requestRevertInterview } from "@/lib/revert-interview-client";
 import { displayNameFromUser, getUserSafe } from "@/lib/supabase-auth";
 import {
@@ -26,9 +27,6 @@ import {
   type InterviewerSelectOption,
 } from "@/lib/interviewer-enum";
 import {
-  canConfirmSocialPosts,
-  canFinalizeDispatch,
-  isDispatchAlreadyFinalized,
   matchesPostContentStageFilter,
   postContentStatusBadgeClass,
   postContentStatusLabel,
@@ -51,9 +49,7 @@ import {
 } from "@/lib/team-roster";
 
 import { AssignInterviewerModal } from "./assign-interviewer-modal";
-import { ConfirmSocialPostsModal } from "./confirm-social-posts-modal";
 import { EditInterviewDetailsModal } from "./edit-interview-details-modal";
-import { FinalizeDispatchModal } from "./finalize-dispatch-modal";
 import { MarkNoShowModal } from "./mark-no-show-modal";
 import { ScheduledInterviewRowActions } from "./scheduled-interview-row-actions";
 import { PhysicalInterviewCityModal } from "./physical-interview-city-modal";
@@ -651,7 +647,6 @@ export function ProjectInterviewsPanel({
   const [completedPopoverId, setCompletedPopoverId] = useState<string | null>(
     null,
   );
-  const [postProdBusyId, setPostProdBusyId] = useState<string | null>(null);
   const [notEligibleRecordingBusyId, setNotEligibleRecordingBusyId] = useState<
     string | null
   >(null);
@@ -677,13 +672,11 @@ export function ProjectInterviewsPanel({
     useState<ProjectLogFollowupRow | null>(null);
   const [dispatchProjectCandidateIds, setDispatchProjectCandidateIds] =
     useState<Set<string>>(() => new Set());
+  const [addressProjectCandidateIds, setAddressProjectCandidateIds] =
+    useState<Set<string>>(() => new Set());
   const [completedPostContentStage, setCompletedPostContentStage] =
     useState<PostContentStageFilter>("all");
   const [noShowFor, setNoShowFor] =
-    useState<ProjectInterviewWithProjectCandidate | null>(null);
-  const [confirmPostsFor, setConfirmPostsFor] =
-    useState<ProjectInterviewWithProjectCandidate | null>(null);
-  const [finalizeDispatchFor, setFinalizeDispatchFor] =
     useState<ProjectInterviewWithProjectCandidate | null>(null);
   const [noShowRevertBusyId, setNoShowRevertBusyId] = useState<string | null>(
     null,
@@ -843,14 +836,17 @@ export function ProjectInterviewsPanel({
 
     const { data: dispatchRows } = await supabase
       .from("project_dispatch")
-      .select("project_candidate_id");
-    setDispatchProjectCandidateIds(
-      new Set(
-        (dispatchRows ?? [])
-          .map((d) => String(d.project_candidate_id ?? "").trim())
-          .filter(Boolean),
-      ),
-    );
+      .select("project_candidate_id, shipping_address");
+    const dispatchIds = new Set<string>();
+    const addressIds = new Set<string>();
+    for (const row of dispatchRows ?? []) {
+      const id = String(row.project_candidate_id ?? "").trim();
+      if (!id) continue;
+      dispatchIds.add(id);
+      if (String(row.shipping_address ?? "").trim()) addressIds.add(id);
+    }
+    setDispatchProjectCandidateIds(dispatchIds);
+    setAddressProjectCandidateIds(addressIds);
 
     if (eCandidates && projectInterviewError) {
       onError(
@@ -868,57 +864,6 @@ export function ProjectInterviewsPanel({
       onError(null);
     }
   }, [supabase, onError]);
-
-  const addProjectCompletedToPostProduction = useCallback(
-    async (i: ProjectInterviewWithProjectCandidate) => {
-      if (!canMoveToPostProduction(i)) return;
-      setPostProdBusyId(i.id);
-      onError(null);
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      const token = session?.access_token;
-      if (!token) {
-        setPostProdBusyId(null);
-        onError("You must be signed in.");
-        return;
-      }
-      let res: Response;
-      try {
-        res = await fetch("/api/post-production/create-entry", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            source: "project",
-            project_interview_id: i.id,
-          }),
-        });
-      } catch (e) {
-        console.error("Post production insert failed", e);
-        setPostProdBusyId(null);
-        onError("Network error while adding to post production.");
-        return;
-      }
-      const json = (await res.json().catch(() => ({}))) as { error?: string };
-      setPostProdBusyId(null);
-      if (!res.ok) {
-        console.error("Post production insert failed", {
-          status: res.status,
-          body: json,
-          project_interview_id: i.id,
-        });
-        onError(json.error ?? "Could not add to post production.");
-        return;
-      }
-      onToast?.("Added to post production.");
-      await loadProjectData();
-      onPipelineChanged();
-    },
-    [supabase, loadProjectData, onPipelineChanged, onError, onToast],
-  );
 
   const saveNotEligibleRecordingLink = useCallback(
     async (interviewId: string, rawValue: string) => {
@@ -1275,6 +1220,9 @@ export function ProjectInterviewsPanel({
   const completedFiltered = useMemo(
     () =>
       [...byStatus.completed.filter((i) => {
+        if (!addressProjectCandidateIds.has(i.project_candidate_id)) {
+          return false;
+        }
         if (
           !matchesPostContentStageFilter(
             i,
@@ -1305,6 +1253,7 @@ export function ProjectInterviewsPanel({
       filters.completed.interviewer,
       completedPostContentStage,
       dispatchProjectCandidateIds,
+      addressProjectCandidateIds,
     ],
   );
 
@@ -1536,23 +1485,19 @@ export function ProjectInterviewsPanel({
   const handleMarkProjectNotInterestedActive = async (pc: ProjectCandidateRow) => {
     if (!canEditScheduledTab) return;
     setRestoringNotInterestedId(pc.id);
-    const { error: uErr } = await supabase
-      .from("project_candidates")
-      .update({
-        followup_status: "pending",
-        followup_count: 0,
-        callback_datetime: null,
-        not_interested_reason: null,
-        not_interested_at: null,
-      })
-      .eq("id", pc.id)
-      .eq("is_deleted", false);
+    const { error: uErr } = await reactivateFollowupCandidate({
+      supabase,
+      table: "project_candidates",
+      id: pc.id,
+    });
     setRestoringNotInterestedId(null);
     if (uErr) {
-      onError(uErr.message);
+      onError(uErr);
       return;
     }
+    onError(null);
     const display = projectDisplayName(pc);
+    const label = display === "—" ? pc.email : display;
     const authUser = await getUserSafe(supabase);
     if (authUser) {
       await logActivity({
@@ -1561,11 +1506,12 @@ export function ProjectInterviewsPanel({
         action_type: "eligibility",
         entity_type: "project_candidate",
         entity_id: pc.id,
-        candidate_name: display === "—" ? pc.email : display,
-        description: `Marked ${display === "—" ? pc.email : display} active again (follow-up pipeline)`,
+        candidate_name: label,
+        description: `Marked ${label} active again (follow-up pipeline)`,
         metadata: { followup: true, project: true },
       });
     }
+    onToast?.(`${label} marked active.`);
     void loadProjectData();
     onPipelineChanged();
   };
@@ -2561,7 +2507,9 @@ export function ProjectInterviewsPanel({
                   {completedPage.slice.length === 0 ? (
                     <tr>
                       <td className={tdBase} colSpan={15}>
-                        {emptyState}
+                        <div className="py-16 text-center text-sm text-muted/80">
+                          No completed interviews with a shipping address yet.
+                        </div>
                       </td>
                     </tr>
                   ) : (
@@ -2633,95 +2581,6 @@ export function ProjectInterviewsPanel({
                               className="relative flex flex-wrap items-center justify-end gap-2"
                               data-project-completed-popover-root
                             >
-                              <button
-                                type="button"
-                                disabled={
-                                  !canEditScheduledTab ||
-                                  postProdBusyId === i.id
-                                }
-                                title={
-                                  !canEditScheduledTab
-                                    ? "View only"
-                                    : undefined
-                                }
-                                className="rounded-lg border border-border bg-elevated px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-background/80 disabled:cursor-not-allowed disabled:opacity-50"
-                                onMouseDown={(e) => e.stopPropagation()}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  if (canEditScheduledTab) {
-                                    setLogFollowupFor(
-                                      projectCandidateForLogModal(pc),
-                                    );
-                                  }
-                                }}
-                              >
-                                Log Call (Post)
-                              </button>
-                              <button
-                                type="button"
-                                disabled={
-                                  !canEditScheduledTab ||
-                                  !canConfirmSocialPosts(i.post_content_status)
-                                }
-                                className="rounded-lg border border-[#bfdbfe] bg-[#eff6ff] px-2.5 py-1 text-xs font-medium text-[#2563eb] hover:bg-[#dbeafe] disabled:opacity-40"
-                                onMouseDown={(e) => e.stopPropagation()}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setConfirmPostsFor(i);
-                                }}
-                              >
-                                Confirm posts
-                              </button>
-                              <button
-                                type="button"
-                                disabled={
-                                  !canEditScheduledTab ||
-                                  !canFinalizeDispatch(
-                                    i.post_content_status,
-                                    i.reward_item,
-                                  ) ||
-                                  isDispatchAlreadyFinalized(
-                                    i.post_content_status,
-                                    dispatchProjectCandidateIds.has(
-                                      i.project_candidate_id,
-                                    ),
-                                  )
-                                }
-                                className="rounded-lg border border-[#bbf7d0] bg-[#f0fdf4] px-2.5 py-1 text-xs font-medium text-[#16a34a] hover:bg-[#dcfce7] disabled:opacity-40"
-                                onMouseDown={(e) => e.stopPropagation()}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setFinalizeDispatchFor(i);
-                                }}
-                              >
-                                Finalize dispatch
-                              </button>
-                              <button
-                                type="button"
-                                disabled={
-                                  !canMoveToPostProduction(i) ||
-                                  postProdBusyId === i.id
-                                }
-                                title={
-                                  !canMoveToPostProduction(i)
-                                    ? POST_PRODUCTION_ELIGIBILITY_TOOLTIP
-                                    : undefined
-                                }
-                                className="rounded-lg bg-foreground px-2.5 py-1 text-xs font-medium text-background hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40 disabled:text-muted"
-                                onMouseDown={(e) => e.stopPropagation()}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  void addProjectCompletedToPostProduction(i);
-                                }}
-                              >
-                                {postProdBusyId === i.id ? (
-                                  <Loader2
-                                    className="h-3.5 w-3.5 animate-spin"
-                                    aria-hidden
-                                  />
-                                ) : null}{" "}
-                                Add to Post Production
-                              </button>
                               <button
                                 type="button"
                                 className="text-sm font-medium text-[#3b82f6] hover:text-[#2563eb]"
@@ -2822,23 +2681,6 @@ export function ProjectInterviewsPanel({
                                     </div>
                                   </dl>
                                   <div className="mt-4 flex flex-wrap items-center gap-2">
-                                    <button
-                                      type="button"
-                                      disabled={!canEditScheduledTab}
-                                      title={
-                                        !canEditScheduledTab
-                                          ? "View only"
-                                          : undefined
-                                      }
-                                      className="rounded-lg border border-border bg-elevated px-2.5 py-1 text-xs font-medium text-foreground hover:bg-background/80 disabled:cursor-not-allowed disabled:border-border disabled:text-muted"
-                                      onClick={() => {
-                                        if (!canEditScheduledTab) return;
-                                        setCompletedPopoverId(null);
-                                        onPostProjectInterview(i);
-                                      }}
-                                    >
-                                      Edit Details
-                                    </button>
                                     <button
                                       type="button"
                                       className="text-xs font-medium text-[#3b82f6] hover:text-[#2563eb]"
@@ -3339,28 +3181,6 @@ export function ProjectInterviewsPanel({
           onPipelineChanged();
         }}
         onToast={onToast}
-      />
-
-      <ConfirmSocialPostsModal
-        open={!!confirmPostsFor}
-        interview={confirmPostsFor}
-        supabase={supabase}
-        onClose={() => setConfirmPostsFor(null)}
-        onSaved={() => {
-          void loadProjectData();
-          onPipelineChanged();
-        }}
-      />
-
-      <FinalizeDispatchModal
-        open={!!finalizeDispatchFor}
-        interview={finalizeDispatchFor}
-        supabase={supabase}
-        onClose={() => setFinalizeDispatchFor(null)}
-        onSaved={() => {
-          void loadProjectData();
-          onPipelineChanged();
-        }}
       />
 
       <LogFollowupCallModal

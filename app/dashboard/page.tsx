@@ -18,6 +18,7 @@ import {
   resolveDashboardStatsBounds,
   type DashboardPeriod,
 } from "@/lib/dashboard-ist-dates";
+import { FOLLOWUP_CYCLE_RESET_STATUS } from "@/lib/followup-constants";
 import { getUserSafe } from "@/lib/supabase-auth";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 
@@ -244,7 +245,8 @@ export default function DashboardPage() {
     let testimonialCallsQ = supabase
       .from("followup_log")
       .select("id", { count: "exact", head: true })
-      .not("candidate_id", "is", null);
+      .not("candidate_id", "is", null)
+      .neq("status", FOLLOWUP_CYCLE_RESET_STATUS);
     if (rangeStart)
       testimonialCallsQ = testimonialCallsQ.gte("created_at", rangeStart);
     if (rangeEnd)
@@ -254,7 +256,8 @@ export default function DashboardPage() {
     let projectCallsQ = supabase
       .from("followup_log")
       .select("id", { count: "exact", head: true })
-      .not("project_candidate_id", "is", null);
+      .not("project_candidate_id", "is", null)
+      .neq("status", FOLLOWUP_CYCLE_RESET_STATUS);
     if (rangeStart)
       projectCallsQ = projectCallsQ.gte("created_at", rangeStart);
     if (rangeEnd) projectCallsQ = projectCallsQ.lt("created_at", rangeEnd);
