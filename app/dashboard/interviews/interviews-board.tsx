@@ -793,18 +793,22 @@ export function InterviewsBoard() {
 
   const loadData = useCallback(async () => {
     if (!supabase) return;
-    await syncAutoNotInterestedFollowups(supabase);
-    const { data: elig, error: e1 } = await supabase
-      .from("candidates")
-      .select(
-        "id, created_at, full_name, email, whatsapp_number, interview_type, poc_assigned, poc_assigned_at, assigned_at, physical_interview_track, physical_interview_status, physical_interview_city, followup_status, followup_count, callback_datetime, not_interested_reason, not_interested_at",
-      )
-      .eq("is_deleted", false)
-      .eq("eligibility_status", "eligible")
-      .order("created_at", { ascending: true });
-    const { data: inv, error: e2 } = await supabase
-      .from("interviews")
-      .select(INTERVIEW_SELECT);
+    const [eligRes, invRes, dispatchRes] = await Promise.all([
+      supabase
+        .from("candidates")
+        .select(
+          "id, created_at, full_name, email, whatsapp_number, interview_type, poc_assigned, poc_assigned_at, assigned_at, physical_interview_track, physical_interview_status, physical_interview_city, followup_status, followup_count, callback_datetime, not_interested_reason, not_interested_at",
+        )
+        .eq("is_deleted", false)
+        .eq("eligibility_status", "eligible")
+        .order("created_at", { ascending: true }),
+      supabase.from("interviews").select(INTERVIEW_SELECT),
+      supabase.from("dispatch").select("candidate_id, shipping_address"),
+    ]);
+    const elig = eligRes.data;
+    const e1 = eligRes.error;
+    const inv = invRes.data;
+    let e2 = invRes.error;
     let interviewRows = (inv as Record<string, unknown>[] | null) ?? null;
     let interviewError = e2;
     if (interviewError?.message?.includes("planned_content_type")) {
@@ -833,9 +837,7 @@ export function InterviewsBoard() {
       return;
     }
 
-    const { data: dispatchRows } = await supabase
-      .from("dispatch")
-      .select("candidate_id, shipping_address");
+    const dispatchRows = dispatchRes.data;
     const dispatchIds = new Set<string>();
     const addressIds = new Set<string>();
     for (const row of dispatchRows ?? []) {
@@ -952,20 +954,29 @@ export function InterviewsBoard() {
       return;
     }
 
+    let reloadTimer: number | null = null;
+    const scheduleReload = () => {
+      if (reloadTimer != null) window.clearTimeout(reloadTimer);
+      reloadTimer = window.setTimeout(() => {
+        reloadTimer = null;
+        void loadData();
+      }, 500);
+    };
+
     const ch = supabase
       .channel("interviews-dashboard")
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "interviews" },
         () => {
-          void loadData();
+          scheduleReload();
         },
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "candidates" },
         () => {
-          void loadData();
+          scheduleReload();
         },
       )
       .on(
@@ -979,11 +990,15 @@ export function InterviewsBoard() {
 
     void (async () => {
       setLoading(true);
+      const syncPromise = syncAutoNotInterestedFollowups(supabase);
       await loadData();
       setLoading(false);
+      const changed = await syncPromise;
+      if (changed) void loadData();
     })();
 
     return () => {
+      if (reloadTimer != null) window.clearTimeout(reloadTimer);
       void supabase.removeChannel(ch);
     };
   }, [supabase, loadData, loadRoster]);

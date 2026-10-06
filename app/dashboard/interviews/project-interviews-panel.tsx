@@ -376,7 +376,7 @@ async function repairInconsistentProjectInterviews(
     }
   }
 
-  const idsToRepair = new Set<string>(alreadyCompletedIds);
+  const idsToRepair = new Set<string>();
   const completedCandidateIds = new Set(completedAtByCandidate.keys());
   for (const i of rows) {
     if (
@@ -692,14 +692,31 @@ export function ProjectInterviewsPanel({
     (role === "admin" || role === "interviewer" || role === "operations");
 
   const loadProjectData = useCallback(async () => {
-    await syncAutoNotInterestedFollowups(supabase);
-    const { data: pc, error: eCandidates } = await supabase
-      .from("project_candidates")
-      .select(
-        "id, created_at, email, full_name, whatsapp_number, project_title, problem_statement, target_user, ai_usage, demo_link, status, poc_assigned, poc_assigned_at, assigned_at, interview_type, followup_status, followup_count, callback_datetime, not_interested_reason, not_interested_at, physical_interview_track, physical_interview_status, physical_interview_city",
-      )
-      .eq("is_deleted", false)
-      .order("created_at", { ascending: true });
+    const [pcRes, piRes, flRes, dispatchRes] = await Promise.all([
+      supabase
+        .from("project_candidates")
+        .select(
+          "id, created_at, email, full_name, whatsapp_number, project_title, problem_statement, target_user, ai_usage, demo_link, status, poc_assigned, poc_assigned_at, assigned_at, interview_type, followup_status, followup_count, callback_datetime, not_interested_reason, not_interested_at, physical_interview_track, physical_interview_status, physical_interview_city",
+        )
+        .eq("is_deleted", false)
+        .order("created_at", { ascending: true }),
+      supabase
+        .from("project_interviews")
+        .select(PROJECT_INTERVIEW_COLUMNS)
+        .order("created_at", { ascending: true }),
+      supabase
+        .from("followup_log")
+        .select(
+          "created_at, project_candidate_id, status, attempt_number, callback_datetime",
+        )
+        .not("project_candidate_id", "is", null)
+        .order("created_at", { ascending: true }),
+      supabase
+        .from("project_dispatch")
+        .select("project_candidate_id, shipping_address"),
+    ]);
+    const pc = pcRes.data;
+    const eCandidates = pcRes.error;
 
     let candidateList: ProjectCandidateRow[] = [];
     if (eCandidates) {
@@ -722,10 +739,8 @@ export function ProjectInterviewsPanel({
       candidateList.map((c) => [c.id, c] as const),
     );
 
-    const { data: pi, error: eInterviews } = await supabase
-      .from("project_interviews")
-      .select(PROJECT_INTERVIEW_COLUMNS)
-      .order("created_at", { ascending: true });
+    const pi = piRes.data;
+    const eInterviews = piRes.error;
     let projectInterviewRows = pi;
     let projectInterviewError = eInterviews;
     if (projectInterviewError?.message?.includes("planned_content_type")) {
@@ -765,13 +780,8 @@ export function ProjectInterviewsPanel({
         })) ?? null;
       projectInterviewError = legacyErr;
     }
-    const { data: fl, error: eFollowup } = await supabase
-      .from("followup_log")
-      .select(
-        "created_at, project_candidate_id, status, attempt_number, callback_datetime",
-      )
-      .not("project_candidate_id", "is", null)
-      .order("created_at", { ascending: true });
+    const fl = flRes.data;
+    const eFollowup = flRes.error;
 
     if (projectInterviewError) {
       console.log(
@@ -834,9 +844,7 @@ export function ProjectInterviewsPanel({
       setFollowupLogs((fl ?? []) as FollowupLogStatusRow[]);
     }
 
-    const { data: dispatchRows } = await supabase
-      .from("project_dispatch")
-      .select("project_candidate_id, shipping_address");
+    const dispatchRows = dispatchRes.data;
     const dispatchIds = new Set<string>();
     const addressIds = new Set<string>();
     for (const row of dispatchRows ?? []) {
@@ -943,39 +951,54 @@ export function ProjectInterviewsPanel({
   useEffect(() => {
     void (async () => {
       setLoading(true);
+      const syncPromise = syncAutoNotInterestedFollowups(supabase);
       await loadProjectData();
       setLoading(false);
+      const changed = await syncPromise;
+      if (changed) void loadProjectData();
     })();
-  }, [loadProjectData]);
+  }, [loadProjectData, supabase]);
 
   useEffect(() => {
     void loadRosters();
   }, [loadRosters]);
 
   useEffect(() => {
+    let reloadTimer: number | null = null;
+    let notifyPipeline = false;
+    const scheduleReload = (pipeline: boolean) => {
+      notifyPipeline = notifyPipeline || pipeline;
+      if (reloadTimer != null) window.clearTimeout(reloadTimer);
+      reloadTimer = window.setTimeout(() => {
+        reloadTimer = null;
+        const shouldNotify = notifyPipeline;
+        notifyPipeline = false;
+        void loadProjectData();
+        if (shouldNotify) onPipelineChanged();
+      }, 500);
+    };
+
     const ch = supabase
       .channel("project-interviews-panel")
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "project_candidates" },
         () => {
-          void loadProjectData();
-          onPipelineChanged();
+          scheduleReload(true);
         },
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "project_interviews" },
         () => {
-          void loadProjectData();
-          onPipelineChanged();
+          scheduleReload(true);
         },
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "followup_log" },
         () => {
-          void loadProjectData();
+          scheduleReload(false);
         },
       )
       .on(
@@ -987,6 +1010,7 @@ export function ProjectInterviewsPanel({
       )
       .subscribe();
     return () => {
+      if (reloadTimer != null) window.clearTimeout(reloadTimer);
       void supabase.removeChannel(ch);
     };
   }, [supabase, loadProjectData, onPipelineChanged, loadRosters]);
