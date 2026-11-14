@@ -108,11 +108,109 @@ function interviewerMatchesFilter(
   return interviewerRowMatchesFilter(filter, rowInterviewer);
 }
 
+function pad2(n: number) {
+  return String(n).padStart(2, "0");
+}
+
+/** Midnight at the start of an IST calendar day, from `<input type="date">`. */
+function istMidnightMs(ymd: string): number | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return null;
+  const [y, m, d] = ymd.split("-").map(Number);
+  const ms = new Date(
+    `${y}-${pad2(m)}-${pad2(d)}T00:00:00+05:30`,
+  ).getTime();
+  return Number.isNaN(ms) ? null : ms;
+}
+
+/**
+ * Inclusive IST day range on `project_candidates.created_at`
+ * (the moment the row was first imported from the project sheet).
+ * Blank ends stay open. A row with no import date is hidden once a bound is set.
+ */
+function matchesSheetSyncedOn(
+  iso: string | null | undefined,
+  fromYmd: string,
+  toYmd: string,
+): boolean {
+  const from = fromYmd.trim();
+  const to = toYmd.trim();
+  if (!from && !to) return true;
+  const ms = iso?.trim() ? Date.parse(iso) : Number.NaN;
+  if (!Number.isFinite(ms)) return false;
+  if (from) {
+    const start = istMidnightMs(from);
+    if (start != null && ms < start) return false;
+  }
+  if (to) {
+    const start = istMidnightMs(to);
+    if (start != null && ms >= start + 86_400_000) return false;
+  }
+  return true;
+}
+
+function SheetSyncDateFilters({
+  from,
+  to,
+  inputClassName,
+  onChange,
+}: {
+  from: string;
+  to: string;
+  inputClassName: string;
+  onChange: (patch: { syncedFrom?: string; syncedTo?: string }) => void;
+}) {
+  return (
+    <>
+      <label className="flex w-full flex-col gap-1 sm:w-40 sm:shrink-0">
+        <span className="text-xs uppercase tracking-widest text-muted/80">
+          Synced from
+        </span>
+        <input
+          type="date"
+          className={inputClassName}
+          value={from}
+          max={to || undefined}
+          title="First day this entry was imported from the project sheet (IST)"
+          aria-label="Synced from"
+          onChange={(e) => onChange({ syncedFrom: e.target.value })}
+        />
+      </label>
+      <label className="flex w-full flex-col gap-1 sm:w-40 sm:shrink-0">
+        <span className="text-xs uppercase tracking-widest text-muted/80">
+          Synced to
+        </span>
+        <input
+          type="date"
+          className={inputClassName}
+          value={to}
+          min={from || undefined}
+          title="Last day this entry was imported from the project sheet (IST)"
+          aria-label="Synced to"
+          onChange={(e) => onChange({ syncedTo: e.target.value })}
+        />
+      </label>
+      {from || to ? (
+        <button
+          type="button"
+          className="self-end rounded-xl px-3 py-2 text-sm font-medium text-[#3b82f6] hover:text-[#2563eb]"
+          onClick={() => onChange({ syncedFrom: "", syncedTo: "" })}
+        >
+          Clear dates
+        </button>
+      ) : null}
+    </>
+  );
+}
+
 type TabFilters = {
   search: string;
   page: number;
   poc: string;
   interviewer: string;
+  /** `YYYY-MM-DD` IST, inclusive. Blank means no lower bound. */
+  syncedFrom: string;
+  /** `YYYY-MM-DD` IST, inclusive. Blank means no upper bound. */
+  syncedTo: string;
 };
 
 function formatDateTime(iso: string | null | undefined) {
@@ -137,6 +235,20 @@ function formatAssignedOnIst(iso: string | null | undefined) {
     }).format(new Date(iso.trim()));
   } catch {
     return "--";
+  }
+}
+
+function formatSyncedOnIst(iso: string | null | undefined) {
+  if (!iso?.trim()) return "—";
+  try {
+    return new Intl.DateTimeFormat("en-IN", {
+      timeZone: "Asia/Kolkata",
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    }).format(new Date(iso.trim()));
+  } catch {
+    return "—";
   }
 }
 
@@ -606,11 +718,46 @@ type Props = {
 };
 
 const defaultFilters = (): Record<ProjectSubTab, TabFilters> => ({
-  pending: { search: "", page: 0, poc: "all", interviewer: "all" },
-  scheduled: { search: "", page: 0, poc: "all", interviewer: "all" },
-  completed: { search: "", page: 0, poc: "all", interviewer: "all" },
-  notEligible: { search: "", page: 0, poc: "all", interviewer: "all" },
-  noShow: { search: "", page: 0, poc: "all", interviewer: "all" },
+  pending: {
+    search: "",
+    page: 0,
+    poc: "all",
+    interviewer: "all",
+    syncedFrom: "",
+    syncedTo: "",
+  },
+  scheduled: {
+    search: "",
+    page: 0,
+    poc: "all",
+    interviewer: "all",
+    syncedFrom: "",
+    syncedTo: "",
+  },
+  completed: {
+    search: "",
+    page: 0,
+    poc: "all",
+    interviewer: "all",
+    syncedFrom: "",
+    syncedTo: "",
+  },
+  notEligible: {
+    search: "",
+    page: 0,
+    poc: "all",
+    interviewer: "all",
+    syncedFrom: "",
+    syncedTo: "",
+  },
+  noShow: {
+    search: "",
+    page: 0,
+    poc: "all",
+    interviewer: "all",
+    syncedFrom: "",
+    syncedTo: "",
+  },
 });
 
 function hasAssignedProjectInterviewer(
@@ -1193,7 +1340,12 @@ export function ProjectInterviewsPanel({
         qualifiesPending &&
         matchesPendingSearch(c, q) &&
         pocMatchesFilter(pocF, c.poc_assigned) &&
-        interviewerMatchesFilter(filters.pending.interviewer, null)
+        interviewerMatchesFilter(filters.pending.interviewer, null) &&
+        matchesSheetSyncedOn(
+          c.created_at,
+          filters.pending.syncedFrom,
+          filters.pending.syncedTo,
+        )
       );
     });
     return [...rows].sort(compareProjectCandidateCreatedAsc);
@@ -1205,20 +1357,36 @@ export function ProjectInterviewsPanel({
     filters.pending.search,
     filters.pending.poc,
     filters.pending.interviewer,
+    filters.pending.syncedFrom,
+    filters.pending.syncedTo,
   ]);
 
   const notInterestedProjectFiltered = useMemo(
     () =>
       candidates.filter(
         (c) =>
-          !c.physical_interview_track && c.followup_status === "not_interested",
+          !c.physical_interview_track &&
+          c.followup_status === "not_interested" &&
+          matchesSheetSyncedOn(
+            c.created_at,
+            filters.pending.syncedFrom,
+            filters.pending.syncedTo,
+          ),
       ),
-    [candidates],
+    [candidates, filters.pending.syncedFrom, filters.pending.syncedTo],
   );
 
   const scheduledFiltered = useMemo(
     () =>
       [...byStatus.scheduled.filter((i) => {
+        if (
+          !matchesSheetSyncedOn(
+            i.project_candidates?.created_at,
+            filters.scheduled.syncedFrom,
+            filters.scheduled.syncedTo,
+          )
+        )
+          return false;
         if (!matchesInterviewSearch(i, filters.scheduled.search))
           return false;
         if (
@@ -1238,12 +1406,22 @@ export function ProjectInterviewsPanel({
       filters.scheduled.search,
       filters.scheduled.poc,
       filters.scheduled.interviewer,
+      filters.scheduled.syncedFrom,
+      filters.scheduled.syncedTo,
     ],
   );
 
   const completedFiltered = useMemo(
     () =>
       [...byStatus.completed.filter((i) => {
+        if (
+          !matchesSheetSyncedOn(
+            i.project_candidates?.created_at,
+            filters.completed.syncedFrom,
+            filters.completed.syncedTo,
+          )
+        )
+          return false;
         if (!addressProjectCandidateIds.has(i.project_candidate_id)) {
           return false;
         }
@@ -1275,6 +1453,8 @@ export function ProjectInterviewsPanel({
       filters.completed.search,
       filters.completed.poc,
       filters.completed.interviewer,
+      filters.completed.syncedFrom,
+      filters.completed.syncedTo,
       completedPostContentStage,
       dispatchProjectCandidateIds,
       addressProjectCandidateIds,
@@ -1284,6 +1464,14 @@ export function ProjectInterviewsPanel({
   const noShowFiltered = useMemo(
     () =>
       [...byStatus.noShow.filter((i) => {
+        if (
+          !matchesSheetSyncedOn(
+            i.project_candidates?.created_at,
+            filters.noShow.syncedFrom,
+            filters.noShow.syncedTo,
+          )
+        )
+          return false;
         if (!matchesInterviewSearch(i, filters.noShow.search)) return false;
         if (
           !pocMatchesFilter(
@@ -1306,12 +1494,22 @@ export function ProjectInterviewsPanel({
       filters.noShow.search,
       filters.noShow.poc,
       filters.noShow.interviewer,
+      filters.noShow.syncedFrom,
+      filters.noShow.syncedTo,
     ],
   );
 
   const notEligibleFiltered = useMemo(
     () =>
       [...byStatus.notEligible.filter((i) => {
+        if (
+          !matchesSheetSyncedOn(
+            i.project_candidates?.created_at,
+            filters.notEligible.syncedFrom,
+            filters.notEligible.syncedTo,
+          )
+        )
+          return false;
         if (!matchesInterviewSearch(i, filters.notEligible.search))
           return false;
         if (
@@ -1331,6 +1529,8 @@ export function ProjectInterviewsPanel({
       filters.notEligible.search,
       filters.notEligible.poc,
       filters.notEligible.interviewer,
+      filters.notEligible.syncedFrom,
+      filters.notEligible.syncedTo,
     ],
   );
 
@@ -1401,7 +1601,9 @@ export function ProjectInterviewsPanel({
         ...patch,
         ...(patch.search !== undefined ||
         patch.poc !== undefined ||
-        patch.interviewer !== undefined
+        patch.interviewer !== undefined ||
+        patch.syncedFrom !== undefined ||
+        patch.syncedTo !== undefined
           ? { page: 0 }
           : {}),
       },
@@ -1863,10 +2065,16 @@ export function ProjectInterviewsPanel({
                 ))}
               </select>
             </label>
+            <SheetSyncDateFilters
+              from={filters.pending.syncedFrom}
+              to={filters.pending.syncedTo}
+              inputClassName={filterInp}
+              onChange={(patch) => patchFilter("pending", patch)}
+            />
           </div>
           <div className={tableWrap}>
             <div className="w-full overflow-x-auto">
-              <table className="w-full min-w-[1160px] table-auto border-collapse">
+              <table className="w-full min-w-[1280px] table-auto border-collapse">
                 <thead>
                   <tr>
                     <th className={thName}>Name</th>
@@ -1874,6 +2082,7 @@ export function ProjectInterviewsPanel({
                     <th className={thProjTitle}>Project title</th>
                     <th className={thTrack}>Track</th>
                     <th className={thPoc}>POC assigned</th>
+                    <th className={thAssignedOn}>Synced on</th>
                     <th className={thAssignedOn}>Assigned On</th>
                     <th className={thFollowUp}>Follow-up</th>
                     <th className={thActions}>Actions</th>
@@ -1882,7 +2091,7 @@ export function ProjectInterviewsPanel({
                 <tbody>
                   {pendingPage.slice.length === 0 ? (
                     <tr>
-                      <td className={tdBase} colSpan={8}>
+                      <td className={tdBase} colSpan={9}>
                         {emptyState}
                       </td>
                     </tr>
@@ -1974,6 +2183,9 @@ export function ProjectInterviewsPanel({
                                 </button>
                               </div>
                             )}
+                          </td>
+                          <td className={tdAssignedOn}>
+                            {formatSyncedOnIst(c.created_at)}
                           </td>
                           <td className={tdAssignedOn}>
                             {formatAssignedOnIst(
@@ -2201,6 +2413,12 @@ export function ProjectInterviewsPanel({
                 ))}
               </select>
             </label>
+            <SheetSyncDateFilters
+              from={filters.scheduled.syncedFrom}
+              to={filters.scheduled.syncedTo}
+              inputClassName={filterInp}
+              onChange={(patch) => patchFilter("scheduled", patch)}
+            />
           </div>
           <div className={tableWrap}>
             <div className="w-full overflow-x-auto">
@@ -2497,6 +2715,12 @@ export function ProjectInterviewsPanel({
                 ))}
               </select>
             </label>
+            <SheetSyncDateFilters
+              from={filters.completed.syncedFrom}
+              to={filters.completed.syncedTo}
+              inputClassName={filterInp}
+              onChange={(patch) => patchFilter("completed", patch)}
+            />
           </div>
           <div className={tableWrap}>
             <div className="w-full overflow-x-auto">
@@ -2735,20 +2959,28 @@ export function ProjectInterviewsPanel({
 
       {subTab === "noShow" && (
         <section className="space-y-4">
-          <label className="flex min-w-0 max-w-md flex-col gap-1">
-            <span className="text-xs uppercase tracking-widest text-muted/80">
-              Search
-            </span>
-            <input
-              type="search"
-              placeholder="Name, email, or title"
-              className={filterInp}
-              value={filters.noShow.search}
-              onChange={(e) =>
-                patchFilter("noShow", { search: e.target.value })
-              }
+          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
+            <label className="flex min-w-0 flex-1 flex-col gap-1 sm:max-w-md">
+              <span className="text-xs uppercase tracking-widest text-muted/80">
+                Search
+              </span>
+              <input
+                type="search"
+                placeholder="Name, email, or title"
+                className={filterInp}
+                value={filters.noShow.search}
+                onChange={(e) =>
+                  patchFilter("noShow", { search: e.target.value })
+                }
+              />
+            </label>
+            <SheetSyncDateFilters
+              from={filters.noShow.syncedFrom}
+              to={filters.noShow.syncedTo}
+              inputClassName={filterInp}
+              onChange={(patch) => patchFilter("noShow", patch)}
             />
-          </label>
+          </div>
           <div className={tableWrap}>
             <div className="w-full overflow-x-auto">
               <table className="w-full min-w-[1120px] table-auto border-collapse">
@@ -2915,6 +3147,12 @@ export function ProjectInterviewsPanel({
                 ))}
               </select>
             </label>
+            <SheetSyncDateFilters
+              from={filters.notEligible.syncedFrom}
+              to={filters.notEligible.syncedTo}
+              inputClassName={filterInp}
+              onChange={(patch) => patchFilter("notEligible", patch)}
+            />
           </div>
           <div className={tableWrap}>
             <div className="w-full overflow-x-auto">
