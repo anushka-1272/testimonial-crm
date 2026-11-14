@@ -25,17 +25,39 @@ type ProjectPipelineStats = {
   inDispatch: number;
 };
 
+/** PostgREST returns at most 1000 rows unless the query pages. */
+async function selectAllPages<T>(
+  fetchPage: (
+    from: number,
+    to: number,
+  ) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>,
+): Promise<{ data: T[]; error: { message: string } | null }> {
+  const pageSize = 1000;
+  const data: T[] = [];
+  for (let from = 0; ; from += pageSize) {
+    const { data: page, error } = await fetchPage(from, from + pageSize - 1);
+    if (error) return { data, error };
+    const rows = page ?? [];
+    data.push(...rows);
+    if (rows.length < pageSize) return { data, error: null };
+  }
+}
+
 /** Matches `ProjectInterviewsPanel` pending-queue rules (no search filter). */
 async function loadProjectPipelineStats(
   supabase: SupabaseClient,
 ): Promise<ProjectPipelineStats> {
   const [{ data: pcRows }, { data: piRows }, { data: dispatchRows }] =
     await Promise.all([
-    supabase
-      .from("project_candidates")
-      .select("id, status, interview_type")
-      .eq("is_deleted", false)
-      .order("created_at", { ascending: true }),
+    selectAllPages((from, to) =>
+      supabase
+        .from("project_candidates")
+        .select("id, status, interview_type")
+        .eq("is_deleted", false)
+        .order("created_at", { ascending: true })
+        .order("id", { ascending: true })
+        .range(from, to),
+    ),
     supabase
       .from("project_interviews")
       .select("project_candidate_id, interview_status, completed_at"),

@@ -69,6 +69,24 @@ import type {
 } from "./types";
 
 const PAGE_SIZE = 20;
+/** PostgREST returns at most 1000 rows unless the query pages. */
+const DB_PAGE_SIZE = 1000;
+
+async function selectAllPages<T>(
+  fetchPage: (
+    from: number,
+    to: number,
+  ) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>,
+): Promise<{ data: T[]; error: { message: string } | null }> {
+  const data: T[] = [];
+  for (let from = 0; ; from += DB_PAGE_SIZE) {
+    const { data: page, error } = await fetchPage(from, from + DB_PAGE_SIZE - 1);
+    if (error) return { data, error };
+    const rows = page ?? [];
+    data.push(...rows);
+    if (rows.length < DB_PAGE_SIZE) return { data, error: null };
+  }
+}
 
 /** Interview rows only — join `project_candidates` client-side so a failed embed never blocks loading candidates. */
 const PROJECT_INTERVIEW_COLUMNS = `id, created_at, project_candidate_id, scheduled_date, previous_scheduled_date, reschedule_reason, completed_at, interviewer, interviewer_assigned_at, zoom_link, zoom_account, not_eligible_recording_link, language, invitation_sent, poc, remarks, reminder_count, interview_status, post_interview_eligible, reward_item, category, funnel, comments, interview_type, post_content_status, linkedin_post_url, blog_post_url, posts_confirmed_at, skip_social_posts, planned_content_type, no_show_reason, no_show_at`;
@@ -840,24 +858,32 @@ export function ProjectInterviewsPanel({
 
   const loadProjectData = useCallback(async () => {
     const [pcRes, piRes, flRes, dispatchRes] = await Promise.all([
-      supabase
-        .from("project_candidates")
-        .select(
-          "id, created_at, email, full_name, whatsapp_number, project_title, problem_statement, target_user, ai_usage, demo_link, status, poc_assigned, poc_assigned_at, assigned_at, interview_type, followup_status, followup_count, callback_datetime, not_interested_reason, not_interested_at, physical_interview_track, physical_interview_status, physical_interview_city",
-        )
-        .eq("is_deleted", false)
-        .order("created_at", { ascending: true }),
+      selectAllPages((from, to) =>
+        supabase
+          .from("project_candidates")
+          .select(
+            "id, created_at, email, full_name, whatsapp_number, project_title, problem_statement, target_user, ai_usage, demo_link, status, poc_assigned, poc_assigned_at, assigned_at, interview_type, followup_status, followup_count, callback_datetime, not_interested_reason, not_interested_at, physical_interview_track, physical_interview_status, physical_interview_city",
+          )
+          .eq("is_deleted", false)
+          .order("created_at", { ascending: true })
+          .order("id", { ascending: true })
+          .range(from, to),
+      ),
       supabase
         .from("project_interviews")
         .select(PROJECT_INTERVIEW_COLUMNS)
         .order("created_at", { ascending: true }),
-      supabase
-        .from("followup_log")
-        .select(
-          "created_at, project_candidate_id, status, attempt_number, callback_datetime",
-        )
-        .not("project_candidate_id", "is", null)
-        .order("created_at", { ascending: true }),
+      selectAllPages((from, to) =>
+        supabase
+          .from("followup_log")
+          .select(
+            "created_at, project_candidate_id, status, attempt_number, callback_datetime",
+          )
+          .not("project_candidate_id", "is", null)
+          .order("created_at", { ascending: true })
+          .order("id", { ascending: true })
+          .range(from, to),
+      ),
       supabase
         .from("project_dispatch")
         .select("project_candidate_id, shipping_address"),
