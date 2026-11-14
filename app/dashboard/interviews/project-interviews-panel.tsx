@@ -1832,6 +1832,7 @@ export function ProjectInterviewsPanel({
     }
     setSheetSyncBusy(true);
     onError(null);
+    let syncedOk = false;
     try {
       const res = await fetch("/api/sync-project-sheet", {
         method: "POST",
@@ -1839,32 +1840,66 @@ export function ProjectInterviewsPanel({
           Authorization: `Bearer ${session.access_token}`,
         },
       });
-      const j = (await res.json()) as {
+      const raw = await res.text();
+      let j: {
         error?: string;
         total_rows?: number;
         upserted?: number;
+        inserted?: number;
+        updated?: number;
+        unchanged?: number;
         phones_updated?: number;
         errors?: string[];
-      };
+      } = {};
+      if (raw) {
+        try {
+          j = JSON.parse(raw) as typeof j;
+        } catch {
+          onError(
+            res.status === 504
+              ? "Project sheet sync timed out. Try again."
+              : `Project sheet sync failed (${res.status}).`,
+          );
+          return;
+        }
+      }
       if (!res.ok) {
-        onError(j.error ?? "Project sheet sync failed.");
+        onError(j.error ?? `Project sheet sync failed (${res.status}).`);
         return;
       }
-      const up = j.upserted ?? 0;
       const total = j.total_rows ?? 0;
       const phones = j.phones_updated ?? 0;
+      const summary =
+        j.inserted != null || j.updated != null
+          ? `${total} rows, ${j.inserted ?? 0} new, ${j.updated ?? 0} updated${j.unchanged ? `, ${j.unchanged} already up to date` : ""}`
+          : `${j.upserted ?? 0} upserted (${total} rows)`;
       alert(
-        `✅ Synced project sheet — ${up} upserted (${total} rows)${phones > 0 ? `, ${phones} phone numbers updated` : ""}`,
+        `✅ Synced project sheet — ${summary}${phones > 0 ? `, ${phones} phone numbers updated` : ""}`,
       );
       if (j.errors?.length) {
         onError(j.errors.slice(0, 5).join(" · "));
       }
-      await loadProjectData();
-      onPipelineChanged();
-    } catch {
-      onError("Project sheet sync request failed.");
+      syncedOk = true;
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "";
+      onError(
+        msg
+          ? `Project sheet sync request failed. ${msg}`
+          : "Project sheet sync request failed.",
+      );
     } finally {
       setSheetSyncBusy(false);
+    }
+    if (!syncedOk) return;
+    try {
+      await loadProjectData();
+      onPipelineChanged();
+    } catch (reloadErr) {
+      onError(
+        reloadErr instanceof Error
+          ? `Sync finished, but the list could not refresh. ${reloadErr.message}`
+          : "Sync finished, but the list could not refresh.",
+      );
     }
   };
 
